@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Bing</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #F2F2F2;
+        }
+        .container {
+            width: 800px;
+            margin: 0 auto;
+        }
+        .logo {
+            text-align: center;
+            margin-top: 50px;
+        }
+        .logo img {
+            width: 200px;
+        }
+        .search {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .search input {
+            width: 500px;
+            height: 40px;
+            border: none;
+            border-radius: 20px;
+            padding: 10px 20px;
+            font-size: 20px;
+        }
+        .search button {
+            width: 100px;
+            height: 40px;
+            border: none;
+            border-radius: 20px;
+            background-color: #4F8EF7;
+            color: white;
+            font-size: 20px;
+            margin-left: 10px;
+        }
+        .cat {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .cat pre {
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="bing-logo.png" alt="Bing">
+        </div>
+        <div class="search">
+            <form action="https://www.bing.com/search" method="get">
+                <input type="text" name="q" placeholder="在 Bing 中搜索">
+                <button type="submit">搜索</button>
+            </form>
+        </div>
+        <div class="cat">
+            <pre>
+    /\___/\
+   /       \
+  ( =  ^.^  = )
+   (")  _  (")
+ /             \
+(               )
+ \___/\___/\___/
+    /   \   \
+   /     \   \
+  /       \   \
+ (_/     \_)
+</pre>
+        </div>
+    </div>
+</body>
+</html>
