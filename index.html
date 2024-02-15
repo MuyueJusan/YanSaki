@@ -19,8 +19,10 @@
             text-align: center;
             margin-top: 50px;
         }
-        .logo img {
-            width: 200px;
+        .logo pre {
+            font-family: monospace;
+            font-size: 24px;
+            line-height: 20px;
         }
         .search {
             text-align: center;
@@ -86,12 +88,21 @@
 <body>
     <div class="container">
         <div class="logo">
-            <img src="bing-logo.png" alt="Bing">
+            <!-- 将图片替换为中文搜索的艺术字字符图形 -->
+            <pre>
+  _____ _   _ _____ _____ 
+ / ____| \ | |_   _|  __ \
+| (___ |  \| | | | | |__) |
+ \___ \| . ` | | | |  ___/
+ ____) | |\  |_| |_| |    
+|_____/|_| \_|_____|_|    
+            </pre>
         </div>
         <div class="search">
             <!-- 给表单添加一个 id，用于后续操作 -->
             <form id="search-form" action="https://www.bing.com/search" method="get">
-                <input type="text" name="q" placeholder="在 Bing 中搜索">
+                <!-- 给输入框添加一个 id，用于后续操作 -->
+                <input id="search-input" type="text" name="q" placeholder="在 Bing 中搜索">
                 <button type="submit">搜索</button>
             </form>
         </div>
@@ -104,25 +115,26 @@
             </select>
         </div>
         <div class="cat">
+            <!-- 将猫的字符图形更加可爱些 -->
             <pre>
-    /\___/\
-   /       \
-  ( =  ^.^  = )
-   (")  _  (")
- /             \
-(               )
- \___/\___/\___/
-    /   \   \
-   /     \   \
-  /       \   \
- (_/     \_)
+   /\___/\
+  ( =^.^= )
+   (")_(")
+ /         \
+(           )
+ \__  _  __/
+    \ \ \
+    / / /
+   / / /
+  (_(_)
 </pre>
         </div>
     </div>
     <!-- 添加一个脚本，用于实现切换搜索引擎的功能 -->
     <script>
-        // 获取搜索表单和搜索引擎下拉列表的元素
+        // 获取搜索表单，搜索输入框和搜索引擎下拉列表的元素
         var searchForm = $("#search-form");
+        var searchInput = $("#search-input");
         var searchEngine = $("#search-engine");
         // 定义一个对象，存储不同搜索引擎的搜索地址
         var searchUrls = {
@@ -130,12 +142,20 @@
             "baidu": "https://www.baidu.com/s",
             "google": "https://www.google.com/search"
         };
+        // 定义一个对象，存储不同搜索引擎的提示文字
+        var searchPlaceholders = {
+            "bing": "在 Bing 中搜索",
+            "baidu": "在百度中搜索",
+            "google": "在谷歌中搜索"
+        };
         // 为搜索引擎下拉列表添加一个事件监听器，当选择改变时触发
         searchEngine.on("change", function() {
             // 获取当前选择的搜索引擎的值
             var value = $(this).val();
             // 根据值修改搜索表单的 action 属性
             searchForm.attr("action", searchUrls[value]);
+            // 根据值修改搜索输入框的 placeholder 属性
+            searchInput.attr("placeholder", searchPlaceholders[value]);
         });
     </script>
 </body>
