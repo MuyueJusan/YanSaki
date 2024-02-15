@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Bing</title>
+    <!-- 添加视区meta标签，让网页宽度等于设备宽度 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
             margin: 0;
@@ -50,6 +52,18 @@
             font-family: monospace;
             font-size: 12px;
             line-height: 10px;
+        }
+        /* 使用媒体查询，当屏幕宽度小于800px时，调整样式 */
+        @media screen and (max-width: 800px) {
+            .container {
+                width: 100%;
+            }
+            .search input {
+                width: 80%;
+            }
+            .search button {
+                width: 15%;
+            }
         }
     </style>
 </head>
