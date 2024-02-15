@@ -65,7 +65,23 @@
                 width: 15%;
             }
         }
+        /* 添加一个切换按钮，让使用者可以切换搜索引擎 */
+        .switch {
+            text-align: center;
+            margin-top: 10px;
+        }
+        .switch select {
+            width: 150px;
+            height: 30px;
+            border: none;
+            border-radius: 15px;
+            background-color: #4F8EF7;
+            color: white;
+            font-size: 16px;
+        }
     </style>
+    <!-- 引入 jQuery 库，用于实现切换搜索引擎的功能 -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -73,10 +89,19 @@
             <img src="bing-logo.png" alt="Bing">
         </div>
         <div class="search">
-            <form action="https://www.bing.com/search" method="get">
+            <!-- 给表单添加一个 id，用于后续操作 -->
+            <form id="search-form" action="https://www.bing.com/search" method="get">
                 <input type="text" name="q" placeholder="在 Bing 中搜索">
                 <button type="submit">搜索</button>
             </form>
+        </div>
+        <div class="switch">
+            <!-- 添加一个下拉列表，用于选择搜索引擎 -->
+            <select id="search-engine">
+                <option value="bing">Bing</option>
+                <option value="baidu">百度</option>
+                <option value="google">谷歌</option>
+            </select>
         </div>
         <div class="cat">
             <pre>
@@ -94,5 +119,24 @@
 </pre>
         </div>
     </div>
+    <!-- 添加一个脚本，用于实现切换搜索引擎的功能 -->
+    <script>
+        // 获取搜索表单和搜索引擎下拉列表的元素
+        var searchForm = $("#search-form");
+        var searchEngine = $("#search-engine");
+        // 定义一个对象，存储不同搜索引擎的搜索地址
+        var searchUrls = {
+            "bing": "https://www.bing.com/search",
+            "baidu": "https://www.baidu.com/s",
+            "google": "https://www.google.com/search"
+        };
+        // 为搜索引擎下拉列表添加一个事件监听器，当选择改变时触发
+        searchEngine.on("change", function() {
+            // 获取当前选择的搜索引擎的值
+            var value = $(this).val();
+            // 根据值修改搜索表单的 action 属性
+            searchForm.attr("action", searchUrls[value]);
+        });
+    </script>
 </body>
 </html>
