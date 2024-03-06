@@ -2,160 +2,59 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Bing</title>
-    <!-- 添加视区meta标签，让网页宽度等于设备宽度 -->
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bilibili 博主粉丝进度条</title>
     <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background-color: #F2F2F2;
+        /* 样式可以根据需要自行修改 */
+        .progress-container {
+            width: 300px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            overflow: hidden;
         }
-        .container {
-            width: 800px;
-            margin: 0 auto;
-        }
-        .logo {
+        .progress-bar {
+            height: 20px;
+            background-color: #4caf50;
             text-align: center;
-            margin-top: 50px;
-        }
-        .logo pre {
-            font-family: monospace;
-            font-size: 24px;
             line-height: 20px;
-        }
-        .search {
-            text-align: center;
-            margin-top: 20px;
-        }
-        .search input {
-            width: 500px;
-            height: 40px;
-            border: none;
-            border-radius: 20px;
-            padding: 10px 20px;
-            font-size: 20px;
-        }
-        .search button {
-            width: 100px;
-            height: 40px;
-            border: none;
-            border-radius: 20px;
-            background-color: #4F8EF7;
             color: white;
-            font-size: 20px;
-            margin-left: 10px;
-        }
-        .cat {
-            text-align: center;
-            margin-top: 20px;
-        }
-        .cat pre {
-            font-family: monospace;
-            font-size: 12px;
-            line-height: 10px;
-        }
-        /* 使用媒体查询，当屏幕宽度小于800px时，调整样式 */
-        @media screen and (max-width: 800px) {
-            .container {
-                width: 100%;
-            }
-            .search input {
-                width: 80%;
-            }
-            .search button {
-                width: 15%;
-            }
-        }
-        /* 添加一个切换按钮，让使用者可以切换搜索引擎 */
-        .switch {
-            text-align: center;
-            margin-top: 10px;
-        }
-        .switch select {
-            width: 150px;
-            height: 30px;
-            border: none;
-            border-radius: 15px;
-            background-color: #4F8EF7;
-            color: white;
-            font-size: 16px;
         }
     </style>
-    <!-- 引入 jQuery 库，用于实现切换搜索引擎的功能 -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <div class="logo">
-            <!-- 将图片替换为猫爪的字符图形 -->
-            <pre>
-   /\_/\
- =( ^.^ )=
-   )   (
-  ( (   ) )
- (__(___)__)
-            </pre>
-        </div>
-        <div class="search">
-            <!-- 给表单添加一个 id，用于后续操作 -->
-            <form id="search-form" action="https://www.bing.com/search" method="get">
-                <!-- 给输入框添加一个 id，用于后续操作 -->
-                <input id="search-input" type="text" name="q" placeholder="在 Bing 中搜索">
-                <button type="submit">搜索</button>
-            </form>
-        </div>
-        <div class="switch">
-            <!-- 添加一个下拉列表，用于选择搜索引擎 -->
-            <select id="search-engine">
-                <option value="bing">Bing</option>
-                <option value="baidu">百度</option>
-                <option value="google">谷歌</option>
-            </select>
-        </div>
-        <div class="cat">
-            <!-- 将猫的字符图形更加可爱些，腿短一点，精度高一点，可以使用其他语言作为组成部分 -->
-            <pre>
-   /\___/\
-  ( =^.^= )
-   (")_(")
- /         \
-(           )
- \__  _  __/
-    \ \ \
-    / / /
-   / / /
-  (_(_)
-</pre>
-        </div>
+    <div class="progress-container">
+        <div class="progress-bar" id="progressBar">.     </div>
     </div>
-    <!-- 添加一个脚本，用于实现切换搜索引擎的功能 -->
     <script>
-        // 获取搜索表单，搜索输入框和搜索引擎下拉列表的元素
-        var searchForm = $("#search-form");
-        var searchInput = $("#search-input");
-        var searchEngine = $("#search-engine");
-        // 定义一个对象，存储不同搜索引擎的搜索地址
-        var searchUrls = {
-            "bing": "https://www.bing.com/search",
-            "baidu": "https://www.baidu.com/s",
-            "google": "https://www.google.com/search"
-        };
-        // 定义一个对象，存储不同搜索引擎的提示文字
-        var searchPlaceholders = {
-            "bing": "在 Bing 中搜索",
-            "baidu": "在百度中搜索",
-            "google": "在谷歌中搜索"
-        };
-        // 为搜索引擎下拉列表添加一个事件监听器，当选择改变时触发
-        searchEngine.on("change", function() {
-            // 获取当前选择的搜索引擎的值
-            var value = $(this).val();
-            // 根据值修改搜索表单的 action 属性
-            searchForm.attr("action", searchUrls[value]);
-            // 根据值修改搜索输入框的 placeholder 属性
-            searchInput.attr("placeholder", searchPlaceholders[value]);
-        });
+        // 假设博主的用户 ID
+        const userId = 33768156; // 替换为实际的用户 ID
+
+        // 更新粉丝数据
+        function updateFansData() {
+            // 假设这里使用了一个 API 来获取粉丝数据
+            // 你可以替换为实际的 API 地址
+            fetch(`https://api.bilibili.com/x/relation/stat?vmid=${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const currentFans = data.data.follower; // 当前粉丝人数
+                    const targetFans = 1000000; // 目标粉丝人数
+
+                    // 计算进度百分比
+                    const progress = (currentFans / targetFans) * 100;
+
+                    // 更新进度条宽度
+                    const progressBar = document.getElementById('progressBar');
+                    progressBar.style.width = `${progress}%`;
+                    progressBar.textContent = `${progress.toFixed(2)}%`;
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                });
+        }
+
+        // 每隔一段时间更新一次数据
+        setInterval(updateFansData, 60000); // 每分钟更新一次
+        updateFansData(); // 初始化数据
     </script>
 </body>
 </html>
