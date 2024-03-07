@@ -1,60 +1,59 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bilibili 博主粉丝进度条</title>
     <style>
-        /* 样式可以根据需要自行修改 */
-        .progress-container {
-            width: 300px;
-            background-color: #f0f0f0;
-            border-radius: 5px;
-            overflow: hidden;
-        }
-        .progress-bar {
-            height: 20px;
-            background-color: #4caf50;
+        body {
+            font-family: Arial, sans-serif;
             text-align: center;
-            line-height: 20px;
-            color: white;
+        }
+
+        #clock {
+            font-size: 5em;
+            margin-top: 100px;
+        }
+
+        /* 添加 @font-face 规则，定义自定义字体 */
+        @font-face {
+            font-family: myFont; /* 自定义字体名称 */
+            src: url("fonts/myFont.ttf"); /* 字体文件路径 */
         }
     </style>
-</head>
-<body>
-    <div class="progress-container">
-        <div class="progress-bar" id="progressBar">.     </div>
-    </div>
     <script>
-        // 假设博主的用户 ID
-        const userId = 33768156; // 替换为实际的用户 ID
-
-        // 更新粉丝数据
-        function updateFansData() {
-            // 假设这里使用了一个 API 来获取粉丝数据
-            // 你可以替换为实际的 API 地址
-            fetch(`https://api.bilibili.com/x/relation/stat?vmid=${userId}`)
-                .then(response => response.json())
-                .then(data => {
-                    const currentFans = data.data.follower; // 当前粉丝人数
-                    const targetFans = 1000000; // 目标粉丝人数
-
-                    // 计算进度百分比
-                    const progress = (currentFans / targetFans) * 100;
-
-                    // 更新进度条宽度
-                    const progressBar = document.getElementById('progressBar');
-                    progressBar.style.width = `${progress}%`;
-                    progressBar.textContent = `${progress.toFixed(2)}%`;
-                })
-                .catch(error => {
-                    console.error('Error fetching data:', error);
-                });
+        // 获取北京时间并格式化为 12 小时制和 am 或 pm
+        function getBeijingTime() {
+            let date = new Date();
+            // 设置时区偏移为北京时间（UTC+8）
+            date.setMinutes(date.getMinutes() + date.getTimezoneOffset() + 480);
+            // 获取小时、分钟和秒
+            let hours = date.getHours();
+            let minutes = date.getMinutes();
+            let seconds = date.getSeconds();
+            // 判断是上午还是下午
+            let ampm = hours >= 12 ? 'pm' : 'am';
+            // 转换为 12 小时制
+            hours = hours % 12;
+            // 如果是 0 小时，表示 12 点
+            hours = hours ? hours : 12;
+            // 补零
+            minutes = minutes < 10 ? '0' + minutes : minutes;
+            seconds = seconds < 10 ? '0' + seconds : seconds;
+            // 返回格式化后的时间字符串
+            return hours + ':' + minutes + ':' + seconds + ' ' + ampm;
         }
 
-        // 每隔一段时间更新一次数据
-        setInterval(updateFansData, 60000); // 每分钟更新一次
-        updateFansData(); // 初始化数据
+        // 更新时钟显示
+        function updateClock() {
+            // 获取时钟元素
+            let clock = document.getElementById('clock');
+            // 设置时钟内容为北京时间
+            clock.innerHTML = getBeijingTime();
+        }
+
+        // 每隔一秒更新一次时钟
+        setInterval(updateClock, 1000);
     </script>
+</head>
+<body>
+    <!-- 使用 style 属性来应用自定义字体 -->
+    <div id="clock" style="font-family: myFont;"></div>
 </body>
 </html>
