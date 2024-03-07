@@ -33,7 +33,7 @@
             let minutes = date.getMinutes();
             let seconds = date.getSeconds();
             // 判断是上午还是下午
-            let ampm = hours >= 12 ? 'PM' : 'AM';
+            let ampm = hours >= 12 ? 'pm' : 'am';
             // 转换为 12 小时制
             hours = hours % 12;
             // 如果是 0 小时，表示 12 点
@@ -80,6 +80,8 @@
 
         // 每隔一秒更新一次时钟
         setInterval(updateClock, 1000);
+        // 每隔一秒更新一次日期
+        setInterval(updateDate, 1000);
     </script>
 </head>
 <body>
