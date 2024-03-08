@@ -1,92 +1,51 @@
-<html>
+<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
+    <meta charset="UTF-8">
+    <title>粉丝进度条</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        #progress-bar {
+            width: 100%;
+            background-color: #ddd;
+        }
+
+        #progress {
+            width: 0%;
+            background-color: #4CAF50;
             text-align: center;
-        }
-
-        #date {
-            font-size: 3em;
-            margin-top: 50px;
-        }
-
-        #clock {
-            font-size: 5em;
-            margin-top: 20px;
-        }
-
-        /* 添加 @font-face 规则，定义自定义字体 */
-        @font-face {
-            font-family: myFont; /* 自定义字体名称 */
-            src: url("fonts/myFont.ttf"); /* 字体文件路径 */
+            color: white;
+            padding: 10px 0;
         }
     </style>
-    <script>
-        // 获取北京时间并格式化为 12 小时制和 am 或 pm
-        function getBeijingTime() {
-            let date = new Date();
-            // 设置时区偏移为北京时间（UTC+8）
-            date.setMinutes(date.getMinutes() + date.getTimezoneOffset() + 480);
-            // 获取小时、分钟和秒
-            let hours = date.getHours();
-            let minutes = date.getMinutes();
-            let seconds = date.getSeconds();
-            // 判断是上午还是下午
-            let ampm = hours >= 12 ? 'PM' : 'AM';
-            // 转换为 12 小时制
-            hours = hours % 12;
-            // 如果是 0 小时，表示 12 点
-            hours = hours ? hours : 12;
-            // 补零
-            hours = hours < 10 ? '0' + hours : hours; // 在这里添加补零的操作
-            minutes = minutes < 10 ? '0' + minutes : minutes;
-            seconds = seconds < 10 ? '0' + seconds : seconds;
-            // 返回格式化后的时间字符串
-            return hours + ':' + minutes + ':' + seconds + ' ' + ampm;
-        }
-
-        // 获取当前日期并格式化为 yyyy-mm-dd
-        function getCurrentDate() {
-            let date = new Date();
-            // 设置时区偏移为北京时间（UTC+8）
-            date.setMinutes(date.getMinutes() + date.getTimezoneOffset() + 480);
-            // 获取年、月、日
-            let year = date.getFullYear();
-            let month = date.getMonth() + 1;
-            let day = date.getDate();
-            // 补零
-            month = month < 10 ? '0' + month : month;
-            day = day < 10 ? '0' + day : day;
-            // 返回格式化后的日期字符串
-            return year + '-' + month + '-' + day;
-        }
-
-        // 更新时钟显示
-        function updateClock() {
-            // 获取时钟元素
-            let clock = document.getElementById('clock');
-            // 设置时钟内容为北京时间
-            clock.innerHTML = getBeijingTime();
-        }
-
-        // 更新日期显示
-        function updateDate() {
-            // 获取日期元素
-            let date = document.getElementById('date');
-            // 设置日期内容为当前日期
-            date.innerHTML = getCurrentDate();
-        }
-
-        // 每隔一秒更新一次时钟
-        setInterval(updateClock, 1000);
-        // 每隔一秒更新一次日期
-        setInterval(updateDate, 1000);
-    </script>
 </head>
 <body>
-    <!-- 使用 style 属性来应用自定义字体 -->
-    <div id="date" style="font-family: myFont;"></div>
-    <div id="clock" style="font-family: myFont;"></div>
+
+<div id="progress-bar">
+    <div id="progress">0%</div>
+</div>
+
+<script>
+    // 目标粉丝数
+    const totalFans = 100; // 您可以根据需要调整这个数值
+
+    // 使用 Fetch API 获取 Bilibili 用户的粉丝人数
+    fetch('https://api.bilibili.com/x/relation/stat?vmid=33768156')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok ' + response.statusText);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const currentFans = data.data.follower;
+            const percentage = (currentFans / totalFans) * 100;
+
+            // 更新进度条
+            document.getElementById('progress').style.width = percentage + '%';
+            document.getElementById('progress').textContent = Math.round(percentage) + '%';
+        })
+        .catch(error => console.error('Fetch Error:', error));
+</script>
+
 </body>
 </html>
