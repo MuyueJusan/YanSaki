@@ -2,50 +2,406 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>粉丝进度条</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>增强版工具集</title>
     <style>
-        #progress-bar {
-            width: 100%;
-            background-color: #ddd;
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
         }
-
-        #progress {
-            width: 0%;
-            background-color: #4CAF50;
+        h1, h2 {
+            color: #333;
             text-align: center;
+        }
+        .tool-section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #00c2f3;
             color: white;
-            padding: 10px 0;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        button:hover {
+            background-color: #19cdda;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .result-box {
+            padding: 10px;
+            background-color: #a5e7f3;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .result-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .hidden {
+            display: none;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        .success {
+            color: green;
+            margin-top: 10px;
+        }
+        .flex-container {
+            display: flex;
+            gap: 10px;
+        }
+        .flex-container > * {
+            flex: 1;
         }
     </style>
 </head>
 <body>
+    <h1>增强版工具集</h1>
+    
+    <!-- 进制转换器部分 -->
+    <div class="tool-section">
+        <h2>进制转换器</h2>
+        <div class="input-group">
+            <label for="inputValue">输入数值：</label>
+            <input type="text" id="inputValue" placeholder="请输入要转换的数值">
+        </div>
+        
+        <div class="input-group">
+            <label for="fromBase">原始进制：</label>
+            <select id="fromBase">
+                <option value="2">二进制 (2)</option>
+                <option value="8">八进制 (8)</option>
+                <option value="10" selected>十进制 (10)</option>
+                <option value="16">十六进制 (16)</option>
+            </select>
+        </div>
+        
+        <button onclick="convert()">转换</button>
+        
+        <div id="converter-error" class="error hidden"></div>
+        
+        <div id="results" class="results hidden">
+            <div class="result-box">
+                <div class="result-title">二进制 (2):</div>
+                <div id="result-bin"></div>
+            </div>
+            <div class="result-box">
+                <div class="result-title">八进制 (8):</div>
+                <div id="result-oct"></div>
+            </div>
+            <div class="result-box">
+                <div class="result-title">十进制 (10):</div>
+                <div id="result-dec"></div>
+            </div>
+            <div class="result-box">
+                <div class="result-title">十六进制 (16):</div>
+                <div id="result-hex"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 随机数生成器部分 -->
+    <div class="tool-section">
+        <h2>随机数生成器</h2>
+        <div class="flex-container">
+            <div class="input-group">
+                <label for="randomMin">最小值：</label>
+                <input type="number" id="randomMin" value="0">
+            </div>
+            <div class="input-group">
+                <label for="randomMax">最大值：</label>
+                <input type="number" id="randomMax" value="100">
+            </div>
+        </div>
+        
+        <div class="input-group">
+            <label for="randomCount">生成数量：</label>
+            <input type="number" id="randomCount" value="1" min="1" max="20">
+        </div>
+        
+        <button onclick="generateRandom()">生成随机数</button>
+        
+        <div id="random-error" class="error hidden"></div>
+        
+        <div id="random-results" class="results hidden">
+            <div class="result-box">
+                <div class="result-title">生成的随机数：</div>
+                <div id="random-numbers"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- IP地址验证器部分 -->
+    <div class="tool-section">
+        <h2>IP地址验证器</h2>
+        <div class="input-group">
+            <label for="ipAddress">IP地址：</label>
+            <input type="text" id="ipAddress" placeholder="例如: 192.168.1.1">
+        </div>
+        
+        <div class="input-group">
+            <label for="subnetMask">子网掩码位数：</label>
+            <input type="number" id="subnetMask" min="0" max="32" placeholder="0-32" value="24">
+        </div>
+        
+        <button onclick="validateIP()">验证IP地址</button>
+        
+        <div id="ip-error" class="error hidden"></div>
+        
+        <div id="ip-results" class="results hidden">
+            <div class="result-box">
+                <div class="result-title">验证结果：</div>
+                <div id="ip-validation-result"></div>
+            </div>
+            <div class="result-box">
+                <div class="result-title">网络地址：</div>
+                <div id="network-address"></div>
+            </div>
+            <div class="result-box">
+                <div class="result-title">广播地址：</div>
+                <div id="broadcast-address"></div>
+            </div>
+            <div class="result-box">
+                <div class="result-title">可用主机范围：</div>
+                <div id="host-range"></div>
+            </div>
+        </div>
+    </div>
 
-<div id="progress-bar">
-    <div id="progress">0%</div>
-</div>
-
-<script>
-    // 目标粉丝数
-    const totalFans = 100; // 您可以根据需要调整这个数值
-
-    // 使用 Fetch API 获取 Bilibili 用户的粉丝人数
-    fetch('https://api.bilibili.com/x/relation/stat?vmid=33768156')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok ' + response.statusText);
+    <script>
+        // 进制转换器功能
+        function convert() {
+            const inputValue = document.getElementById('inputValue').value.trim();
+            const fromBase = parseInt(document.getElementById('fromBase').value);
+            const resultsElement = document.getElementById('results');
+            const errorElement = document.getElementById('converter-error');
+            
+            // 隐藏结果和错误信息
+            resultsElement.classList.add('hidden');
+            errorElement.classList.add('hidden');
+            
+            if (!inputValue) {
+                showError('请输入要转换的数值', errorElement);
+                return;
             }
-            return response.json();
-        })
-        .then(data => {
-            const currentFans = data.data.follower;
-            const percentage = (currentFans / totalFans) * 100;
-
-            // 更新进度条
-            document.getElementById('progress').style.width = percentage + '%';
-            document.getElementById('progress').textContent = Math.round(percentage) + '%';
-        })
-        .catch(error => console.error('Fetch Error:', error));
-</script>
-
+            
+            try {
+                // 先转换为十进制
+                let decimalValue;
+                if (fromBase === 16) {
+                    // 处理十六进制可能包含的前缀(0x或0X)
+                    const hexValue = inputValue.replace(/^0x/i, '');
+                    decimalValue = parseInt(hexValue, 16);
+                } else {
+                    decimalValue = parseInt(inputValue, fromBase);
+                }
+                
+                if (isNaN(decimalValue)) {
+                    throw new Error('输入数值无效，请检查数值和进制是否匹配');
+                }
+                
+                // 验证输入是否与指定的进制匹配
+                if (!isValidForBase(inputValue, fromBase)) {
+                    throw new Error('输入数值与选择的进制不匹配');
+                }
+                
+                // 计算所有进制的结果
+                const results = {
+                    bin: decimalValue.toString(2),
+                    oct: decimalValue.toString(8),
+                    dec: decimalValue.toString(10),
+                    hex: decimalValue.toString(16).toUpperCase()
+                };
+                
+                // 显示结果
+                document.getElementById('result-bin').textContent = results.bin;
+                document.getElementById('result-oct').textContent = results.oct;
+                document.getElementById('result-dec').textContent = results.dec;
+                document.getElementById('result-hex').textContent = results.hex;
+                
+                resultsElement.classList.remove('hidden');
+            } catch (error) {
+                showError('转换失败: ' + error.message, errorElement);
+            }
+        }
+        
+        // 随机数生成器功能
+        function generateRandom() {
+            const min = parseInt(document.getElementById('randomMin').value);
+            const max = parseInt(document.getElementById('randomMax').value);
+            const count = parseInt(document.getElementById('randomCount').value);
+            const errorElement = document.getElementById('random-error');
+            const resultsElement = document.getElementById('random-results');
+            
+            // 隐藏结果和错误信息
+            resultsElement.classList.add('hidden');
+            errorElement.classList.add('hidden');
+            
+            try {
+                if (isNaN(min) || isNaN(max) || isNaN(count)) {
+                    throw new Error('请输入有效的数字');
+                }
+                
+                if (min >= max) {
+                    throw new Error('最小值必须小于最大值');
+                }
+                
+                if (count < 1 || count > 20) {
+                    throw new Error('生成数量必须在1-20之间');
+                }
+                
+                const numbers = [];
+                for (let i = 0; i < count; i++) {
+                    numbers.push(Math.floor(Math.random() * (max - min + 1)) + min);
+                }
+                
+                document.getElementById('random-numbers').textContent = numbers.join(', ');
+                resultsElement.classList.remove('hidden');
+            } catch (error) {
+                showError('生成失败: ' + error.message, errorElement);
+            }
+        }
+        
+        // IP地址验证器功能
+        function validateIP() {
+            const ipAddress = document.getElementById('ipAddress').value.trim();
+            const subnetMask = parseInt(document.getElementById('subnetMask').value);
+            const errorElement = document.getElementById('ip-error');
+            const resultsElement = document.getElementById('ip-results');
+            
+            // 隐藏结果和错误信息
+            resultsElement.classList.add('hidden');
+            errorElement.classList.add('hidden');
+            
+            try {
+                if (!ipAddress) {
+                    throw new Error('请输入IP地址');
+                }
+                
+                if (isNaN(subnetMask) || subnetMask < 0 || subnetMask > 32) {
+                    throw new Error('子网掩码位数必须是0-32之间的整数');
+                }
+                
+                // 验证IP地址格式
+                if (!isValidIP(ipAddress)) {
+                    throw new Error('IP地址格式不正确');
+                }
+                
+                // 计算网络信息
+                const ipParts = ipAddress.split('.').map(Number);
+                const ipBinary = ipParts.map(part => part.toString(2).padStart(8, '0')).join('');
+                
+                // 计算网络地址和广播地址
+                const networkBinary = ipBinary.substring(0, subnetMask).padEnd(32, '0');
+                const broadcastBinary = ipBinary.substring(0, subnetMask).padEnd(32, '1');
+                
+                const networkAddress = binaryToIP(networkBinary);
+                const broadcastAddress = binaryToIP(broadcastBinary);
+                
+                // 计算可用主机范围
+                let hostMin = '';
+                let hostMax = '';
+                if (subnetMask < 31) {
+                    const hostMinBinary = (parseInt(networkBinary, 2) + 1).toString(2).padStart(32, '0');
+                    const hostMaxBinary = (parseInt(broadcastBinary, 2) - 1).toString(2).padStart(32, '0');
+                    hostMin = binaryToIP(hostMinBinary);
+                    hostMax = binaryToIP(hostMaxBinary);
+                }
+                
+                // 显示结果
+                document.getElementById('ip-validation-result').textContent = 'IP地址有效';
+                document.getElementById('ip-validation-result').className = 'result-box success';
+                document.getElementById('network-address').textContent = networkAddress;
+                document.getElementById('broadcast-address').textContent = broadcastAddress;
+                
+                if (hostMin && hostMax) {
+                    document.getElementById('host-range').textContent = `${hostMin} - ${hostMax}`;
+                } else if (subnetMask === 31) {
+                    document.getElementById('host-range').textContent = '点对点链路，无可用主机范围';
+                } else if (subnetMask === 32) {
+                    document.getElementById('host-range').textContent = '单个主机地址，无可用主机范围';
+                }
+                
+                resultsElement.classList.remove('hidden');
+            } catch (error) {
+                showError('验证失败: ' + error.message, errorElement);
+            }
+        }
+        
+        // 辅助函数
+        function showError(message, element) {
+            element.textContent = message;
+            element.classList.remove('hidden');
+        }
+        
+        function isValidForBase(value, base) {
+            const validChars = {
+                2: /^[01]+$/,
+                8: /^[0-7]+$/,
+                10: /^[0-9]+$/,
+                16: /^[0-9a-fA-F]+$/
+            };
+            
+            // 如果是16进制，去掉可能的前缀
+            if (base === 16) {
+                value = value.replace(/^0x/i, '');
+            }
+            
+            return validChars[base].test(value);
+        }
+        
+        function isValidIP(ip) {
+            const ipPattern = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+            return ipPattern.test(ip);
+        }
+        
+        function binaryToIP(binaryStr) {
+            return [
+                parseInt(binaryStr.substring(0, 8), 2),
+                parseInt(binaryStr.substring(8, 16), 2),
+                parseInt(binaryStr.substring(16, 24), 2),
+                parseInt(binaryStr.substring(24, 32), 2)
+            ].join('.');
+        }
+        
+        // 添加键盘事件监听，按Enter键也可以触发功能
+        document.getElementById('inputValue').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') convert();
+        });
+        
+        document.getElementById('ipAddress').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') validateIP();
+        });
+    </script>
 </body>
 </html>
