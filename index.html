@@ -155,6 +155,11 @@
         .ip-item:last-child {
             border-bottom: none;
         }
+        .ip-class-info {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 5px;
+        }
     </style>
     
     <!-- 引入Google Fonts -->
@@ -163,7 +168,7 @@
 <body>
     <!-- 字体选择器 -->
     <div class="font-selector">
-        <h3>选择字体风格：</h3>
+        <h3>来选择字体风格：</h3>
         <div class="font-options">
             <div class="font-option selected" onclick="changeFont('default')" style="font-family: 'Segoe UI', Arial, sans-serif">默认</div>
             <div class="font-option" onclick="changeFont('roboto')" style="font-family: 'Roboto', sans-serif">Roboto</div>
@@ -186,9 +191,65 @@
         <div id="timezone-info" class="timezone-info">北京时间</div>
     </div>
     
-    <h1>增强版工具集</h1>
+    <h1>工具集</h1>
     
-    <!-- IP地址生成器部分 -->
+    <!-- 高级IP地址生成器部分 -->
+    <div class="tool-section">
+        <h2>IP地址生成器PRO</h2>
+        <div class="input-group">
+            <label for="ipNetwork2">网络地址：</label>
+            <input type="text" id="ipNetwork2" placeholder="留空将根据IP类别随机生成">
+        </div>
+        
+        <div class="flex-container">
+            <div class="input-group">
+                <label for="ipClass">IP类别：</label>
+                <select id="ipClass">
+                    <option value="A">A类 (1.0.0.0 - 126.255.255.255)</option>
+                    <option value="B">B类 (128.0.0.0 - 191.255.255.255)</option>
+                    <option value="C" selected>C类 (192.0.0.0 - 223.255.255.255)</option>
+                    <option value="private">私有地址</option>
+                </select>
+                <div class="ip-class-info" id="ipClassInfo">默认掩码: /24 (255.255.255.0)</div>
+            </div>
+            <div class="input-group">
+                <label for="ipMask2">子网掩码位数：</label>
+                <input type="number" id="ipMask2" min="1" max="32" placeholder="1-32" value="24">
+            </div>
+        </div>
+        
+        <div class="flex-container">
+            <div class="input-group">
+                <label for="ipCount2">生成数量：</label>
+                <input type="number" id="ipCount2" value="5" min="1" max="1000">
+            </div>
+            <div class="input-group">
+                <label for="ipType2">生成方式：</label>
+                <select id="ipType2">
+                    <option value="sequential">顺序生成</option>
+                    <option value="random">随机生成</option>
+                </select>
+            </div>
+        </div>
+        
+        <button onclick="generateIPsAdvanced()">生成IP地址</button>
+        
+        <div id="ipgen2-error" class="error hidden"></div>
+        
+        <div id="ipgen2-results" class="results hidden">
+            <div class="result-box">
+                <div class="result-title">生成的网络信息：</div>
+                <div id="ipgen2-network-info"></div>
+            </div>
+            <div class="result-box">
+                <div class="result-title">生成的IP地址：</div>
+                <div id="ipgen2-generated-count"></div>
+                <div class="ip-list" id="ipgen2-generated-list"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 原有IP地址生成器部分 -->
     <div class="tool-section">
         <h2>IP地址生成器</h2>
         <div class="flex-container">
@@ -392,7 +453,44 @@
                     fontOption.click();
                 }
             }
+            
+            // IP类别选择变化时更新默认掩码提示
+            document.getElementById('ipClass').addEventListener('change', function() {
+                updateDefaultMaskHint();
+            });
+            
+            // 初始化默认掩码提示
+            updateDefaultMaskHint();
         };
+        
+        // 更新IP类别默认掩码提示
+        function updateDefaultMaskHint() {
+            const ipClass = document.getElementById('ipClass').value;
+            let defaultMask = 24;
+            let maskText = '255.255.255.0';
+            
+            switch(ipClass) {
+                case 'A':
+                    defaultMask = 8;
+                    maskText = '255.0.0.0';
+                    break;
+                case 'B':
+                    defaultMask = 16;
+                    maskText = '255.255.0.0';
+                    break;
+                case 'C':
+                    defaultMask = 24;
+                    maskText = '255.255.255.0';
+                    break;
+                case 'private':
+                    defaultMask = 24;
+                    maskText = '255.255.255.0';
+                    break;
+            }
+            
+            document.getElementById('ipMask2').value = defaultMask;
+            document.getElementById('ipClassInfo').textContent = `默认掩码: /${defaultMask} (${maskText})`;
+        }
         
         // 全局变量存储用户时区信息
         let userTimezone = 'Asia/Shanghai'; // 默认中国时区
@@ -742,6 +840,231 @@
             }
         }
         
+        // 高级IP地址生成器功能
+        function generateIPsAdvanced() {
+            const networkAddress = document.getElementById('ipNetwork2').value.trim();
+            const ipClass = document.getElementById('ipClass').value;
+            const subnetMask = parseInt(document.getElementById('ipMask2').value);
+            const count = parseInt(document.getElementById('ipCount2').value);
+            const ipType = document.getElementById('ipType2').value;
+            const errorElement = document.getElementById('ipgen2-error');
+            const resultsElement = document.getElementById('ipgen2-results');
+            
+            // 隐藏结果和错误信息
+            resultsElement.classList.add('hidden');
+            errorElement.classList.add('hidden');
+            
+            try {
+                if (isNaN(subnetMask) || subnetMask < 1 || subnetMask > 32) {
+                    throw new Error('子网掩码位数必须是1-32之间的整数');
+                }
+                
+                if (isNaN(count) || count < 1 || count > 1000) {
+                    throw new Error('生成数量必须是1-1000之间的整数');
+                }
+                
+                let finalNetworkAddress = networkAddress;
+                let generatedNetwork = false;
+                
+                // 如果网络地址为空，根据IP类别生成随机网络地址
+                if (!networkAddress) {
+                    finalNetworkAddress = generateRandomNetwork(ipClass, subnetMask);
+                    generatedNetwork = true;
+                }
+                
+                // 验证网络地址格式
+                if (!isValidIP(finalNetworkAddress)) {
+                    throw new Error('网络地址格式不正确');
+                }
+                
+                // 计算网络信息
+                const ipParts = finalNetworkAddress.split('.').map(Number);
+                const ipBinary = ipParts.map(part => part.toString(2).padStart(8, '0')).join('');
+                
+                // 计算网络地址和广播地址
+                const networkBinary = ipBinary.substring(0, subnetMask).padEnd(32, '0');
+                const broadcastBinary = ipBinary.substring(0, subnetMask).padEnd(32, '1');
+                
+                const networkAddressCalc = binaryToIP(networkBinary);
+                const broadcastAddress = binaryToIP(broadcastBinary);
+                
+                // 验证输入的网络地址是否有效
+                if (finalNetworkAddress !== networkAddressCalc) {
+                    throw new Error(`输入的网络地址无效，正确的网络地址应为: ${networkAddressCalc}`);
+                }
+                
+                // 验证IP类别是否符合要求
+                if (!isValidIPClass(finalNetworkAddress, ipClass)) {
+                    throw new Error(`生成的网络地址不符合选择的IP类别: ${ipClass}`);
+                }
+                
+                // 计算可用主机范围
+                let hostMin = parseInt(networkBinary, 2) + 1;
+                let hostMax = parseInt(broadcastBinary, 2) - 1;
+                
+                // 特殊子网掩码处理
+                if (subnetMask >= 31) {
+                    if (subnetMask === 31) {
+                        // /31 子网只有2个地址，无可用主机范围
+                        hostMin = parseInt(networkBinary, 2);
+                        hostMax = parseInt(broadcastBinary, 2);
+                    } else {
+                        // /32 子网只有1个地址
+                        hostMin = parseInt(networkBinary, 2);
+                        hostMax = hostMin;
+                    }
+                }
+                
+                const totalAvailable = hostMax - hostMin + 1;
+                if (totalAvailable <= 0) {
+                    throw new Error('该子网没有可用的主机地址');
+                }
+                
+                // 生成IP地址
+                const generatedIPs = [];
+                
+                if (ipType === 'sequential') {
+                    // 顺序生成IP
+                    const maxCount = Math.min(count, totalAvailable);
+                    for (let i = 0; i < maxCount; i++) {
+                        const ipNum = hostMin + i;
+                        if (ipNum > hostMax) break;
+                        const ipBinary = ipNum.toString(2).padStart(32, '0');
+                        generatedIPs.push(binaryToIP(ipBinary));
+                    }
+                } else {
+                    // 随机生成IP
+                    for (let i = 0; i < count; i++) {
+                        const ipNum = Math.floor(Math.random() * (hostMax - hostMin + 1)) + hostMin;
+                        const ipBinary = ipNum.toString(2).padStart(32, '0');
+                        generatedIPs.push(binaryToIP(ipBinary));
+                    }
+                }
+                
+                // 显示结果
+                let networkInfo = `网络地址: ${finalNetworkAddress}/${subnetMask}<br>`;
+                networkInfo += `广播地址: ${broadcastAddress}<br>`;
+                networkInfo += `可用主机范围: ${binaryToIP((hostMin).toString(2).padStart(32, '0'))} - ${binaryToIP((hostMax).toString(2).padStart(32, '0'))}<br>`;
+                networkInfo += `可用主机数量: ${totalAvailable}`;
+                
+                if (generatedNetwork) {
+                    networkInfo += `<br><span class="success">* 网络地址是根据IP类别自动生成的</span>`;
+                }
+                
+                document.getElementById('ipgen2-network-info').innerHTML = networkInfo;
+                document.getElementById('ipgen2-generated-count').textContent = 
+                    `共生成 ${generatedIPs.length} 个IP地址`;
+                
+                const ipListElement = document.getElementById('ipgen2-generated-list');
+                ipListElement.innerHTML = '';
+                
+                generatedIPs.forEach(ip => {
+                    const ipItem = document.createElement('div');
+                    ipItem.className = 'ip-item';
+                    ipItem.textContent = ip;
+                    ipListElement.appendChild(ipItem);
+                });
+                
+                resultsElement.classList.remove('hidden');
+            } catch (error) {
+                showError('生成失败: ' + error.message, errorElement);
+            }
+        }
+        
+        // 根据IP类别和掩码生成随机网络地址
+        function generateRandomNetwork(ipClass, subnetMask) {
+            let firstOctet;
+            
+            switch(ipClass) {
+                case 'A':
+                    // A类: 1.0.0.0 - 126.255.255.255
+                    firstOctet = Math.floor(Math.random() * 126) + 1;
+                    break;
+                case 'B':
+                    // B类: 128.0.0.0 - 191.255.255.255
+                    firstOctet = Math.floor(Math.random() * 64) + 128;
+                    break;
+                case 'C':
+                    // C类: 192.0.0.0 - 223.255.255.255
+                    firstOctet = Math.floor(Math.random() * 32) + 192;
+                    break;
+                case 'private':
+                    // 私有地址范围:
+                    // 10.0.0.0/8
+                    // 172.16.0.0/12
+                    // 192.168.0.0/16
+                    const privateRanges = [
+                        { min: 10, max: 10, mask: 8 },
+                        { min: 172, max: 172, mask: 12 },
+                        { min: 192, max: 192, mask: 16 }
+                    ];
+                    const range = privateRanges[Math.floor(Math.random() * privateRanges.length)];
+                    firstOctet = range.min;
+                    break;
+                default:
+                    firstOctet = Math.floor(Math.random() * 254) + 1;
+            }
+            
+            // 生成剩余的三个八位组
+            let secondOctet = 0, thirdOctet = 0, fourthOctet = 0;
+            
+            if (ipClass === 'private') {
+                // 特殊处理私有地址
+                if (firstOctet === 10) {
+                    // 10.0.0.0/8
+                    secondOctet = Math.floor(Math.random() * 256);
+                    thirdOctet = Math.floor(Math.random() * 256);
+                    fourthOctet = 0;
+                } else if (firstOctet === 172) {
+                    // 172.16.0.0/12
+                    secondOctet = Math.floor(Math.random() * 16) + 16;
+                    thirdOctet = Math.floor(Math.random() * 256);
+                    fourthOctet = 0;
+                } else if (firstOctet === 192) {
+                    // 192.168.0.0/16
+                    secondOctet = 168;
+                    thirdOctet = Math.floor(Math.random() * 256);
+                    fourthOctet = 0;
+                }
+            } else {
+                // 普通IP类别
+                secondOctet = Math.floor(Math.random() * 256);
+                thirdOctet = Math.floor(Math.random() * 256);
+                fourthOctet = 0;
+            }
+            
+            // 根据子网掩码调整网络地址
+            const ipBinary = 
+                firstOctet.toString(2).padStart(8, '0') +
+                secondOctet.toString(2).padStart(8, '0') +
+                thirdOctet.toString(2).padStart(8, '0') +
+                fourthOctet.toString(2).padStart(8, '0');
+            
+            const networkBinary = ipBinary.substring(0, subnetMask).padEnd(32, '0');
+            return binaryToIP(networkBinary);
+        }
+        
+        // 验证IP地址是否符合指定的类别
+        function isValidIPClass(ip, ipClass) {
+            const parts = ip.split('.').map(Number);
+            const firstOctet = parts[0];
+            
+            switch(ipClass) {
+                case 'A':
+                    return firstOctet >= 1 && firstOctet <= 126;
+                case 'B':
+                    return firstOctet >= 128 && firstOctet <= 191;
+                case 'C':
+                    return firstOctet >= 192 && firstOctet <= 223;
+                case 'private':
+                    return (firstOctet === 10) || 
+                           (firstOctet === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+                           (firstOctet === 192 && parts[1] === 168);
+                default:
+                    return true;
+            }
+        }
+        
         // 辅助函数
         function showError(message, element) {
             element.textContent = message;
@@ -789,6 +1112,10 @@
         
         document.getElementById('ipNetwork').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') generateIPs();
+        });
+        
+        document.getElementById('ipNetwork2').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') generateIPsAdvanced();
         });
         
         // 初始化
