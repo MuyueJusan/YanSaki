@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YanSaki的小屋</title>
+    <!-- 引入像素字体 (Silkscreen, ZCOOL Gaodeng) 和 晶体管数字字体 (Orbitron) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Share+Tech+Mono&family=Silkscreen&family=ZCOOL+Gaodeng&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --color-1: #79d2b3;
+            --color-2: #79d2ca;
+            --color-3: #79c4d2;
+            --color-4: #79aed2;
+            --color-5: #7998d2;
+        }
+
+        /* 全局像素字体设置 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Silkscreen', 'DotGothic16', 'ZCOOL Gaodeng', monospace;
+            user-select: none;
+        }
+
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            background: linear-gradient(135deg, var(--color-1), var(--color-2), var(--color-3), var(--color-4), var(--color-5));
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            padding: 0 1rem 2.5rem 1rem;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* 顶部标题 */
+        .title {
+            margin-top: clamp(2rem, 6vh, 4rem); 
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            text-align: center;
+            letter-spacing: 2px;
+            width: 100%;
+        }
+
+        /* 毛玻璃卡片基类 */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            border-radius: 14px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            overflow: hidden;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        /* 时钟容器 */
+        .clock-container {
+            margin-top: clamp(1rem, 3vh, 2rem);
+            height: clamp(90px, 15vh, 135px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 1rem;
+        }
+
+        .period-box {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            font-size: clamp(0.9rem, 2.5vw, 1.25rem);
+            line-height: 1.4;
+            text-align: center;
+            border-right: 2px solid rgba(255, 255, 255, 0.4);
+            padding-right: clamp(0.6rem, 2vw, 1.2rem);
+            margin-right: clamp(0.6rem, 2vw, 1.2rem);
+            flex-shrink: 0;
+        }
+
+        .period-am, .period-pm {
+            transition: opacity 0.3s ease;
+        }
+        
+        .inactive { opacity: 0.3; }
+
+        .active {
+            opacity: 1;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+        }
+
+        /* 数字时钟：等宽晶体管字体，每个字符天然等宽，数字变化不跳动 */
+        .digital-clock {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: clamp(2rem, 7vw, 3.6rem);
+            letter-spacing: clamp(1px, 0.8vw, 4px);
+            color: #ffffff;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+
+            display: inline-block;
+            text-align: center;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* 日历容器 */
+        .calendar-container {
+            margin-top: clamp(1rem, 2.5vh, 1.5rem);
+            padding: clamp(0.8rem, 2.5vw, 1.2rem);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 日历头部控制栏 */
+        .calendar-header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 0.2rem;
+        }
+
+        .header-title-box {
+            display: flex;
+            align-items: center;
+            gap: clamp(4px, 1.5vw, 8px);
+        }
+
+        .clickable-title {
+            font-size: clamp(1rem, 3vw, 1.3rem);
+            letter-spacing: 1px;
+            color: #ffffff;
+            text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: background 0.2s ease;
+        }
+
+        .clickable-title:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .cal-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            color: #fff;
+            padding: clamp(3px, 1vw, 5px) clamp(6px, 1.5vw, 10px);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: clamp(0.75rem, 2vw, 0.9rem);
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        .cal-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+        }
+
+        .cal-btn:active {
+            transform: scale(0.95);
+        }
+
+        .today-btn {
+            font-size: clamp(0.7rem, 1.8vw, 0.8rem);
+            padding: 3px 6px;
+        }
+
+        .toggle-btn {
+            font-size: clamp(0.8rem, 2vw, 1rem);
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            padding: 0;
+        }
+
+        .toggle-icon {
+            display: inline-block;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .calendar-container.collapsed .toggle-icon {
+            transform: rotate(-180deg);
+        }
+
+        /* 核心折叠动画 wrapper */
+        .calendar-collapse-wrapper {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%;
+        }
+
+        .calendar-container:not(.collapsed) .calendar-collapse-wrapper {
+            grid-template-rows: 1fr;
+        }
+
+        .calendar-collapse-inner {
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .calendar-body {
+            width: 100%;
+            height: clamp(250px, 35vh, 300px);
+            margin-top: clamp(0.6rem, 2vh, 1rem);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .calendar-container.collapsed .calendar-body {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+
+        .calendar-body.fade-out {
+            opacity: 0;
+            transform: scale(0.96);
+        }
+
+        /* 网格视图结构 */
+        .days-grid {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: clamp(4px, 1.2vw, 8px);
+            text-align: center;
+        }
+
+        .weekday-tag {
+            font-size: clamp(0.75rem, 2vw, 0.95rem);
+            font-weight: bold;
+            opacity: 0.85;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .weekday-tag.sun { color: #ff9e9e; }
+        .weekday-tag.sat { color: #9ed2ff; }
+
+        .day-cell {
+            font-size: clamp(0.8rem, 2.2vw, 1rem);
+            height: clamp(28px, 4.5vh, 36px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .day-cell.current-month:hover {
+            background: rgba(255, 255, 255, 0.25);
+            cursor: default;
+        }
+
+        .day-cell.other-month {
+            opacity: 0.25;
+        }
+
+        .day-cell.today {
+            background: rgba(255, 255, 255, 0.9);
+            color: #3a7bd5;
+            font-weight: bold;
+            text-shadow: none;
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+        }
+
+        .months-grid {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: clamp(6px, 1.5vw, 12px);
+            align-content: center;
+        }
+
+        .month-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 8px;
+            font-size: clamp(0.85rem, 2.2vw, 1.1rem);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            height: clamp(40px, 7vh, 55px);
+        }
+
+        .month-cell:hover {
+            background: rgba(255, 255, 255, 0.35);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .month-cell.selected {
+            background: rgba(255, 255, 255, 0.85);
+            color: #3a7bd5;
+            font-weight: bold;
+            text-shadow: none;
+        }
+
+        .years-grid {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: clamp(8px, 1.8vw, 14px);
+            align-content: center;
+        }
+
+        .year-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 8px;
+            font-size: clamp(0.95rem, 2.5vw, 1.2rem);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            height: clamp(45px, 8vh, 60px);
+        }
+
+        .year-cell:hover {
+            background: rgba(255, 255, 255, 0.35);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .year-cell.selected {
+            background: rgba(255, 255, 255, 0.85);
+            color: #3a7bd5;
+            font-weight: bold;
+            text-shadow: none;
+        }
+
+        /* 底部【点击与Saki贴贴】跳转按钮 */
+        .hug-button {
+            margin-top: clamp(1.5rem, 4vh, 2.5rem);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            color: #ffffff;
+            font-size: clamp(0.95rem, 2.5vw, 1.1rem);
+            padding: 0.8em 1.8em;
+            letter-spacing: 1.5px;
+            background: rgba(255, 255, 255, 0.22);
+            backdrop-filter: blur(10px);
+            border: 1.5px solid rgba(255, 255, 255, 0.45);
+            border-radius: 30px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+
+        .hug-button:hover {
+            background: rgba(255, 255, 255, 0.38);
+            border-color: rgba(255, 255, 255, 0.8);
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25), 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+
+        .hug-button:active {
+            transform: translateY(0) scale(0.98);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        @media (max-width: 400px) {
+            body { padding-left: 0.5rem; padding-right: 0.5rem; }
+            .clock-container { padding: 0 0.5rem; }
+            .period-box { margin-right: 0.5rem; padding-right: 0.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="title">YanSaki的小屋</h1>
+
+    <!-- 时钟卡片 -->
+    <div class="clock-container glass-card">
+        <div class="period-box">
+            <span id="am-indicator" class="period-am">午前</span>
+            <span id="pm-indicator" class="period-pm">午後</span>
+        </div>
+        <div id="clock" class="digital-clock">00:00:00</div>
+    </div>
+
+    <!-- 交互式日历卡片 (默认折叠) -->
+    <div class="calendar-container glass-card collapsed" id="calendar-card">
+        <div class="calendar-header">
+            <button class="cal-btn" onclick="handlePrev()">＜</button>
+            <div class="header-title-box">
+                <span id="title-year" class="clickable-title" onclick="switchMode('year')">2026年</span>
+                <span id="title-month" class="clickable-title" onclick="switchMode('month')">09月</span>
+                <button class="cal-btn today-btn" onclick="resetToToday()">今日</button>
+            </div>
+            <div style="display: flex; gap: 6px;">
+                <button class="cal-btn" onclick="handleNext()">＞</button>
+                <button class="cal-btn toggle-btn" onclick="toggleCalendar()" title="展开/折叠日历">
+                    <span class="toggle-icon">▲</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 动画折叠外层容器 -->
+        <div class="calendar-collapse-wrapper">
+            <div class="calendar-collapse-inner">
+                <div class="calendar-body" id="calendar-body">
+                    <!-- JS 动态渲染 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部居中贴贴按钮 -->
+    <a href="https://discord.gg/7uTWKYv36w" target="_blank" rel="noopener noreferrer" class="hug-button">
+        点击与Saki贴贴
+    </a>
+
+    <script>
+        // 时钟逻辑
+        function updateClock() {
+            const now = new Date();
+            let hours = now.getHours();
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+
+            const amIndicator = document.getElementById('am-indicator');
+            const pmIndicator = document.getElementById('pm-indicator');
+
+            if (hours < 12) {
+                amIndicator.className = 'period-am active';
+                pmIndicator.className = 'period-pm inactive';
+            } else {
+                amIndicator.className = 'period-am inactive';
+                pmIndicator.className = 'period-pm active';
+            }
+
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            const formattedHours = String(hours).padStart(2, '0');
+
+            // 等宽字体保证每个字符宽度一致，直接改文本即可，不跳动
+            document.getElementById('clock').textContent = `${formattedHours}:${minutes}:${seconds}`;
+        }
+
+        // 日历状态
+        let currentMode = 'day'; 
+        let viewYear = new Date().getFullYear();
+        let viewMonth = new Date().getMonth();
+
+        // 切换折叠/展开
+        function toggleCalendar() {
+            const card = document.getElementById('calendar-card');
+            card.classList.toggle('collapsed');
+        }
+
+        // 动画更新视图
+        function updateCalendarView(actionCallback) {
+            const card = document.getElementById('calendar-card');
+            if (card.classList.contains('collapsed')) {
+                card.classList.remove('collapsed');
+            }
+
+            const body = document.getElementById('calendar-body');
+            body.classList.add('fade-out');
+
+            setTimeout(() => {
+                if (actionCallback) actionCallback();
+                renderCalendar();
+                body.classList.remove('fade-out');
+            }, 200);
+        }
+
+        function switchMode(targetMode) {
+            updateCalendarView(() => {
+                if (currentMode === targetMode) {
+                    currentMode = 'day';
+                } else {
+                    currentMode = targetMode;
+                }
+            });
+        }
+
+        // 视图渲染
+        function renderCalendar() {
+            document.getElementById('title-year').textContent = `${viewYear}年`;
+            document.getElementById('title-month').textContent = `${String(viewMonth + 1).padStart(2, '0')}月`;
+
+            const body = document.getElementById('calendar-body');
+            body.innerHTML = '';
+
+            if (currentMode === 'day') {
+                renderDaysView(body);
+            } else if (currentMode === 'month') {
+                renderMonthsView(body);
+            } else if (currentMode === 'year') {
+                renderYearsView(body);
+            }
+        }
+
+        // 1. 日视图
+        function renderDaysView(container) {
+            const grid = document.createElement('div');
+            grid.className = 'days-grid';
+
+            const weekdays = [
+                { name: '日', class: 'sun' },
+                { name: '月', class: '' },
+                { name: '火', class: '' },
+                { name: '水', class: '' },
+                { name: '木', class: '' },
+                { name: '金', class: '' },
+                { name: '土', class: 'sat' }
+            ];
+
+            weekdays.forEach(w => {
+                const tag = document.createElement('div');
+                tag.className = `weekday-tag ${w.class}`.trim();
+                tag.textContent = w.name;
+                grid.appendChild(tag);
+            });
+
+            const realNow = new Date();
+            const realYear = realNow.getFullYear();
+            const realMonth = realNow.getMonth();
+            const realDate = realNow.getDate();
+
+            const firstDayOfMonth = new Date(viewYear, viewMonth, 1);
+            const lastDayOfMonth = new Date(viewYear, viewMonth + 1, 0);
+
+            const startWeekday = firstDayOfMonth.getDay(); 
+            const totalDays = lastDayOfMonth.getDate();
+
+            const prevMonthLastDay = new Date(viewYear, viewMonth, 0).getDate();
+            for (let i = startWeekday - 1; i >= 0; i--) {
+                const cell = document.createElement('div');
+                cell.className = 'day-cell other-month';
+                cell.textContent = prevMonthLastDay - i;
+                grid.appendChild(cell);
+            }
+
+            for (let day = 1; day <= totalDays; day++) {
+                const cell = document.createElement('div');
+                cell.className = 'day-cell current-month';
+                cell.textContent = day;
+
+                if (viewYear === realYear && viewMonth === realMonth && day === realDate) {
+                    cell.classList.add('today');
+                }
+
+                grid.appendChild(cell);
+            }
+
+            const currentTotalCells = grid.children.length - 7;
+            const nextMonthDays = (currentTotalCells % 7 === 0) ? 0 : 7 - (currentTotalCells % 7);
+            for (let i = 1; i <= nextMonthDays; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'day-cell other-month';
+                cell.textContent = i;
+                grid.appendChild(cell);
+            }
+
+            container.appendChild(grid);
+        }
+
+        // 2. 月份视图
+        function renderMonthsView(container) {
+            const grid = document.createElement('div');
+            grid.className = 'months-grid';
+
+            for (let m = 0; m < 12; m++) {
+                const cell = document.createElement('div');
+                cell.className = 'month-cell';
+                if (m === viewMonth) {
+                    cell.classList.add('selected');
+                }
+                cell.textContent = `${String(m + 1).padStart(2, '0')}月`;
+                cell.onclick = () => {
+                    updateCalendarView(() => {
+                        viewMonth = m;
+                        currentMode = 'day';
+                    });
+                };
+                grid.appendChild(cell);
+            }
+
+            container.appendChild(grid);
+        }
+
+        // 3. 年份视图
+        function renderYearsView(container) {
+            const grid = document.createElement('div');
+            grid.className = 'years-grid';
+
+            const startYear = viewYear - 4;
+
+            for (let i = 0; i < 9; i++) {
+                const y = startYear + i;
+                const cell = document.createElement('div');
+                cell.className = 'year-cell';
+                if (y === viewYear) {
+                    cell.classList.add('selected');
+                }
+                cell.textContent = `${y}年`;
+                cell.onclick = () => {
+                    updateCalendarView(() => {
+                        viewYear = y;
+                        currentMode = 'month';
+                    });
+                };
+                grid.appendChild(cell);
+            }
+
+            container.appendChild(grid);
+        }
+
+        // 左右切换逻辑
+        function handlePrev() {
+            updateCalendarView(() => {
+                if (currentMode === 'day') {
+                    viewMonth--;
+                    if (viewMonth < 0) {
+                        viewMonth = 11;
+                        viewYear--;
+                    }
+                } else if (currentMode === 'month') {
+                    viewYear--;
+                } else if (currentMode === 'year') {
+                    viewYear -= 9;
+                }
+            });
+        }
+
+        function handleNext() {
+            updateCalendarView(() => {
+                if (currentMode === 'day') {
+                    viewMonth++;
+                    if (viewMonth > 11) {
+                        viewMonth = 0;
+                        viewYear++;
+                    }
+                } else if (currentMode === 'month') {
+                    viewYear++;
+                } else if (currentMode === 'year') {
+                    viewYear += 9;
+                }
+            });
+        }
+
+        function resetToToday() {
+            updateCalendarView(() => {
+                const now = new Date();
+                viewYear = now.getFullYear();
+                viewMonth = now.getMonth();
+                currentMode = 'day';
+            });
+        }
+
+        // 初始化
+        updateClock();
+        renderCalendar();
+
+        setInterval(updateClock, 1000);
+    </script>
+</body>
+</html>
