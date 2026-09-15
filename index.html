@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YanSaki的小屋</title>
-    <!-- 引入像素字体 (Silkscreen, ZCOOL Gaodeng) 和 晶体管数字字体 (Orbitron) -->
+    <!-- 引入像素字体 (Silkscreen, ZCOOL Gaodeng) 和 晶体管数字字体 (Orbitron / Share Tech Mono) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Share+Tech+Mono&family=Silkscreen&family=ZCOOL+Gaodeng&display=swap" rel="stylesheet">
@@ -39,6 +39,7 @@
             color: #ffffff;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
             padding: 0 1rem 2.5rem 1rem;
+            transition: background 0.5s ease;
         }
 
         @keyframes gradientShift {
@@ -47,9 +48,52 @@
             100% { background-position: 0% 50%; }
         }
 
+        /* 顶部控制栏 (固定在右上角) */
+        .top-controls-container {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+            border: 1.5px solid rgba(255, 255, 255, 0.5);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        /* 小游戏入口按钮（位于日历下方，居中） */
+        .game-entry-btn {
+            margin-top: clamp(1rem, 3vh, 2rem);
+        }
+
+        .switch-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #ff4d4d;
+            box-shadow: 0 0 5px #ff4d4d;
+        }
+
         /* 顶部标题 */
         .title {
-            margin-top: clamp(2rem, 6vh, 4rem); 
+            margin-top: clamp(2.5rem, 6vh, 4.5rem); 
             font-size: clamp(1.5rem, 5vw, 2.5rem);
             text-align: center;
             letter-spacing: 2px;
@@ -66,16 +110,111 @@
             overflow: hidden;
             width: 100%;
             max-width: 500px;
+            transition: all 0.3s ease;
         }
 
         /* 时钟容器 */
         .clock-container {
             margin-top: clamp(1rem, 3vh, 2rem);
-            height: clamp(90px, 15vh, 135px);
+            min-height: clamp(90px, 15vh, 135px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem;
+        }
+
+        .clock-display {
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 0 1rem;
+        }
+
+        /* 时区切换开关（点击展开/折叠时区按钮网格） */
+        .tz-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            color: #fff;
+            padding: clamp(3px, 1vw, 5px) clamp(10px, 2vw, 14px);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: clamp(0.75rem, 2vw, 0.9rem);
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        .tz-toggle:hover {
+            background: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+        }
+
+        .tz-toggle-icon {
+            display: inline-block;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .clock-container.tz-collapsed .tz-toggle-icon {
+            transform: rotate(-90deg);
+        }
+
+        .tz-collapse-wrapper {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%;
+        }
+
+        .clock-container:not(.tz-collapsed) .tz-collapse-wrapper {
+            grid-template-rows: 1fr;
+        }
+
+        .tz-collapse-inner {
+            overflow: hidden;
+            width: 100%;
+        }
+
+        /* 时区切换按钮网格（样式与日历展开的月份/年份格子一致） */
+        .tz-grid {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: clamp(4px, 1.2vw, 8px);
+            padding: 0 0.2rem;
+        }
+
+        .tz-cell {
+            appearance: none;
+            -webkit-appearance: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 8px;
+            color: #fff;
+            font-size: clamp(0.72rem, 2vw, 0.9rem);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            height: clamp(30px, 5vh, 38px);
+            padding: 0 4px;
+            text-align: center;
+        }
+
+        .tz-cell:hover {
+            background: rgba(255, 255, 255, 0.35);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .tz-cell.selected {
+            background: rgba(255, 255, 255, 0.85);
+            color: #3a7bd5;
+            font-weight: bold;
+            text-shadow: none;
         }
 
         .period-box {
@@ -104,7 +243,7 @@
             text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
         }
 
-        /* 数字时钟：等宽晶体管字体，每个字符天然等宽，数字变化不跳动 */
+        /* 数字时钟 */
         .digital-clock {
             font-family: 'Share Tech Mono', monospace;
             font-size: clamp(2rem, 7vw, 3.6rem);
@@ -116,6 +255,7 @@
             text-align: center;
             white-space: nowrap;
             flex-shrink: 0;
+            cursor: pointer;
         }
 
         /* 日历容器 */
@@ -128,7 +268,6 @@
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* 日历头部控制栏 */
         .calendar-header {
             width: 100%;
             display: flex;
@@ -204,7 +343,6 @@
             transform: rotate(-180deg);
         }
 
-        /* 核心折叠动画 wrapper */
         .calendar-collapse-wrapper {
             display: grid;
             grid-template-rows: 0fr;
@@ -243,7 +381,6 @@
             transform: scale(0.96);
         }
 
-        /* 网格视图结构 */
         .days-grid {
             width: 100%;
             display: grid;
@@ -358,7 +495,7 @@
             text-shadow: none;
         }
 
-        /* 底部【点击与Saki贴贴】跳转按钮 */
+        /* 贴贴按钮 */
         .hug-button {
             margin-top: clamp(1.5rem, 4vh, 2.5rem);
             display: inline-flex;
@@ -390,6 +527,466 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
+        /* Modal 弹窗 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .game-card {
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            border-radius: 16px;
+            padding: 20px;
+            width: 90%;
+            max-width: 520px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-shadow: none;
+        }
+
+        .game-card-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 8px;
+        }
+
+        .game-title-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .game-title {
+            font-size: 1.1rem;
+            color: #333;
+            font-weight: bold;
+        }
+
+        .nav-back-btn {
+            background: #eee;
+            border: 1px solid #ccc;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            display: none;
+        }
+
+        .nav-back-btn:hover { background: #ddd; }
+
+        .close-game-btn {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: #666;
+            padding: 0 6px;
+        }
+
+        .close-game-btn:hover { color: #000; }
+
+        /* 游戏列表样式 */
+        .game-menu-list {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 10px 0;
+        }
+
+        .game-item-btn {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #ffffff;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .game-item-btn:hover {
+            border-color: #3a7bd5;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        .game-item-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+        }
+
+        .game-item-title {
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #222;
+        }
+
+        .game-item-desc {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .game-item-icon {
+            font-size: 1.5rem;
+        }
+
+        /* 游戏 Canvas View */
+        .game-viewport {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        #catGameCanvas {
+            background: #000;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 480px;
+            height: 260px;
+            cursor: pointer;
+        }
+
+        /* 虚拟实体控制按键样式 (双人/单向左右) */
+        .touch-controls {
+            display: none;
+            width: 100%;
+            max-width: 480px;
+            justify-content: space-between;
+            margin-top: 10px;
+            gap: 15px;
+        }
+
+        /* 十字键控制样式 */
+        .dpad-controls {
+            display: none;
+            grid-template-columns: repeat(3, 42px);
+            grid-template-rows: repeat(3, 42px);
+            gap: 4px;
+            margin-top: 10px;
+            justify-content: center;
+        }
+
+        .touch-btn {
+            flex: 1;
+            height: 48px;
+            background: rgba(240, 240, 240, 0.9);
+            border: 2px solid #bbb;
+            border-radius: 8px;
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #999;
+            touch-action: manipulation;
+        }
+
+        .touch-btn:active, .touch-btn.pressed {
+            background: #ddd;
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #999;
+        }
+
+        .dpad-btn {
+            background: rgba(240, 240, 240, 0.9);
+            border: 2px solid #bbb;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 3px 0 #999;
+            touch-action: manipulation;
+        }
+
+        .dpad-btn:active, .dpad-btn.pressed {
+            background: #ddd;
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #999;
+        }
+
+        .dpad-up { grid-column: 2; grid-row: 1; }
+        .dpad-left { grid-column: 1; grid-row: 2; }
+        .dpad-right { grid-column: 3; grid-row: 2; }
+        .dpad-down { grid-column: 2; grid-row: 3; }
+
+        .game-hint {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        /* 复古模式覆盖 */
+        body.retro-mode {
+            animation: none;
+            background: #008080;
+            background-image: 
+                linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #000;
+            text-shadow: none;
+        }
+
+        body.retro-mode .action-btn {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #fff #808080 #808080 #fff;
+            border-radius: 0;
+            font-weight: bold;
+            box-shadow: none;
+        }
+
+        body.retro-mode .switch-indicator {
+            background-color: #00ff00;
+            box-shadow: 0 0 6px #00ff00;
+        }
+
+        body.retro-mode .title {
+            color: #ffff00;
+            font-family: 'DotGothic16', monospace;
+            text-shadow: 2px 2px #000;
+            letter-spacing: 4px;
+        }
+
+        body.retro-mode .glass-card {
+            background: #c0c0c0;
+            backdrop-filter: none;
+            border-radius: 0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            box-shadow: 2px 2px 0px #000000;
+            padding-top: 26px;
+            position: relative;
+        }
+
+        body.retro-mode .glass-card::before {
+            content: " System Window";
+            position: absolute;
+            top: 2px; left: 2px; right: 2px;
+            height: 20px;
+            background: linear-gradient(90deg, #000080, #1084d0);
+            color: #ffffff;
+            font-size: 0.75rem;
+            line-height: 20px;
+            padding-left: 5px;
+            font-weight: bold;
+            text-align: left;
+        }
+
+        body.retro-mode .glass-card::after {
+            content: "×";
+            position: absolute;
+            top: 4px; right: 4px;
+            width: 16px; height: 14px;
+            background: #c0c0c0;
+            border: 1px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            color: #000;
+            font-size: 12px;
+            line-height: 12px;
+            text-align: center;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        body.retro-mode .period-box { border-right-color: #808080; color: #000080; }
+        body.retro-mode .period-am.active,
+        body.retro-mode .period-pm.active { color: #000080; text-shadow: none; font-weight: bold; }
+
+        body.retro-mode .digital-clock {
+            background: #000;
+            color: #00ff00;
+            padding: 4px 12px;
+            border: 2px solid;
+            border-color: #808080 #fff #fff #808080;
+            text-shadow: 0 0 4px rgba(0, 255, 0, 0.6);
+        }
+
+        body.retro-mode .tz-cell {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: none;
+            font-weight: bold;
+        }
+
+        body.retro-mode .tz-toggle {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: none;
+            font-weight: bold;
+        }
+
+        body.retro-mode .clickable-title { color: #000; text-shadow: none; }
+        body.retro-mode .clickable-title:hover { background: #000080; color: #fff; }
+
+        body.retro-mode .cal-btn {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: none;
+            font-weight: bold;
+        }
+
+        body.retro-mode .weekday-tag { color: #000080; border-bottom: 2px solid #808080; }
+        body.retro-mode .day-cell { color: #000; border-radius: 0; }
+        body.retro-mode .day-cell.current-month:hover { background: #000080; color: #fff; }
+
+        body.retro-mode .day-cell.today {
+            background: #000080;
+            color: #ffff00;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .month-cell,
+        body.retro-mode .year-cell {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+
+        body.retro-mode .hug-button {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 2px 2px 0px #000000;
+            text-shadow: none;
+            font-weight: bold;
+            backdrop-filter: none;
+        }
+
+        body.retro-mode .game-card {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 3px 3px 0 #000;
+            padding-top: 30px;
+        }
+
+        body.retro-mode .game-card-header {
+            position: absolute;
+            top: 2px; left: 2px; right: 2px;
+            height: 22px;
+            background: linear-gradient(90deg, #000080, #1084d0);
+            color: #fff;
+            padding: 0 4px;
+            margin-bottom: 0;
+            border-bottom: none;
+        }
+
+        body.retro-mode .game-title { color: #fff; font-size: 0.8rem; }
+        body.retro-mode .nav-back-btn {
+            background: #c0c0c0;
+            border: 1px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            color: #000;
+            font-size: 0.7rem;
+            padding: 0 4px;
+        }
+
+        body.retro-mode .close-game-btn {
+            background: #c0c0c0;
+            border: 1px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            color: #000;
+            font-size: 10px;
+            line-height: 10px;
+            height: 14px; width: 14px;
+            padding: 0;
+        }
+
+        body.retro-mode .game-item-btn {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+
+        body.retro-mode .game-item-btn:hover {
+            background: #000080;
+            color: #fff;
+        }
+
+        body.retro-mode .game-item-btn:hover .game-item-title,
+        body.retro-mode .game-item-btn:hover .game-item-desc {
+            color: #fff;
+        }
+
+        body.retro-mode #catGameCanvas {
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+            background: #000;
+        }
+
+        body.retro-mode .touch-btn,
+        body.retro-mode .dpad-btn {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 2px 2px 0 #000;
+            color: #000;
+        }
+
+        body.retro-mode .touch-btn:active,
+        body.retro-mode .dpad-btn:active {
+            border-color: #808080 #ffffff #ffffff #808080;
+            box-shadow: none;
+            transform: translate(1px, 1px);
+        }
+
         @media (max-width: 400px) {
             body { padding-left: 0.5rem; padding-right: 0.5rem; }
             .clock-container { padding: 0 0.5rem; }
@@ -402,12 +999,22 @@
     <h1 class="title">YanSaki的小屋</h1>
 
     <!-- 时钟卡片 -->
-    <div class="clock-container glass-card">
-        <div class="period-box">
-            <span id="am-indicator" class="period-am">午前</span>
-            <span id="pm-indicator" class="period-pm">午後</span>
+    <div class="clock-container glass-card tz-collapsed" id="clock-tz-card">
+        <div class="clock-display">
+            <div class="period-box">
+                <span id="am-indicator" class="period-am">午前</span>
+                <span id="pm-indicator" class="period-pm">午後</span>
+            </div>
+            <div id="clock" class="digital-clock" onclick="toggleRetroMode()" title="点击切换复古 / 现代模式">00:00:00</div>
         </div>
-        <div id="clock" class="digital-clock">00:00:00</div>
+        <button id="clock-tz-toggle" class="tz-toggle" type="button" onclick="toggleTimezoneGrid()">
+            切换时区 <span class="tz-toggle-icon">▾</span>
+        </button>
+        <div class="tz-collapse-wrapper">
+            <div class="tz-collapse-inner">
+                <div id="clock-tz-grid" class="tz-grid"></div>
+            </div>
+        </div>
     </div>
 
     <!-- 交互式日历卡片 (默认折叠) -->
@@ -427,7 +1034,6 @@
             </div>
         </div>
         
-        <!-- 动画折叠外层容器 -->
         <div class="calendar-collapse-wrapper">
             <div class="calendar-collapse-inner">
                 <div class="calendar-body" id="calendar-body">
@@ -437,18 +1043,112 @@
         </div>
     </div>
 
-    <!-- 底部居中贴贴按钮 -->
+    <!-- 小游戏按钮 -->
+    <button class="action-btn game-entry-btn" onclick="openCatGame()">
+        <span>🐱 小游戏</span>
+    </button>
+
+    <!-- 贴贴按钮 -->
     <a href="https://discord.gg/7uTWKYv36w" target="_blank" rel="noopener noreferrer" class="hug-button">
         点击与Saki贴贴
     </a>
 
+    <!-- 小游戏 Modal 弹窗 -->
+    <div class="modal-overlay" id="gameModal">
+        <div class="game-card">
+            <div class="game-card-header">
+                <div class="game-title-box">
+                    <button class="nav-back-btn" id="backMenuBtn" onclick="showGameMenu()">＜ 返回菜单</button>
+                    <span class="game-title" id="gameModalTitle">Arcade Select.exe</span>
+                </div>
+                <button class="close-game-btn" onclick="closeCatGame()">×</button>
+            </div>
+
+            <!-- 游戏选择菜单 -->
+            <div class="game-menu-list" id="gameMenuList">
+                <div class="game-item-btn" onclick="launchGame('runner')">
+                    <div class="game-item-info">
+                        <span class="game-item-title">Cat Runner</span>
+                        <span class="game-item-desc">经典横版跳跃避障游戏</span>
+                    </div>
+                    <span class="game-item-icon">🏃</span>
+                </div>
+                <div class="game-item-btn" onclick="launchGame('doodle')">
+                    <div class="game-item-info">
+                        <span class="game-item-title">Cat Doodle Jump</span>
+                        <span class="game-item-desc">竖版无限踏板涂鸦跳跃</span>
+                    </div>
+                    <span class="game-item-icon">🚀</span>
+                </div>
+                <div class="game-item-btn" onclick="launchGame('parade')">
+                    <div class="game-item-info">
+                        <span class="game-item-title">Cat Parade</span>
+                        <span class="game-item-desc">贪吃蛇风：猫猫大游行</span>
+                    </div>
+                    <span class="game-item-icon">🐈‍⬛</span>
+                </div>
+            </div>
+
+            <!-- 游戏画布区域 -->
+            <div class="game-viewport" id="gameViewport">
+                <canvas id="catGameCanvas" width="480" height="260"></canvas>
+                
+                <!-- Doodle Jump 双向控制按键 -->
+                <div class="touch-controls" id="touchControls">
+                    <button class="touch-btn" id="btnLeft">◀</button>
+                    <button class="touch-btn" id="btnRight">▶</button>
+                </div>
+
+                <!-- 猫猫游行 十字按键 -->
+                <div class="dpad-controls" id="dpadControls">
+                    <button class="dpad-btn dpad-up" id="btnUp">▲</button>
+                    <button class="dpad-btn dpad-left" id="btnDpadLeft">◀</button>
+                    <button class="dpad-btn dpad-right" id="btnDpadRight">▶</button>
+                    <button class="dpad-btn dpad-down" id="btnDown">▼</button>
+                </div>
+
+                <div class="game-hint" id="gameControlHint">SUPPORT KEYBOARD & TOUCH</div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // 切换复古模式逻辑（点击时钟触发）
+        function toggleRetroMode() {
+            document.body.classList.toggle('retro-mode');
+        }
+
         // 时钟逻辑
+        let clockTimezone = 'local';
+        try { clockTimezone = localStorage.getItem('clockTimezone') || 'local'; } catch (e) {}
+
+        // 获取当前时区的时/分/秒
+        function getClockTimeParts() {
+            if (clockTimezone === 'local') {
+                const now = new Date();
+                return {
+                    hours: now.getHours(),
+                    minutes: String(now.getMinutes()).padStart(2, '0'),
+                    seconds: String(now.getSeconds()).padStart(2, '0')
+                };
+            }
+            const parts = new Intl.DateTimeFormat('en-US', {
+                timeZone: clockTimezone,
+                hourCycle: 'h23',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            }).formatToParts(new Date());
+            const get = (t) => (parts.find(p => p.type === t) || {}).value || '00';
+            return {
+                hours: parseInt(get('hour'), 10),
+                minutes: get('minute'),
+                seconds: get('second')
+            };
+        }
+
         function updateClock() {
-            const now = new Date();
-            let hours = now.getHours();
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const { hours, minutes, seconds } = getClockTimeParts();
 
             const amIndicator = document.getElementById('am-indicator');
             const pmIndicator = document.getElementById('pm-indicator');
@@ -461,12 +1161,64 @@
                 pmIndicator.className = 'period-pm active';
             }
 
-            hours = hours % 12;
-            hours = hours ? hours : 12;
-            const formattedHours = String(hours).padStart(2, '0');
+            let h12 = hours % 12;
+            h12 = h12 ? h12 : 12;
+            const formattedHours = String(h12).padStart(2, '0');
 
-            // 等宽字体保证每个字符宽度一致，直接改文本即可，不跳动
             document.getElementById('clock').textContent = `${formattedHours}:${minutes}:${seconds}`;
+        }
+
+        // 时区列表（value 为 IANA 时区名，'local' 表示本地时间）
+        const TIMEZONES = [
+            { value: 'local', label: '本地时间' },
+            { value: 'Asia/Shanghai', label: '北京' },
+            { value: 'Asia/Hong_Kong', label: '香港' },
+            { value: 'Asia/Taipei', label: '台北' },
+            { value: 'Asia/Tokyo', label: '东京' },
+            { value: 'Asia/Seoul', label: '首尔' },
+            { value: 'Asia/Singapore', label: '新加坡' },
+            { value: 'Asia/Bangkok', label: '曼谷' },
+            { value: 'Asia/Kolkata', label: '新德里' },
+            { value: 'Asia/Dubai', label: '迪拜' },
+            { value: 'Europe/Moscow', label: '莫斯科' },
+            { value: 'Europe/London', label: '伦敦' },
+            { value: 'Europe/Paris', label: '巴黎' },
+            { value: 'Europe/Berlin', label: '柏林' },
+            { value: 'America/New_York', label: '纽约' },
+            { value: 'America/Chicago', label: '芝加哥' },
+            { value: 'America/Denver', label: '丹佛' },
+            { value: 'America/Los_Angeles', label: '洛杉矶' },
+            { value: 'America/Vancouver', label: '温哥华' },
+            { value: 'America/Sao_Paulo', label: '圣保罗' },
+            { value: 'Australia/Sydney', label: '悉尼' },
+            { value: 'Pacific/Auckland', label: '奥克兰' },
+            { value: 'Pacific/Honolulu', label: '檀香山' }
+        ];
+
+        function setClockTimezone(value) {
+            clockTimezone = value;
+            try { localStorage.setItem('clockTimezone', value); } catch (e) {}
+            renderTimezoneButtons();
+            updateClock();
+        }
+
+        function renderTimezoneButtons() {
+            const grid = document.getElementById('clock-tz-grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+            TIMEZONES.forEach(tz => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'tz-cell' + (tz.value === clockTimezone ? ' selected' : '');
+                btn.textContent = tz.label;
+                btn.addEventListener('click', () => setClockTimezone(tz.value));
+                grid.appendChild(btn);
+            });
+        }
+
+        function toggleTimezoneGrid() {
+            const card = document.getElementById('clock-tz-card');
+            if (card) card.classList.toggle('tz-collapsed');
         }
 
         // 日历状态
@@ -474,13 +1226,11 @@
         let viewYear = new Date().getFullYear();
         let viewMonth = new Date().getMonth();
 
-        // 切换折叠/展开
         function toggleCalendar() {
             const card = document.getElementById('calendar-card');
             card.classList.toggle('collapsed');
         }
 
-        // 动画更新视图
         function updateCalendarView(actionCallback) {
             const card = document.getElementById('calendar-card');
             if (card.classList.contains('collapsed')) {
@@ -499,15 +1249,10 @@
 
         function switchMode(targetMode) {
             updateCalendarView(() => {
-                if (currentMode === targetMode) {
-                    currentMode = 'day';
-                } else {
-                    currentMode = targetMode;
-                }
+                currentMode = (currentMode === targetMode) ? 'day' : targetMode;
             });
         }
 
-        // 视图渲染
         function renderCalendar() {
             document.getElementById('title-year').textContent = `${viewYear}年`;
             document.getElementById('title-month').textContent = `${String(viewMonth + 1).padStart(2, '0')}月`;
@@ -515,27 +1260,19 @@
             const body = document.getElementById('calendar-body');
             body.innerHTML = '';
 
-            if (currentMode === 'day') {
-                renderDaysView(body);
-            } else if (currentMode === 'month') {
-                renderMonthsView(body);
-            } else if (currentMode === 'year') {
-                renderYearsView(body);
-            }
+            if (currentMode === 'day') renderDaysView(body);
+            else if (currentMode === 'month') renderMonthsView(body);
+            else if (currentMode === 'year') renderYearsView(body);
         }
 
-        // 1. 日视图
         function renderDaysView(container) {
             const grid = document.createElement('div');
             grid.className = 'days-grid';
 
             const weekdays = [
-                { name: '日', class: 'sun' },
-                { name: '月', class: '' },
-                { name: '火', class: '' },
-                { name: '水', class: '' },
-                { name: '木', class: '' },
-                { name: '金', class: '' },
+                { name: '日', class: 'sun' }, { name: '月', class: '' },
+                { name: '火', class: '' }, { name: '水', class: '' },
+                { name: '木', class: '' }, { name: '金', class: '' },
                 { name: '土', class: 'sat' }
             ];
 
@@ -569,11 +1306,9 @@
                 const cell = document.createElement('div');
                 cell.className = 'day-cell current-month';
                 cell.textContent = day;
-
                 if (viewYear === realYear && viewMonth === realMonth && day === realDate) {
                     cell.classList.add('today');
                 }
-
                 grid.appendChild(cell);
             }
 
@@ -589,7 +1324,6 @@
             container.appendChild(grid);
         }
 
-        // 2. 月份视图
         function renderMonthsView(container) {
             const grid = document.createElement('div');
             grid.className = 'months-grid';
@@ -597,9 +1331,7 @@
             for (let m = 0; m < 12; m++) {
                 const cell = document.createElement('div');
                 cell.className = 'month-cell';
-                if (m === viewMonth) {
-                    cell.classList.add('selected');
-                }
+                if (m === viewMonth) cell.classList.add('selected');
                 cell.textContent = `${String(m + 1).padStart(2, '0')}月`;
                 cell.onclick = () => {
                     updateCalendarView(() => {
@@ -613,7 +1345,6 @@
             container.appendChild(grid);
         }
 
-        // 3. 年份视图
         function renderYearsView(container) {
             const grid = document.createElement('div');
             grid.className = 'years-grid';
@@ -624,9 +1355,7 @@
                 const y = startYear + i;
                 const cell = document.createElement('div');
                 cell.className = 'year-cell';
-                if (y === viewYear) {
-                    cell.classList.add('selected');
-                }
+                if (y === viewYear) cell.classList.add('selected');
                 cell.textContent = `${y}年`;
                 cell.onclick = () => {
                     updateCalendarView(() => {
@@ -640,7 +1369,6 @@
             container.appendChild(grid);
         }
 
-        // 左右切换逻辑
         function handlePrev() {
             updateCalendarView(() => {
                 if (currentMode === 'day') {
@@ -682,10 +1410,741 @@
             });
         }
 
-        // 初始化
+        // ==========================================================================
+        // 街机小游戏 框架 (支持选择列表 & 游戏切换)
+        // ==========================================================================
+        let activeGameType = null; // 'runner' | 'doodle' | 'parade'
+        let gameCanvas, ctx;
+        let gameAnimationId;
+
+        let keysPressed = {};
+        let touchMoveState = { left: false, right: false };
+
+        function openCatGame() {
+            const modal = document.getElementById('gameModal');
+            modal.classList.add('active');
+            showGameMenu();
+        }
+
+        function closeCatGame() {
+            const modal = document.getElementById('gameModal');
+            modal.classList.remove('active');
+            if (gameAnimationId) cancelAnimationFrame(gameAnimationId);
+            activeGameType = null;
+        }
+
+        function showGameMenu() {
+            if (gameAnimationId) cancelAnimationFrame(gameAnimationId);
+            activeGameType = null;
+
+            document.getElementById('gameMenuList').style.display = 'flex';
+            document.getElementById('gameViewport').style.display = 'none';
+            document.getElementById('touchControls').style.display = 'none';
+            document.getElementById('dpadControls').style.display = 'none';
+            document.getElementById('backMenuBtn').style.display = 'none';
+            document.getElementById('gameModalTitle').textContent = "Arcade Select.exe";
+        }
+
+        function launchGame(type) {
+            activeGameType = type;
+            document.getElementById('gameMenuList').style.display = 'none';
+            document.getElementById('gameViewport').style.display = 'flex';
+            document.getElementById('backMenuBtn').style.display = 'inline-block';
+
+            gameCanvas = document.getElementById('catGameCanvas');
+            ctx = gameCanvas.getContext('2d');
+
+            if (type === 'runner') {
+                document.getElementById('touchControls').style.display = 'none';
+                document.getElementById('dpadControls').style.display = 'none';
+                document.getElementById('gameModalTitle').textContent = "Cat Runner.exe";
+                document.getElementById('gameControlHint').textContent = "SPACE / UP / TOUCH TO JUMP";
+                initRunnerGame();
+            } else if (type === 'doodle') {
+                document.getElementById('touchControls').style.display = 'flex';
+                document.getElementById('dpadControls').style.display = 'none';
+                document.getElementById('gameModalTitle').textContent = "Cat Doodle Jump.exe";
+                document.getElementById('gameControlHint').textContent = "KEY A/D or LEFT/RIGHT | TOUCH BUTTONS BELOW";
+                initDoodleGame();
+            } else if (type === 'parade') {
+                document.getElementById('touchControls').style.display = 'none';
+                document.getElementById('dpadControls').style.display = 'grid';
+                document.getElementById('gameModalTitle').textContent = "Cat Parade.exe";
+                document.getElementById('gameControlHint').textContent = "WASD / ARROW KEYS / DPAD TO MOVE";
+                initParadeGame();
+            }
+        }
+
+        // 绑定实体触屏按钮事件
+        function bindTouchButtonEvents() {
+            const btnLeft = document.getElementById('btnLeft');
+            const btnRight = document.getElementById('btnRight');
+
+            const handlePress = (direction, isPressed) => {
+                if (direction === 'left') touchMoveState.left = isPressed;
+                if (direction === 'right') touchMoveState.right = isPressed;
+
+                if (isPressed && activeGameType === 'doodle') {
+                    handleDoodleTouchPress();
+                }
+            };
+
+            ['touchstart', 'mousedown'].forEach(evtName => {
+                btnLeft.addEventListener(evtName, (e) => { e.preventDefault(); handlePress('left', true); });
+                btnRight.addEventListener(evtName, (e) => { e.preventDefault(); handlePress('right', true); });
+            });
+
+            ['touchend', 'touchcancel', 'mouseup', 'mouseleave'].forEach(evtName => {
+                btnLeft.addEventListener(evtName, (e) => { e.preventDefault(); handlePress('left', false); });
+                btnRight.addEventListener(evtName, (e) => { e.preventDefault(); handlePress('right', false); });
+            });
+
+            // 绑定十字键按键事件
+            const dpadMap = [
+                { id: 'btnUp', dir: 'up' },
+                { id: 'btnDown', dir: 'down' },
+                { id: 'btnDpadLeft', dir: 'left' },
+                { id: 'btnDpadRight', dir: 'right' }
+            ];
+
+            dpadMap.forEach(item => {
+                const btn = document.getElementById(item.id);
+                ['touchstart', 'mousedown'].forEach(evtName => {
+                    btn.addEventListener(evtName, (e) => {
+                        e.preventDefault();
+                        if (activeGameType === 'parade') {
+                            handleParadeTouchPress(item.dir);
+                        }
+                    });
+                });
+            });
+        }
+
+        window.addEventListener('keydown', (e) => {
+            keysPressed[e.code] = true;
+            if (activeGameType === 'runner') handleRunnerAction(e);
+            else if (activeGameType === 'doodle') handleDoodleAction(e);
+            else if (activeGameType === 'parade') handleParadeAction(e);
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keysPressed[e.code] = false;
+        });
+
+        // 绘制像素猫咪（支持自然基因配色：毛色 & 眼睛）
+        function drawPixelCat(x, y, isFacingLeft = false, furColor = '#444444', eyeColor = '#66ccff') {
+            ctx.save();
+            if (isFacingLeft) {
+                ctx.translate(x + 24, y);
+                ctx.scale(-1, 1);
+                x = 0; y = 0;
+            }
+            
+            // 身体
+            ctx.fillStyle = furColor; 
+            ctx.fillRect(x + 4, y + 8, 16, 10); 
+            ctx.fillRect(x + 12, y + 2, 10, 10); 
+            ctx.fillRect(x + 13, y, 3, 3); 
+            ctx.fillRect(x + 18, y, 3, 3);
+            
+            // 眼睛
+            ctx.fillStyle = eyeColor;
+            ctx.fillRect(x + 19, y + 4, 2, 2); 
+            
+            // 尾巴
+            ctx.fillStyle = furColor;
+            ctx.fillRect(x, y + 4, 4, 3); 
+            ctx.fillRect(x - 2, y + 2, 3, 3);
+
+            ctx.restore();
+        }
+
+        // 自然界猫猫毛色与眼睛颜色池
+        const NATURAL_FUR_COLORS = [
+            '#444444', // 经典灰黑
+            '#e67e22', // 橘猫
+            '#2c3e50', // 纯黑猫
+            '#ecf0f1', // 纯白猫
+            '#95a5a6', // 蓝灰色 (英国短毛)
+            '#d35400', // 深赭棕色
+            '#f39c12', // 奶油黄
+            '#7f8c8d'  // 烟灰色
+        ];
+
+        const NATURAL_EYE_COLORS = [
+            '#66ccff', // 天蓝
+            '#2ecc71', // 翡翠绿
+            '#f1c40f', // 珀金黄
+            '#e67e22', // 琥珀铜
+            '#1abc9c'  // 青蓝
+        ];
+
+        function getRandomCatColors() {
+            return {
+                fur: NATURAL_FUR_COLORS[Math.floor(Math.random() * NATURAL_FUR_COLORS.length)],
+                eye: NATURAL_EYE_COLORS[Math.floor(Math.random() * NATURAL_EYE_COLORS.length)]
+            };
+        }
+
+        // ==========================================================================
+        // 游戏 1：Cat Runner (横版奔跑)
+        // ==========================================================================
+        let runnerState = {};
+
+        function initRunnerGame() {
+            runnerState = {
+                phase: 'POST', postStep: 0, postTimer: 0, phaseTimer: 0, transitionFlashTimer: 0,
+                score: 0, highScore: runnerState.highScore || 0, speed: 4, frameCount: 0, nextSpawnFrame: 50,
+                cat: {
+                    x: 40, y: 210, width: 24, height: 24, vy: 0, gravity: 0.6, jumpPower: -9.5, isGrounded: true, legFrame: 0,
+                    jump() { if (this.isGrounded) { this.vy = this.jumpPower; this.isGrounded = false; } },
+                    update() {
+                        this.vy += this.gravity; this.y += this.vy;
+                        if (this.y >= 210) { this.y = 210; this.vy = 0; this.isGrounded = true; }
+                        if (runnerState.frameCount % 6 === 0) this.legFrame = (this.legFrame + 1) % 2;
+                    },
+                    draw() {
+                        drawPixelCat(this.x, this.y);
+                        if (!this.isGrounded) {
+                            ctx.fillStyle = '#444';
+                            ctx.fillRect(this.x + 2, this.y + 18, 4, 4);
+                            ctx.fillRect(this.x + 16, this.y + 18, 4, 4);
+                        } else {
+                            ctx.fillStyle = '#444';
+                            if (this.legFrame === 0) {
+                                ctx.fillRect(this.x + 5, this.y + 18, 3, 5);
+                                ctx.fillRect(this.x + 15, this.y + 18, 3, 5);
+                            } else {
+                                ctx.fillRect(this.x + 8, this.y + 18, 3, 5);
+                                ctx.fillRect(this.x + 12, this.y + 18, 3, 5);
+                            }
+                        }
+                    }
+                },
+                obstacles: []
+            };
+
+            gameCanvas.onclick = (e) => handleRunnerAction(e);
+            if (gameAnimationId) cancelAnimationFrame(gameAnimationId);
+            runnerLoop();
+        }
+
+        function handleRunnerAction(e) {
+            if (activeGameType !== 'runner') return;
+            if (e.type === 'keydown') {
+                if (['Alt', 'Control', 'Meta', 'Shift', 'Tab', 'CapsLock'].includes(e.key)) return;
+                if (e.code === 'Space' || e.code === 'ArrowUp') e.preventDefault();
+            }
+
+            const s = runnerState;
+            if (s.phase === 'POST') { s.phase = 'TITLE'; s.phaseTimer = 0; }
+            else if (s.phase === 'TITLE' || s.phase === 'DEMO') { s.phase = 'TRANSITION'; s.transitionFlashTimer = 0; }
+            else if (s.phase === 'PLAYING') { s.cat.jump(); }
+            else if (s.phase === 'GAMEOVER') { s.phase = 'TRANSITION'; s.transitionFlashTimer = 0; }
+        }
+
+        function runnerLoop() {
+            if (activeGameType !== 'runner') return;
+            const s = runnerState;
+            s.frameCount++;
+            ctx.fillStyle = '#f7f7f7'; ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+            if (s.phase === 'POST') {
+                ctx.fillStyle = '#000'; ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+                s.postTimer++;
+                if (s.postTimer % 15 === 0 && s.postStep < 7) s.postStep++;
+                ctx.fillStyle = '#00ff00'; ctx.font = "11px 'Share Tech Mono', monospace";
+                const lines = [
+                    "SAKI-SYSTEM ARCADE BOARD V2.6",
+                    "CPU  : M68000 @ 12.5MHz ....... OK",
+                    "SOUND: YM2610 @ 8.0MHz ........ OK",
+                    "WORK RAM  0x00000-0x3FFFF ..... OK",
+                    "VRAM TEST 0x00000-0x1FFFF ..... OK",
+                    "SYSTEM ALL CLEAR!", "BOOTING CAT RUNNER..."
+                ];
+                for (let i = 0; i <= s.postStep && i < lines.length; i++) ctx.fillText(lines[i], 20, 30 + i * 18);
+                if (s.postStep >= 6 && s.postTimer > 120) { s.phase = 'TITLE'; s.phaseTimer = 0; }
+            } else if (s.phase === 'TITLE') {
+                s.phaseTimer++;
+                ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, 234); ctx.lineTo(gameCanvas.width, 234); ctx.stroke();
+                s.cat.draw();
+
+                if (Math.floor(s.phaseTimer / 20) % 2 === 0) {
+                    ctx.fillStyle = '#111'; ctx.font = "bold 20px 'Silkscreen', monospace";
+                    ctx.textAlign = 'center'; ctx.fillText("CAT RUNNER", gameCanvas.width / 2, 80);
+                }
+                if (Math.floor(s.phaseTimer / 15) % 2 === 0) {
+                    ctx.fillStyle = '#e65100'; ctx.font = "11px 'Silkscreen', monospace";
+                    ctx.textAlign = 'center'; ctx.fillText("PRESS ANY KEY TO PLAY", gameCanvas.width / 2, 120);
+                }
+                ctx.textAlign = 'left';
+                if (s.phaseTimer > 180) { s.phase = 'DEMO'; s.obstacles = []; s.score = 0; s.speed = 4; s.frameCount = 0; s.nextSpawnFrame = 30; }
+            } else if (s.phase === 'DEMO' || s.phase === 'PLAYING') {
+                const isDemo = (s.phase === 'DEMO');
+                ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, 234); ctx.lineTo(gameCanvas.width, 234); ctx.stroke();
+
+                if (isDemo && s.obstacles.length > 0) {
+                    const nextObs = s.obstacles[0];
+                    if (nextObs.x - s.cat.x < 70 + (s.speed * 3) && nextObs.x > s.cat.x && s.cat.isGrounded) s.cat.jump();
+                }
+
+                s.cat.update(); s.cat.draw();
+
+                if (s.frameCount >= s.nextSpawnFrame) {
+                    const isTall = Math.random() > 0.6;
+                    const h = isTall ? 32 : 18;
+                    s.obstacles.push({ x: gameCanvas.width, y: 234 - h, width: 18, height: h });
+                    s.nextSpawnFrame = s.frameCount + Math.floor(160 / s.speed) + Math.floor(Math.random() * 40);
+                }
+
+                for (let i = s.obstacles.length - 1; i >= 0; i--) {
+                    let obs = s.obstacles[i];
+                    obs.x -= s.speed;
+                    ctx.fillStyle = '#c68c53'; ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+
+                    if (s.cat.x + 4 < obs.x + obs.width && s.cat.x + s.cat.width - 4 > obs.x &&
+                        s.cat.y + 4 < obs.y + obs.height && s.cat.y + s.cat.height > obs.y) {
+                        if (isDemo) { s.obstacles = []; s.score = 0; }
+                        else { s.phase = 'GAMEOVER'; }
+                    }
+
+                    if (obs.x + obs.width < 0) {
+                        s.obstacles.splice(i, 1);
+                        s.score += 10;
+                        if (!isDemo && s.score > s.highScore) s.highScore = s.score;
+                        if (s.score % 100 === 0) s.speed += 0.5;
+                    }
+                }
+
+                ctx.fillStyle = '#333'; ctx.font = "12px 'Share Tech Mono', monospace";
+                ctx.fillText(`SCORE: ${s.score}`, gameCanvas.width - 100, 25);
+                ctx.fillText(`HI: ${s.highScore}`, gameCanvas.width - 170, 25);
+
+                if (isDemo && Math.floor(s.frameCount / 20) % 2 === 0) {
+                    ctx.fillStyle = '#d32f2f'; ctx.font = "bold 14px 'Silkscreen', monospace";
+                    ctx.textAlign = 'center'; ctx.fillText("--- DEMO MODE ---", gameCanvas.width / 2, 50);
+                    ctx.textAlign = 'left';
+                }
+            } else if (s.phase === 'TRANSITION') {
+                s.transitionFlashTimer++;
+                ctx.fillStyle = (Math.floor(s.transitionFlashTimer / 4) % 2 === 0) ? '#ffffff' : '#79d2b3';
+                ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+                ctx.fillStyle = '#000'; ctx.font = "bold 22px 'Silkscreen', monospace";
+                ctx.textAlign = 'center'; ctx.fillText("READY!", gameCanvas.width / 2, gameCanvas.height / 2);
+                ctx.textAlign = 'left';
+                if (s.transitionFlashTimer > 30) {
+                    s.phase = 'PLAYING'; s.obstacles = []; s.score = 0; s.speed = 4; s.frameCount = 0; s.nextSpawnFrame = 50;
+                    s.cat.y = 210; s.cat.vy = 0;
+                }
+            } else if (s.phase === 'GAMEOVER') {
+                ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, 234); ctx.lineTo(gameCanvas.width, 234); ctx.stroke();
+                s.cat.draw();
+                ctx.fillStyle = '#333'; ctx.font = "16px 'Silkscreen', monospace"; ctx.textAlign = "center";
+                ctx.fillText("GAME OVER", gameCanvas.width / 2, gameCanvas.height / 2 - 10);
+                ctx.font = "10px 'Silkscreen', monospace";
+                ctx.fillText("Press Any Key to Restart", gameCanvas.width / 2, gameCanvas.height / 2 + 15);
+                ctx.textAlign = "left";
+            }
+
+            gameAnimationId = requestAnimationFrame(runnerLoop);
+        }
+
+        // ==========================================================================
+        // 游戏 2：Cat Doodle Jump (涂鸦跳跃)
+        // ==========================================================================
+        let doodleState = {};
+
+        function initDoodleGame() {
+            doodleState = {
+                phase: 'POST', postStep: 0, postTimer: 0, phaseTimer: 0, transitionFlashTimer: 0,
+                score: 0, highScore: doodleState.highScore || 0,
+                cat: { x: 228, y: 150, width: 24, height: 24, vx: 0, vy: 0, gravity: 0.18, jumpPower: -8.0, facingLeft: false },
+                platforms: [], cameraY: 0
+            };
+
+            gameCanvas.onclick = () => handleDoodleTouchPress();
+            if (gameAnimationId) cancelAnimationFrame(gameAnimationId);
+            doodleLoop();
+        }
+
+        function handleDoodleTouchPress() {
+            if (activeGameType !== 'doodle') return;
+            const s = doodleState;
+            if (s.phase === 'POST') { s.phase = 'TITLE'; s.phaseTimer = 0; }
+            else if (s.phase === 'TITLE' || s.phase === 'DEMO' || s.phase === 'GAMEOVER') {
+                s.phase = 'TRANSITION'; s.transitionFlashTimer = 0;
+            }
+        }
+
+        function handleDoodleAction(e) { handleDoodleTouchPress(); }
+
+        function doodleLoop() {
+            if (activeGameType !== 'doodle') return;
+            const s = doodleState;
+            ctx.fillStyle = '#faf8f0'; ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+            ctx.strokeStyle = '#f0ebd8'; ctx.lineWidth = 1;
+            for (let x = 0; x < gameCanvas.width; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, gameCanvas.height); ctx.stroke(); }
+            for (let y = 0; y < gameCanvas.height; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(gameCanvas.width, y); ctx.stroke(); }
+
+            if (s.phase === 'POST') {
+                ctx.fillStyle = '#000'; ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+                s.postTimer++;
+                if (s.postTimer % 15 === 0 && s.postStep < 6) s.postStep++;
+                ctx.fillStyle = '#00ff00'; ctx.font = "11px 'Share Tech Mono', monospace";
+                const lines = [
+                    "DOODLE ENGINE V1.0",
+                    "GRAVITY MOTOR CHECK ...... OK",
+                    "PLATFORM GEN TEST ........ OK",
+                    "BOUNCE SPRINGS .......... OK",
+                    "BOOTING CAT DOODLE..."
+                ];
+                for (let i = 0; i <= s.postStep && i < lines.length; i++) ctx.fillText(lines[i], 20, 40 + i * 20);
+                if (s.postStep >= 4 && s.postTimer > 100) { s.phase = 'TITLE'; s.phaseTimer = 0; }
+            } else if (s.phase === 'TITLE') {
+                s.phaseTimer++;
+                drawPixelCat(228, 120);
+                if (Math.floor(s.phaseTimer / 20) % 2 === 0) {
+                    ctx.fillStyle = '#333'; ctx.font = "bold 18px 'Silkscreen', monospace";
+                    ctx.textAlign = 'center'; ctx.fillText("CAT DOODLE JUMP", gameCanvas.width / 2, 80);
+                }
+                if (Math.floor(s.phaseTimer / 15) % 2 === 0) {
+                    ctx.fillStyle = '#3a7bd5'; ctx.font = "11px 'Silkscreen', monospace";
+                    ctx.textAlign = 'center'; ctx.fillText("PRESS ANY KEY / CLICK TO START", gameCanvas.width / 2, 170);
+                }
+                ctx.textAlign = 'left';
+                if (s.phaseTimer > 180) { s.phase = 'DEMO'; resetDoodleWorld(); }
+            } else if (s.phase === 'DEMO' || s.phase === 'PLAYING') {
+                const isDemo = (s.phase === 'DEMO');
+
+                if (!isDemo) {
+                    const moveLeft = keysPressed['KeyA'] || keysPressed['ArrowLeft'] || touchMoveState.left;
+                    const moveRight = keysPressed['KeyD'] || keysPressed['ArrowRight'] || touchMoveState.right;
+
+                    if (moveLeft) { s.cat.vx = -4.5; s.cat.facingLeft = true; }
+                    else if (moveRight) { s.cat.vx = 4.5; s.cat.facingLeft = false; }
+                    else { s.cat.vx *= 0.92; }
+                } else {
+                    let targetPlat = s.platforms[0];
+                    for (let p of s.platforms) {
+                        if (p.y < s.cat.y + 40 && p.y > s.cat.y - 120) { targetPlat = p; break; }
+                    }
+                    if (targetPlat) {
+                        if (s.cat.x + 12 < targetPlat.x + targetPlat.width / 2) { s.cat.vx = 3.8; s.cat.facingLeft = false; }
+                        else { s.cat.vx = -3.8; s.cat.facingLeft = true; }
+                    }
+                }
+
+                s.cat.vy += s.cat.gravity; s.cat.x += s.cat.vx; s.cat.y += s.cat.vy;
+                if (s.cat.x < -12) s.cat.x = gameCanvas.width - 12;
+                if (s.cat.x > gameCanvas.width - 12) s.cat.x = -12;
+
+                if (s.cat.y < 110) {
+                    const diff = 110 - s.cat.y;
+                    s.cat.y = 110; s.score += Math.floor(diff);
+                    if (!isDemo && s.score > s.highScore) s.highScore = s.score;
+                    s.platforms.forEach(p => p.y += diff);
+                }
+
+                if (s.cat.y > gameCanvas.height) {
+                    if (isDemo) resetDoodleWorld(); else s.phase = 'GAMEOVER';
+                }
+
+                if (s.cat.vy > 0) {
+                    s.platforms.forEach(p => {
+                        if (s.cat.x + 4 < p.x + p.width && s.cat.x + s.cat.width - 4 > p.x &&
+                            s.cat.y + s.cat.height >= p.y && s.cat.y + s.cat.height <= p.y + 12) {
+                            s.cat.vy = p.isSpring ? s.cat.jumpPower * 1.35 : s.cat.jumpPower;
+                        }
+                    });
+                }
+
+                s.platforms = s.platforms.filter(p => p.y < gameCanvas.height);
+                while (s.platforms.length < 9) {
+                    const highestY = Math.min(...s.platforms.map(p => p.y));
+                    s.platforms.push({
+                        x: Math.random() * (gameCanvas.width - 60),
+                        y: highestY - (25 + Math.random() * 25),
+                        width: 58, height: 10, isSpring: Math.random() < 0.18
+                    });
+                }
+
+                s.platforms.forEach(p => {
+                    ctx.fillStyle = p.isSpring ? '#4caf50' : '#8d6e63'; ctx.fillRect(p.x, p.y, p.width, p.height);
+                    ctx.fillStyle = p.isSpring ? '#2e7d32' : '#5d4037'; ctx.fillRect(p.x, p.y + p.height - 2, p.width, 2);
+                });
+
+                drawPixelCat(s.cat.x, s.cat.y, s.cat.facingLeft);
+
+                ctx.fillStyle = '#333'; ctx.font = "12px 'Share Tech Mono', monospace";
+                ctx.fillText(`HEIGHT: ${s.score}`, gameCanvas.width - 120, 25);
+                ctx.fillText(`HI: ${s.highScore}`, gameCanvas.width - 200, 25);
+
+                if (isDemo && Math.floor(Date.now() / 400) % 2 === 0) {
+                    ctx.fillStyle = '#d32f2f'; ctx.font = "bold 14px 'Silkscreen', monospace";
+                    ctx.textAlign = 'center'; ctx.fillText("--- DEMO MODE ---", gameCanvas.width / 2, 45);
+                    ctx.textAlign = 'left';
+                }
+            } else if (s.phase === 'TRANSITION') {
+                s.transitionFlashTimer++;
+                ctx.fillStyle = (Math.floor(s.transitionFlashTimer / 4) % 2 === 0) ? '#ffffff' : '#79d2b3';
+                ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+                ctx.fillStyle = '#000'; ctx.font = "bold 22px 'Silkscreen', monospace";
+                ctx.textAlign = 'center'; ctx.fillText("JUMP!", gameCanvas.width / 2, gameCanvas.height / 2);
+                ctx.textAlign = 'left';
+                if (s.transitionFlashTimer > 30) { s.phase = 'PLAYING'; resetDoodleWorld(); }
+            } else if (s.phase === 'GAMEOVER') {
+                ctx.fillStyle = '#333'; ctx.font = "16px 'Silkscreen', monospace"; ctx.textAlign = "center";
+                ctx.fillText("GAME OVER", gameCanvas.width / 2, gameCanvas.height / 2 - 10);
+                ctx.font = "10px 'Silkscreen', monospace";
+                ctx.fillText("Click / Press Button to Restart", gameCanvas.width / 2, gameCanvas.height / 2 + 15);
+                ctx.textAlign = "left";
+            }
+
+            gameAnimationId = requestAnimationFrame(doodleLoop);
+        }
+
+        function resetDoodleWorld() {
+            const s = doodleState;
+            s.score = 0; s.cat.x = 228; s.cat.y = 150; s.cat.vx = 0; s.cat.vy = 0;
+            s.platforms = [
+                { x: 210, y: 220, width: 60, height: 10, isSpring: false },
+                { x: 130, y: 180, width: 58, height: 10, isSpring: false },
+                { x: 280, y: 140, width: 58, height: 10, isSpring: true },
+                { x: 100, y: 100, width: 58, height: 10, isSpring: false },
+                { x: 230, y: 60, width: 58, height: 10, isSpring: false },
+                { x: 150, y: 20, width: 58, height: 10, isSpring: false }
+            ];
+        }
+
+        // ==========================================================================
+        // 游戏 3：Cat Parade (猫猫大游行 - 绝对方向控制 + 十字键)
+        // ==========================================================================
+        let paradeState = {};
+        const GRID_SIZE = 24;
+        const PARADE_CATCH_RADIUS = 1; // 收集野生猫咪的判定半径（格），越大越容易收集到同伴
+
+        function initParadeGame() {
+            paradeState = {
+                phase: 'POST', postStep: 0, postTimer: 0, phaseTimer: 0, transitionFlashTimer: 0,
+                score: 0, highScore: paradeState.highScore || 0,
+                moveTimer: 0, speedInterval: 12, // 移动帧率隔帧
+                dir: { x: 1, y: 0 }, // 当前移动方向
+                nextDir: { x: 1, y: 0 }, // 下一次移动将改变的方向
+                cats: [
+                    { x: 5, y: 5, fur: '#444444', eye: '#66ccff' } // 主角猫咪
+                ],
+                wildCat: null
+            };
+
+            spawnWildCat();
+            gameCanvas.onclick = () => handleParadeTouchPress('click');
+
+            if (gameAnimationId) cancelAnimationFrame(gameAnimationId);
+            paradeLoop();
+        }
+
+        function spawnWildCat() {
+            const cols = Math.floor(gameCanvas.width / GRID_SIZE);
+            const rows = Math.floor(gameCanvas.height / GRID_SIZE);
+
+            let valid = false;
+            let rx, ry;
+            while (!valid) {
+                // 同胞猫咪不生成在边缘一圈，只落在内部区域 [1, cols-2] × [1, rows-2]
+                rx = 1 + Math.floor(Math.random() * (cols - 2));
+                ry = 1 + Math.floor(Math.random() * (rows - 2));
+                valid = !paradeState.cats.some(c => c.x === rx && c.y === ry);
+            }
+
+            const colors = getRandomCatColors();
+            paradeState.wildCat = { x: rx, y: ry, fur: colors.fur, eye: colors.eye };
+        }
+
+        function setParadeDirection(targetDir) {
+            const s = paradeState;
+            if (s.phase !== 'PLAYING') return;
+
+            // 绝对方向映射
+            let newDir = null;
+            if (targetDir === 'up') newDir = { x: 0, y: -1 };
+            if (targetDir === 'down') newDir = { x: 0, y: 1 };
+            if (targetDir === 'left') newDir = { x: -1, y: 0 };
+            if (targetDir === 'right') newDir = { x: 1, y: 0 };
+
+            if (newDir) {
+                // 禁止 180 度直接反向移动（自吞防护）
+                if (s.dir.x + newDir.x !== 0 || s.dir.y + newDir.y !== 0) {
+                    s.nextDir = newDir;
+                }
+            }
+        }
+
+        function handleParadeTouchPress(action) {
+            if (activeGameType !== 'parade') return;
+            const s = paradeState;
+
+            if (s.phase === 'POST') { s.phase = 'TITLE'; s.phaseTimer = 0; }
+            else if (s.phase === 'TITLE' || s.phase === 'GAMEOVER') {
+                s.phase = 'TRANSITION'; s.transitionFlashTimer = 0;
+            } else if (s.phase === 'PLAYING') {
+                setParadeDirection(action);
+            }
+        }
+
+        function handleParadeAction(e) {
+            if (activeGameType !== 'parade') return;
+            const s = paradeState;
+
+            if (s.phase === 'POST') { s.phase = 'TITLE'; s.phaseTimer = 0; }
+            else if (s.phase === 'TITLE' || s.phase === 'GAMEOVER') {
+                s.phase = 'TRANSITION'; s.transitionFlashTimer = 0;
+            } else if (s.phase === 'PLAYING') {
+                if (e.code === 'KeyW' || e.code === 'ArrowUp') setParadeDirection('up');
+                if (e.code === 'KeyS' || e.code === 'ArrowDown') setParadeDirection('down');
+                if (e.code === 'KeyA' || e.code === 'ArrowLeft') setParadeDirection('left');
+                if (e.code === 'KeyD' || e.code === 'ArrowRight') setParadeDirection('right');
+            }
+        }
+
+        function paradeLoop() {
+            if (activeGameType !== 'parade') return;
+
+            const s = paradeState;
+            ctx.fillStyle = '#7f9a7a'; // 中灰绿底色：浅色与深色猫猫都能清晰辨认
+            ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+            // 绘制底板点阵
+            ctx.fillStyle = '#6b8466';
+            for (let x = 12; x < gameCanvas.width; x += GRID_SIZE) {
+                for (let y = 12; y < gameCanvas.height; y += GRID_SIZE) {
+                    ctx.fillRect(x - 1, y - 1, 2, 2);
+                }
+            }
+
+            if (s.phase === 'POST') {
+                ctx.fillStyle = '#000'; ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+                s.postTimer++;
+                if (s.postTimer % 15 === 0 && s.postStep < 5) s.postStep++;
+                ctx.fillStyle = '#00ff00'; ctx.font = "11px 'Share Tech Mono', monospace";
+                const lines = [
+                    "CAT PARADE ENGINE V2.0",
+                    "COLOR GEN MATRIX ......... OK",
+                    "WRAP AROUND BOUNDS ....... OK",
+                    "BOOTING CAT PARADE..."
+                ];
+                for (let i = 0; i <= s.postStep && i < lines.length; i++) ctx.fillText(lines[i], 20, 50 + i * 20);
+                if (s.postStep >= 3 && s.postTimer > 90) { s.phase = 'TITLE'; s.phaseTimer = 0; }
+            } else if (s.phase === 'TITLE') {
+                s.phaseTimer++;
+                drawPixelCat(228, 110, false, '#444444', '#66ccff');
+                if (Math.floor(s.phaseTimer / 20) % 2 === 0) {
+                    ctx.fillStyle = '#ffffff'; ctx.font = "bold 18px 'Silkscreen', monospace";
+                    ctx.textAlign = 'center'; ctx.fillText("CAT PARADE", gameCanvas.width / 2, 70);
+                }
+                if (Math.floor(s.phaseTimer / 15) % 2 === 0) {
+                    ctx.fillStyle = '#ffffff'; ctx.font = "11px 'Silkscreen', monospace";
+                    ctx.textAlign = 'center'; ctx.fillText("CLICK / PRESS BUTTON TO PLAY", gameCanvas.width / 2, 160);
+                }
+                ctx.textAlign = 'left';
+            } else if (s.phase === 'PLAYING') {
+                s.moveTimer++;
+
+                if (s.moveTimer >= s.speedInterval) {
+                    s.moveTimer = 0;
+                    s.dir = { ...s.nextDir };
+
+                    const cols = gameCanvas.width / GRID_SIZE;
+                    const rows = gameCanvas.height / GRID_SIZE;
+
+                    // 计算首领新位置 (包含边界安全穿透逻辑)
+                    let newX = (s.cats[0].x + s.dir.x + cols) % cols;
+                    let newY = (s.cats[0].y + s.dir.y + rows) % rows;
+
+                    // 碰撞自身身体判定
+                    const selfCollide = s.cats.slice(1).some(c => c.x === newX && c.y === newY);
+                    if (selfCollide) {
+                        s.phase = 'GAMEOVER';
+                    } else {
+                        // 移动队伍：后面的猫跟上前一节
+                        for (let i = s.cats.length - 1; i > 0; i--) {
+                            s.cats[i].x = s.cats[i - 1].x;
+                            s.cats[i].y = s.cats[i - 1].y;
+                        }
+                        s.cats[0].x = newX;
+                        s.cats[0].y = newY;
+
+                        // 碰到野生猫咪 -> 增加队伍（判定范围扩大，更容易收集到同伴）
+                        const dx = Math.abs(newX - s.wildCat.x);
+                        const dy = Math.abs(newY - s.wildCat.y);
+                        if (dx <= PARADE_CATCH_RADIUS && dy <= PARADE_CATCH_RADIUS) {
+                            // 新同伴追加到队伍尾部，保持队伍连续
+                            const tail = s.cats[s.cats.length - 1];
+                            s.cats.push({
+                                x: tail.x,
+                                y: tail.y,
+                                fur: s.wildCat.fur,
+                                eye: s.wildCat.eye
+                            });
+                            s.score += 10;
+                            if (s.score > s.highScore) s.highScore = s.score;
+                            // 随着猫咪增多稍许加快游行速度
+                            if (s.speedInterval > 6 && s.cats.length % 3 === 0) s.speedInterval--;
+                            spawnWildCat();
+                        }
+                    }
+                }
+
+                // 绘制野生等待加入的猫咪 (微动动画)
+                if (s.wildCat) {
+                    const breathOffset = (Math.floor(Date.now() / 300) % 2 === 0) ? 0 : -1;
+                    drawPixelCat(s.wildCat.x * GRID_SIZE, s.wildCat.y * GRID_SIZE + breathOffset, false, s.wildCat.fur, s.wildCat.eye);
+                }
+
+                // 绘制游行中的猫猫队伍
+                for (let i = s.cats.length - 1; i >= 0; i--) {
+                    const c = s.cats[i];
+                    const isLeft = (s.dir.x === -1);
+                    drawPixelCat(c.x * GRID_SIZE, c.y * GRID_SIZE, isLeft, c.fur, c.eye);
+                }
+
+                // 分数与统计
+                ctx.fillStyle = '#ffffff'; ctx.font = "12px 'Share Tech Mono', monospace";
+                ctx.fillText(`CATS: ${s.cats.length}`, gameCanvas.width - 100, 25);
+                ctx.fillText(`HI: ${s.highScore}`, gameCanvas.width - 170, 25);
+            } else if (s.phase === 'TRANSITION') {
+                s.transitionFlashTimer++;
+                ctx.fillStyle = (Math.floor(s.transitionFlashTimer / 4) % 2 === 0) ? '#ffffff' : '#a5d6a7';
+                ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+                ctx.fillStyle = '#1b5e20'; ctx.font = "bold 22px 'Silkscreen', monospace";
+                ctx.textAlign = 'center'; ctx.fillText("MARCH!", gameCanvas.width / 2, gameCanvas.height / 2);
+                ctx.textAlign = 'left';
+                if (s.transitionFlashTimer > 30) {
+                    s.phase = 'PLAYING';
+                    s.score = 0; s.speedInterval = 12; s.moveTimer = 0;
+                    s.dir = { x: 1, y: 0 }; s.nextDir = { x: 1, y: 0 };
+                    s.cats = [{ x: 5, y: 5, fur: '#444444', eye: '#66ccff' }];
+                    spawnWildCat();
+                }
+            } else if (s.phase === 'GAMEOVER') {
+                ctx.fillStyle = '#2e7d32'; ctx.font = "16px 'Silkscreen', monospace"; ctx.textAlign = "center";
+                ctx.fillText("PARADE ENDED", gameCanvas.width / 2, gameCanvas.height / 2 - 10);
+                ctx.font = "10px 'Silkscreen', monospace";
+                ctx.fillText("Click / Press Button to March Again", gameCanvas.width / 2, gameCanvas.height / 2 + 15);
+                ctx.textAlign = "left";
+            }
+
+            gameAnimationId = requestAnimationFrame(paradeLoop);
+        }
+
+        // 初始化页面与按键绑定
+        bindTouchButtonEvents();
+        renderTimezoneButtons();
         updateClock();
         renderCalendar();
-
         setInterval(updateClock, 1000);
     </script>
 </body>
