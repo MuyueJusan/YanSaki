@@ -495,6 +495,335 @@
             text-shadow: none;
         }
 
+        /* ===== AI 对话区域 ===== */
+        .ai-container {
+            margin-top: clamp(1rem, 2.5vh, 1.5rem);
+            padding: clamp(0.8rem, 2.5vw, 1.2rem);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: visible; /* 避免原生 select 下拉被卡片裁剪 */
+        }
+
+        .ai-header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 0.2rem;
+        }
+
+        .ai-title {
+            font-size: clamp(1rem, 3vw, 1.3rem);
+            letter-spacing: 1px;
+            color: #ffffff;
+            text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+        }
+
+        .ai-toggle-icon {
+            display: inline-block;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .ai-container.ai-collapsed .ai-toggle-icon {
+            transform: rotate(-180deg);
+        }
+
+        .ai-collapse-wrapper {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%;
+        }
+
+        .ai-container:not(.ai-collapsed) .ai-collapse-wrapper {
+            grid-template-rows: 1fr;
+        }
+
+        .ai-collapse-inner {
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .ai-settings {
+            width: 100%;
+            margin-top: clamp(0.6rem, 2vh, 1rem);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ai-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .ai-field label {
+            font-size: 0.8rem;
+            opacity: 0.9;
+            letter-spacing: 1px;
+        }
+
+        .ai-field input,
+        .ai-field select,
+        .ai-field textarea {
+            font-family: inherit;
+            font-size: 0.85rem;
+            color: #1a2b3c;
+            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 8px;
+            padding: 8px 10px;
+            outline: none;
+            user-select: text;
+            text-shadow: none;
+            width: 100%;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .ai-field input:focus,
+        .ai-field select:focus,
+        .ai-field textarea:focus {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.25);
+        }
+
+        .ai-field input:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .ai-field textarea {
+            resize: vertical;
+            min-height: 56px;
+        }
+
+        .ai-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .ai-row .ai-field { flex: 1; }
+
+        .ai-btn {
+            background: rgba(255, 255, 255, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        .ai-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+        }
+
+        .ai-btn:active { transform: scale(0.96); }
+
+        .ai-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .ai-btn.primary {
+            background: #3a7bd5;
+            border-color: #3a7bd5;
+            font-weight: bold;
+        }
+
+        .ai-btn.primary:hover { background: #4a8ae0; }
+
+        .ai-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .ai-adv-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            background: none;
+            border: none;
+            color: #fff;
+            opacity: 0.9;
+            padding: 0;
+            align-self: flex-start;
+        }
+
+        .ai-adv-toggle:hover { opacity: 1; }
+
+        .ai-adv-icon {
+            display: inline-block;
+            transition: transform 0.3s ease;
+        }
+
+        .ai-adv-panel {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .ai-container:not(.ai-adv-collapsed) .ai-adv-panel { grid-template-rows: 1fr; }
+        .ai-container.ai-adv-collapsed .ai-adv-icon { transform: rotate(-90deg); }
+
+        .ai-adv-inner { overflow: hidden; }
+
+        .ai-adv-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-top: 10px;
+        }
+
+        /* 流式 / 非流式 开关 */
+        .ai-switch {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .ai-switch input { display: none; }
+
+        .ai-switch-track {
+            width: 44px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            position: relative;
+            flex-shrink: 0;
+            transition: background 0.2s ease;
+        }
+
+        .ai-switch-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s ease;
+        }
+
+        .ai-switch input:checked + .ai-switch-track { background: #3a7bd5; }
+        .ai-switch input:checked + .ai-switch-track .ai-switch-thumb { transform: translateX(20px); }
+
+        /* 温度滑块 */
+        .ai-field input[type="range"] {
+            padding: 0;
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            accent-color: #3a7bd5;
+        }
+
+        .ai-status {
+            font-size: 0.75rem;
+            min-height: 1em;
+            color: #d6f5ff;
+            text-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 聊天界面（浅蓝色背景 + 圆润气泡） */
+        .ai-chat {
+            display: none;
+            width: 100%;
+            margin-top: clamp(0.6rem, 2vh, 1rem);
+            background: #e3f0ff;
+            border-radius: 16px;
+            padding: 12px;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ai-container.chat-active .ai-chat { display: flex; }
+
+        .ai-messages {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 4px;
+            text-shadow: none;
+            color: #1a2b3c;
+        }
+
+        .ai-bubble {
+            max-width: 78%;
+            padding: 10px 14px;
+            border-radius: 18px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            word-break: break-word;
+            white-space: pre-wrap;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            user-select: text;
+        }
+
+        .ai-bubble.ai {
+            align-self: flex-start;
+            background: #ffffff;
+            color: #1a2b3c;
+            border-bottom-left-radius: 6px;
+        }
+
+        .ai-bubble.user {
+            align-self: flex-end;
+            background: #3a7bd5;
+            color: #ffffff;
+            border-bottom-right-radius: 6px;
+        }
+
+        .ai-bubble.loading {
+            color: #7a9bb5;
+            font-style: italic;
+        }
+
+        .ai-input-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .ai-input-row input {
+            flex: 1;
+            font-family: inherit;
+            font-size: 0.85rem;
+            color: #1a2b3c;
+            background: #ffffff;
+            border: 1px solid #c8d8ee;
+            border-radius: 20px;
+            padding: 9px 14px;
+            outline: none;
+            user-select: text;
+            text-shadow: none;
+            transition: border-color 0.2s ease;
+        }
+
+        .ai-input-row input:focus { border-color: #3a7bd5; }
+
+        .ai-send-btn {
+            background: #3a7bd5;
+            border: none;
+            color: #fff;
+            border-radius: 20px;
+            padding: 0 18px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+
+        .ai-send-btn:hover { background: #4a8ae0; }
+        .ai-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
         /* 贴贴按钮 */
         .hug-button {
             margin-top: clamp(1.5rem, 4vh, 2.5rem);
@@ -987,6 +1316,71 @@
             transform: translate(1px, 1px);
         }
 
+        body.retro-mode .ai-title { color: #000; text-shadow: none; }
+        body.retro-mode .ai-field label { color: #000; }
+        body.retro-mode .ai-field input,
+        body.retro-mode .ai-field select,
+        body.retro-mode .ai-field textarea {
+            background: #fff;
+            color: #000;
+            border: 2px solid;
+            border-color: #808080 #fff #fff #808080;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-btn {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-btn.primary { background: #000080; color: #fff; }
+        body.retro-mode .ai-adv-toggle { color: #000; }
+        body.retro-mode .ai-switch-track { background: #808080; }
+        body.retro-mode .ai-status { color: #000; text-shadow: none; }
+
+        body.retro-mode .ai-chat {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .ai-bubble.ai {
+            background: #fff;
+            color: #000;
+            border: 1px solid #808080;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-bubble.user {
+            background: #000080;
+            color: #fff;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-input-row input {
+            background: #fff;
+            color: #000;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .ai-send-btn {
+            background: #000080;
+            color: #fff;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+
         @media (max-width: 400px) {
             body { padding-left: 0.5rem; padding-right: 0.5rem; }
             .clock-container { padding: 0 0.5rem; }
@@ -1008,7 +1402,7 @@
             <div id="clock" class="digital-clock" onclick="toggleRetroMode()" title="点击切换复古 / 现代模式">00:00:00</div>
         </div>
         <button id="clock-tz-toggle" class="tz-toggle" type="button" onclick="toggleTimezoneGrid()">
-            切换时区 <span class="tz-toggle-icon">▾</span>
+            <span id="clock-tz-label">本地时间</span> <span class="tz-toggle-icon">▾</span>
         </button>
         <div class="tz-collapse-wrapper">
             <div class="tz-collapse-inner">
@@ -1039,6 +1433,85 @@
                 <div class="calendar-body" id="calendar-body">
                     <!-- JS 动态渲染 -->
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 对话区域 -->
+    <div class="ai-container glass-card ai-collapsed ai-adv-collapsed" id="ai-card">
+        <div class="ai-header">
+            <span class="ai-title">🤖 AI 对话</span>
+            <button class="cal-btn toggle-btn" onclick="toggleAiArea()" title="展开/折叠">
+                <span class="toggle-icon ai-toggle-icon">▲</span>
+            </button>
+        </div>
+
+        <!-- 设置面板（折叠） -->
+        <div class="ai-collapse-wrapper">
+            <div class="ai-collapse-inner">
+                <div class="ai-settings">
+                    <div class="ai-field">
+                        <label>服务商</label>
+                        <select id="ai-provider" onchange="syncAiProviderUI()"></select>
+                    </div>
+                    <div class="ai-field">
+                        <label>Base URL（自定义时填写）</label>
+                        <input id="ai-base-url" type="text" placeholder="https://api.example.com/v1" oninput="customBaseUrlDraft=this.value">
+                    </div>
+                    <div class="ai-field">
+                        <label>API Key</label>
+                        <input id="ai-api-key" type="password" placeholder="sk-..." autocomplete="off">
+                    </div>
+                    <div class="ai-field">
+                        <label>模型</label>
+                        <select id="ai-model"><option value="">先点击「获取模型」</option></select>
+                    </div>
+                    <button class="ai-btn" id="ai-fetch-btn" onclick="fetchModels()">获取模型</button>
+
+                    <!-- 高级设置（折叠） -->
+                    <button class="ai-adv-toggle" type="button" onclick="toggleAiAdvanced()">
+                        ⚙ 高级设置 <span class="ai-adv-icon">▾</span>
+                    </button>
+                    <div class="ai-adv-panel">
+                        <div class="ai-adv-inner">
+                            <div class="ai-adv-grid">
+                                <label class="ai-switch">
+                                    <input type="checkbox" id="ai-stream" onchange="updateAiStreamLabel()">
+                                    <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                                    <span class="ai-switch-label" id="ai-stream-label">流式输出</span>
+                                </label>
+                                <div class="ai-field">
+                                    <label>温度：<span id="ai-temp-value">0.7</span></label>
+                                    <input id="ai-temperature" type="range" min="0" max="2" step="0.1" value="0.7" oninput="updateAiTempLabel()">
+                                </div>
+                                <div class="ai-field">
+                                    <label>回复长度（max_tokens）</label>
+                                    <input id="ai-max-tokens" type="number" min="1" max="32768" value="1024">
+                                </div>
+                                <div class="ai-field">
+                                    <label>系统提示词</label>
+                                    <textarea id="ai-system-prompt" rows="3" placeholder="设定 AI 的角色与语气…"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ai-status" id="ai-status"></div>
+
+                    <div class="ai-actions">
+                        <button class="ai-btn" onclick="saveAiSettings()">保存</button>
+                        <button class="ai-btn primary" onclick="applyAiSettings()">应用</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 聊天界面（应用后显示） -->
+        <div class="ai-chat" id="ai-chat">
+            <div class="ai-messages" id="ai-messages"></div>
+            <div class="ai-input-row">
+                <input id="ai-input" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter')sendAiMessage()">
+                <button class="ai-send-btn" id="ai-send-btn" onclick="sendAiMessage()">发送</button>
             </div>
         </div>
     </div>
@@ -1203,6 +1676,12 @@
         }
 
         function renderTimezoneButtons() {
+            // 切换按钮上的文字显示当前选中的时区
+            const labelEl = document.getElementById('clock-tz-label');
+            if (labelEl) {
+                const cur = TIMEZONES.find(t => t.value === clockTimezone);
+                labelEl.textContent = cur ? cur.label : '本地时间';
+            }
             const grid = document.getElementById('clock-tz-grid');
             if (!grid) return;
             grid.innerHTML = '';
@@ -1594,7 +2073,7 @@
         function initRunnerGame() {
             runnerState = {
                 phase: 'POST', postStep: 0, postTimer: 0, phaseTimer: 0, transitionFlashTimer: 0,
-                score: 0, highScore: runnerState.highScore || 0, speed: 4, frameCount: 0, nextSpawnFrame: 50,
+                score: 0, highScore: runnerState.highScore || 0, speed: 2, frameCount: 0, nextSpawnFrame: 50,
                 cat: {
                     x: 40, y: 210, width: 24, height: 24, vy: 0, gravity: 0.6, jumpPower: -9.5, isGrounded: true, legFrame: 0,
                     jump() { if (this.isGrounded) { this.vy = this.jumpPower; this.isGrounded = false; } },
@@ -1679,15 +2158,28 @@
                     ctx.textAlign = 'center'; ctx.fillText("PRESS ANY KEY TO PLAY", gameCanvas.width / 2, 120);
                 }
                 ctx.textAlign = 'left';
-                if (s.phaseTimer > 180) { s.phase = 'DEMO'; s.obstacles = []; s.score = 0; s.speed = 4; s.frameCount = 0; s.nextSpawnFrame = 30; }
+                if (s.phaseTimer > 180) { s.phase = 'DEMO'; s.obstacles = []; s.score = 0; s.speed = 3; s.frameCount = 0; s.nextSpawnFrame = 30; }
             } else if (s.phase === 'DEMO' || s.phase === 'PLAYING') {
                 const isDemo = (s.phase === 'DEMO');
                 ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
                 ctx.beginPath(); ctx.moveTo(0, 234); ctx.lineTo(gameCanvas.width, 234); ctx.stroke();
 
-                if (isDemo && s.obstacles.length > 0) {
-                    const nextObs = s.obstacles[0];
-                    if (nextObs.x - s.cat.x < 70 + (s.speed * 3) && nextObs.x > s.cat.x && s.cat.isGrounded) s.cat.jump();
+                if (isDemo && s.cat.isGrounded) {
+                    // 演示 AI：找到前方最近、尚未越过的障碍，在合适距离起跳，
+                    // 使「障碍与猫重叠」的窗口落在猫跳跃顶点附近，从而稳定越过。
+                    let target = null;
+                    for (const obs of s.obstacles) {
+                        if (obs.x + obs.width > s.cat.x) {
+                            if (!target || obs.x < target.x) target = obs;
+                        }
+                    }
+                    if (target) {
+                        // 顶点到达帧数 ≈ |jumpPower| / gravity；起跳距离随速度自适应，
+                        // 障碍重叠区间中心位于猫前方约 3px（由碰撞判定几何导出）。
+                        const apexFrames = -s.cat.jumpPower / s.cat.gravity;
+                        const jumpAt = s.cat.x + 3 + apexFrames * s.speed;
+                        if (target.x <= jumpAt) s.cat.jump();
+                    }
                 }
 
                 s.cat.update(); s.cat.draw();
@@ -1735,7 +2227,7 @@
                 ctx.textAlign = 'center'; ctx.fillText("READY!", gameCanvas.width / 2, gameCanvas.height / 2);
                 ctx.textAlign = 'left';
                 if (s.transitionFlashTimer > 30) {
-                    s.phase = 'PLAYING'; s.obstacles = []; s.score = 0; s.speed = 4; s.frameCount = 0; s.nextSpawnFrame = 50;
+                    s.phase = 'PLAYING'; s.obstacles = []; s.score = 0; s.speed = 3; s.frameCount = 0; s.nextSpawnFrame = 50;
                     s.cat.y = 210; s.cat.vy = 0;
                 }
             } else if (s.phase === 'GAMEOVER') {
@@ -1761,7 +2253,7 @@
             doodleState = {
                 phase: 'POST', postStep: 0, postTimer: 0, phaseTimer: 0, transitionFlashTimer: 0,
                 score: 0, highScore: doodleState.highScore || 0,
-                cat: { x: 228, y: 150, width: 24, height: 24, vx: 0, vy: 0, gravity: 0.18, jumpPower: -8.0, facingLeft: false },
+                cat: { x: 228, y: 150, width: 24, height: 24, vx: 0, vy: 0, gravity: 0.14, jumpPower: -8.0, facingLeft: false },
                 platforms: [], cameraY: 0
             };
 
@@ -1824,17 +2316,37 @@
                     const moveLeft = keysPressed['KeyA'] || keysPressed['ArrowLeft'] || touchMoveState.left;
                     const moveRight = keysPressed['KeyD'] || keysPressed['ArrowRight'] || touchMoveState.right;
 
-                    if (moveLeft) { s.cat.vx = -4.5; s.cat.facingLeft = true; }
-                    else if (moveRight) { s.cat.vx = 4.5; s.cat.facingLeft = false; }
-                    else { s.cat.vx *= 0.92; }
+                    if (moveLeft) { s.cat.vx = -3.0; s.cat.facingLeft = true; }
+                    else if (moveRight) { s.cat.vx = 3.0; s.cat.facingLeft = false; }
+                    else { s.cat.vx *= 0.97; }
                 } else {
-                    let targetPlat = s.platforms[0];
-                    for (let p of s.platforms) {
-                        if (p.y < s.cat.y + 40 && p.y > s.cat.y - 120) { targetPlat = p; break; }
+                    // 演示 AI：按上升/下落阶段选择目标平台并水平接近，保证持续向上弹跳
+                    let target = null;
+                    let best = Infinity;
+                    const catCx = s.cat.x + 12;
+                    if (s.cat.vy <= 0) {
+                        // 上升阶段：瞄准上方 20~160px 内水平最近的平台
+                        for (const p of s.platforms) {
+                            const rise = s.cat.y - p.y; // 正 = 平台在上方
+                            if (rise < 20 || rise > 160) continue;
+                            const dx = Math.abs(catCx - (p.x + p.width / 2));
+                            if (dx < best) { best = dx; target = p; }
+                        }
+                    } else {
+                        // 下落阶段：瞄准下方最近的平台，确保踩到后继续弹跳
+                        for (const p of s.platforms) {
+                            if (p.y <= s.cat.y) continue;
+                            const dx = Math.abs(catCx - (p.x + p.width / 2));
+                            const dy = p.y - s.cat.y;
+                            const score = dx + dy * 0.05;
+                            if (score < best) { best = score; target = p; }
+                        }
                     }
-                    if (targetPlat) {
-                        if (s.cat.x + 12 < targetPlat.x + targetPlat.width / 2) { s.cat.vx = 3.8; s.cat.facingLeft = false; }
-                        else { s.cat.vx = -3.8; s.cat.facingLeft = true; }
+                    if (target) {
+                        const targetCx = target.x + target.width / 2;
+                        if (catCx < targetCx - 4) { s.cat.vx = 3.0; s.cat.facingLeft = false; }
+                        else if (catCx > targetCx + 4) { s.cat.vx = -3.0; s.cat.facingLeft = true; }
+                        else { s.cat.vx *= 0.9; }
                     }
                 }
 
@@ -1931,7 +2443,7 @@
             paradeState = {
                 phase: 'POST', postStep: 0, postTimer: 0, phaseTimer: 0, transitionFlashTimer: 0,
                 score: 0, highScore: paradeState.highScore || 0,
-                moveTimer: 0, speedInterval: 12, // 移动帧率隔帧
+                moveTimer: 0, speedInterval: 18, // 移动帧率隔帧
                 dir: { x: 1, y: 0 }, // 当前移动方向
                 nextDir: { x: 1, y: 0 }, // 下一次移动将改变的方向
                 cats: [
@@ -2092,7 +2604,7 @@
                             s.score += 10;
                             if (s.score > s.highScore) s.highScore = s.score;
                             // 随着猫咪增多稍许加快游行速度
-                            if (s.speedInterval > 6 && s.cats.length % 3 === 0) s.speedInterval--;
+                            if (s.speedInterval > 8 && s.cats.length % 3 === 0) s.speedInterval--;
                             spawnWildCat();
                         }
                     }
@@ -2124,7 +2636,7 @@
                 ctx.textAlign = 'left';
                 if (s.transitionFlashTimer > 30) {
                     s.phase = 'PLAYING';
-                    s.score = 0; s.speedInterval = 12; s.moveTimer = 0;
+                    s.score = 0; s.speedInterval = 16; s.moveTimer = 0;
                     s.dir = { x: 1, y: 0 }; s.nextDir = { x: 1, y: 0 };
                     s.cats = [{ x: 5, y: 5, fur: '#444444', eye: '#66ccff' }];
                     spawnWildCat();
@@ -2140,11 +2652,324 @@
             gameAnimationId = requestAnimationFrame(paradeLoop);
         }
 
+        // ==========================================================================
+        // AI 对话区域
+        // ==========================================================================
+        const AI_PROVIDERS = [
+            { value: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', custom: false },
+            { value: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', custom: false },
+            { value: 'moonshot', label: 'Moonshot (Kimi)', baseUrl: 'https://api.moonshot.cn/v1', custom: false },
+            { value: 'glm', label: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', custom: false },
+            { value: 'qwen', label: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', custom: false },
+            { value: 'siliconflow', label: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', custom: false },
+            { value: 'custom', label: '自定义 (OpenAI 兼容)', baseUrl: '', custom: true }
+        ];
+
+        const AI_DEFAULTS = {
+            provider: 'openai',
+            baseUrl: 'https://api.openai.com/v1',
+            apiKey: '',
+            model: '',
+            stream: true,
+            temperature: 0.7,
+            maxTokens: 1024,
+            systemPrompt: '你是一只名叫 Saki 的小猫，用温柔可爱的语气和主人聊天。'
+        };
+
+        let aiConfig = { ...AI_DEFAULTS };
+        try {
+            const saved = localStorage.getItem('aiChatConfig');
+            if (saved) aiConfig = { ...AI_DEFAULTS, ...JSON.parse(saved) };
+        } catch (e) {}
+
+        let customBaseUrlDraft = (aiConfig.provider === 'custom') ? aiConfig.baseUrl : '';
+        let chatHistory = [];
+        let aiBusy = false;
+
+        function initAiArea() {
+            const providerSel = document.getElementById('ai-provider');
+            providerSel.innerHTML = '';
+            AI_PROVIDERS.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.value;
+                opt.textContent = p.label;
+                providerSel.appendChild(opt);
+            });
+            providerSel.value = aiConfig.provider;
+            syncAiProviderUI();
+            document.getElementById('ai-api-key').value = aiConfig.apiKey || '';
+            document.getElementById('ai-stream').checked = !!aiConfig.stream;
+            updateAiStreamLabel();
+            document.getElementById('ai-temperature').value = aiConfig.temperature;
+            document.getElementById('ai-temp-value').textContent = Number(aiConfig.temperature).toFixed(1);
+            document.getElementById('ai-max-tokens').value = aiConfig.maxTokens;
+            document.getElementById('ai-system-prompt').value = aiConfig.systemPrompt || '';
+            setAiModelOption(aiConfig.model);
+        }
+
+        function setAiModelOption(modelId) {
+            if (!modelId) return;
+            const sel = document.getElementById('ai-model');
+            if (![...sel.options].some(o => o.value === modelId)) {
+                const opt = document.createElement('option');
+                opt.value = modelId;
+                opt.textContent = modelId;
+                sel.appendChild(opt);
+            }
+            sel.value = modelId;
+        }
+
+        function syncAiProviderUI() {
+            const p = AI_PROVIDERS.find(x => x.value === document.getElementById('ai-provider').value) || AI_PROVIDERS[0];
+            const urlInput = document.getElementById('ai-base-url');
+            if (p.custom) {
+                urlInput.disabled = false;
+                urlInput.value = customBaseUrlDraft || '';
+            } else {
+                urlInput.disabled = true;
+                urlInput.value = p.baseUrl || '';
+            }
+        }
+
+        function getAiConfigFromInputs() {
+            const p = AI_PROVIDERS.find(x => x.value === document.getElementById('ai-provider').value) || AI_PROVIDERS[0];
+            let baseUrl = p.custom
+                ? (document.getElementById('ai-base-url').value || '').trim()
+                : (p.baseUrl || '');
+            baseUrl = baseUrl.replace(/\/+$/, '');
+            return {
+                provider: p.value,
+                baseUrl: baseUrl,
+                apiKey: document.getElementById('ai-api-key').value.trim(),
+                model: document.getElementById('ai-model').value.trim(),
+                stream: document.getElementById('ai-stream').checked,
+                temperature: parseFloat(document.getElementById('ai-temperature').value) || 0.7,
+                maxTokens: parseInt(document.getElementById('ai-max-tokens').value, 10) || 1024,
+                systemPrompt: document.getElementById('ai-system-prompt').value
+            };
+        }
+
+        function updateAiStatus(msg) {
+            const el = document.getElementById('ai-status');
+            if (el) el.textContent = msg || '';
+        }
+
+        function updateAiTempLabel() {
+            const v = document.getElementById('ai-temperature').value;
+            document.getElementById('ai-temp-value').textContent = Number(v).toFixed(1);
+        }
+
+        function updateAiStreamLabel() {
+            const checked = document.getElementById('ai-stream').checked;
+            document.getElementById('ai-stream-label').textContent = checked ? '流式输出' : '非流式输出';
+        }
+
+        function expandAiAdvanced() {
+            document.getElementById('ai-card').classList.remove('ai-adv-collapsed');
+        }
+
+        function toggleAiAdvanced() {
+            document.getElementById('ai-card').classList.toggle('ai-adv-collapsed');
+        }
+
+        function toggleAiArea() {
+            const card = document.getElementById('ai-card');
+            if (card.classList.contains('chat-active')) {
+                // 从聊天返回设置
+                card.classList.remove('chat-active', 'ai-collapsed');
+                expandAiAdvanced();
+            } else {
+                card.classList.toggle('ai-collapsed');
+                if (!card.classList.contains('ai-collapsed')) expandAiAdvanced();
+            }
+        }
+
+        function saveAiSettings() {
+            aiConfig = getAiConfigFromInputs();
+            if (aiConfig.provider === 'custom') customBaseUrlDraft = aiConfig.baseUrl;
+            try { localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig)); } catch (e) {}
+            updateAiStatus('✅ 设置已保存');
+        }
+
+        function applyAiSettings() {
+            const cfg = getAiConfigFromInputs();
+            if (!cfg.apiKey) { updateAiStatus('⚠️ 请先填写 API Key'); return; }
+            if (!cfg.baseUrl) { updateAiStatus('⚠️ 请填写服务商或 Base URL'); return; }
+            if (!cfg.model) { updateAiStatus('⚠️ 请先获取并选择模型'); return; }
+            aiConfig = cfg;
+            if (cfg.provider === 'custom') customBaseUrlDraft = cfg.baseUrl;
+            try { localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig)); } catch (e) {}
+            const card = document.getElementById('ai-card');
+            card.classList.add('ai-collapsed', 'chat-active');
+            updateAiStatus('');
+            if (!chatHistory.length) {
+                appendAiBubble('ai', '你好呀～我是 Saki，现在可以和我聊天啦！🐾');
+            }
+        }
+
+        async function fetchModels() {
+            const cfg = getAiConfigFromInputs();
+            if (!cfg.apiKey) { updateAiStatus('⚠️ 请先填写 API Key'); return; }
+            if (!cfg.baseUrl) { updateAiStatus('⚠️ 请填写服务商或 Base URL'); return; }
+            const btn = document.getElementById('ai-fetch-btn');
+            btn.disabled = true;
+            btn.textContent = '获取中…';
+            updateAiStatus('⏳ 正在获取模型列表…');
+            try {
+                const resp = await fetch(cfg.baseUrl + '/models', {
+                    headers: { 'Authorization': 'Bearer ' + cfg.apiKey }
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                const ids = (data.data || []).map(m => m.id).filter(Boolean).sort();
+                if (!ids.length) throw new Error('未返回任何模型');
+                const sel = document.getElementById('ai-model');
+                sel.innerHTML = '';
+                ids.forEach(id => {
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = id;
+                    sel.appendChild(opt);
+                });
+                setAiModelOption(cfg.model);
+                updateAiStatus('✅ 获取到 ' + ids.length + ' 个模型，请选择');
+            } catch (e) {
+                updateAiStatus('❌ 获取模型失败：' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '获取模型';
+            }
+        }
+
+        function appendAiBubble(role, text) {
+            const container = document.getElementById('ai-messages');
+            const div = document.createElement('div');
+            div.className = 'ai-bubble ' + (role === 'user' ? 'user' : 'ai');
+            div.textContent = text;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            return div;
+        }
+
+        function scrollAiBottom() {
+            const c = document.getElementById('ai-messages');
+            c.scrollTop = c.scrollHeight;
+        }
+
+        async function safeErrorText(resp) {
+            try { const t = await resp.text(); return t.slice(0, 200); } catch (e) { return ''; }
+        }
+
+        async function nonStreamChat(messages) {
+            const body = {
+                model: aiConfig.model,
+                messages: messages,
+                stream: false,
+                temperature: aiConfig.temperature
+            };
+            if (aiConfig.maxTokens > 0) body.max_tokens = aiConfig.maxTokens;
+            const resp = await fetch(aiConfig.baseUrl + '/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + aiConfig.apiKey },
+                body: JSON.stringify(body)
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (await safeErrorText(resp)));
+            const data = await resp.json();
+            return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+        }
+
+        async function streamChat(messages, onDelta) {
+            const body = {
+                model: aiConfig.model,
+                messages: messages,
+                stream: true,
+                temperature: aiConfig.temperature
+            };
+            if (aiConfig.maxTokens > 0) body.max_tokens = aiConfig.maxTokens;
+            const resp = await fetch(aiConfig.baseUrl + '/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + aiConfig.apiKey },
+                body: JSON.stringify(body)
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (await safeErrorText(resp)));
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let full = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                let idx;
+                while ((idx = buffer.indexOf('\n')) >= 0) {
+                    const line = buffer.slice(0, idx).trim();
+                    buffer = buffer.slice(idx + 1);
+                    if (!line.startsWith('data:')) continue;
+                    const payload = line.slice(5).trim();
+                    if (!payload || payload === '[DONE]') continue;
+                    try {
+                        const json = JSON.parse(payload);
+                        const delta = json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content;
+                        if (delta) { full += delta; onDelta(full); }
+                    } catch (e) {}
+                }
+            }
+            return full;
+        }
+
+        async function sendAiMessage() {
+            if (aiBusy) return;
+            const input = document.getElementById('ai-input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+
+            appendAiBubble('user', text);
+            chatHistory.push({ role: 'user', content: text });
+            if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
+
+            const aiBubble = appendAiBubble('ai', '');
+            aiBubble.classList.add('loading');
+            aiBubble.textContent = '思考中…';
+
+            aiBusy = true;
+            const sendBtn = document.getElementById('ai-send-btn');
+            sendBtn.disabled = true;
+
+            const messages = [];
+            if (aiConfig.systemPrompt) messages.push({ role: 'system', content: aiConfig.systemPrompt });
+            messages.push(...chatHistory);
+
+            try {
+                let full = '';
+                if (aiConfig.stream) {
+                    full = await streamChat(messages, (acc) => {
+                        aiBubble.textContent = acc;
+                        aiBubble.classList.remove('loading');
+                        scrollAiBottom();
+                    });
+                } else {
+                    full = await nonStreamChat(messages);
+                }
+                aiBubble.classList.remove('loading');
+                aiBubble.textContent = full || '(空回复)';
+                chatHistory.push({ role: 'assistant', content: full });
+            } catch (e) {
+                aiBubble.classList.remove('loading');
+                aiBubble.textContent = '请求失败：' + e.message;
+            } finally {
+                aiBusy = false;
+                sendBtn.disabled = false;
+                scrollAiBottom();
+            }
+        }
+
         // 初始化页面与按键绑定
         bindTouchButtonEvents();
         renderTimezoneButtons();
         updateClock();
         renderCalendar();
+        initAiArea();
         setInterval(updateClock, 1000);
     </script>
 </body>
