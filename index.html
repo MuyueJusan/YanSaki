@@ -16,6 +16,11 @@
             --color-3: #79c4d2;
             --color-4: #79aed2;
             --color-5: #7998d2;
+            /* 放大模式（电脑）：宽度 = 窗口宽度的这个比例，但不超过上限。
+               注意 85vw 只在窗口较窄时起作用，桌面上实际由上限值决定宽度。
+               想调宽度，改下面这两个数就行 */
+            --ai-max-width-pct: 85vw;
+            --ai-max-width-max: 640px;
         }
 
         /* 全局像素字体设置 */
@@ -548,7 +553,7 @@
 
         .ai-settings {
             width: 100%;
-            margin-top: clamp(0.6rem, 2vh, 1rem);
+            padding-top: 10px;
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -642,6 +647,43 @@
             gap: 8px;
         }
 
+        /* 模型设置子面板（位于聊天上方，作为整个 AI 对话的子展开） */
+        .ai-settings-panel {
+            width: 100%;
+            margin-top: clamp(0.6rem, 2vh, 1rem);
+        }
+
+        .ai-settings-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            background: rgba(255, 255, 255, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .ai-settings-toggle:hover {
+            background: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+        }
+
+        .ai-settings-collapse {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .ai-container:not(.ai-settings-collapsed) .ai-settings-collapse { grid-template-rows: 1fr; }
+        .ai-container.ai-settings-collapsed .ai-settings-toggle .ai-adv-icon { transform: rotate(-90deg); }
+
+        .ai-settings-collapse-inner { overflow: hidden; }
+
         .ai-adv-toggle {
             display: flex;
             align-items: center;
@@ -670,7 +712,7 @@
         }
 
         .ai-container:not(.ai-adv-collapsed) .ai-adv-panel { grid-template-rows: 1fr; }
-        .ai-container.ai-adv-collapsed .ai-adv-icon { transform: rotate(-90deg); }
+        .ai-container.ai-adv-collapsed .ai-adv-toggle .ai-adv-icon { transform: rotate(-90deg); }
 
         .ai-adv-inner { overflow: hidden; }
 
@@ -716,6 +758,76 @@
         .ai-switch input:checked + .ai-switch-track { background: #3a7bd5; }
         .ai-switch input:checked + .ai-switch-track .ai-switch-thumb { transform: translateX(20px); }
 
+        /* ===== SillyTavern 风格 {{user}} 宏设置 ===== */
+        .ai-adv-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.28);
+            margin: 2px 0;
+        }
+
+        .ai-adv-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ai-adv-group-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        .ai-switch-mini { gap: 0; }
+        .ai-switch-mini .ai-switch-track { width: 36px; height: 20px; border-radius: 10px; }
+        .ai-switch-mini .ai-switch-thumb { width: 16px; height: 16px; }
+        .ai-switch-mini input:checked + .ai-switch-track .ai-switch-thumb { transform: translateX(16px); }
+
+        .ai-macro-body {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 0.25s ease;
+        }
+
+        .ai-macro-body.ai-macro-off {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .ai-macro-preview {
+            font-size: 0.78rem;
+            line-height: 1.6;
+            background: rgba(255, 255, 255, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 8px;
+            padding: 7px 10px;
+            word-break: break-word;
+        }
+
+        .ai-macro-preview b { text-shadow: 0 0 6px rgba(255, 255, 255, 0.7); }
+
+        .ai-macro-preview code,
+        .ai-hint code {
+            font-family: 'Share Tech Mono', monospace;
+            background: rgba(0, 0, 0, 0.18);
+            border-radius: 4px;
+            padding: 1px 4px;
+        }
+
+        .ai-hint {
+            font-size: 0.72rem;
+            line-height: 1.6;
+            opacity: 0.82;
+        }
+
+        .ai-btn-mini {
+            padding: 5px 9px;
+            font-size: 0.75rem;
+        }
+
         /* 温度滑块 */
         .ai-field input[type="range"] {
             padding: 0;
@@ -734,7 +846,7 @@
 
         /* 聊天界面（浅蓝色背景 + 圆润气泡） */
         .ai-chat {
-            display: none;
+            display: flex;
             width: 100%;
             margin-top: clamp(0.6rem, 2vh, 1rem);
             background: #e3f0ff;
@@ -743,8 +855,6 @@
             flex-direction: column;
             gap: 10px;
         }
-
-        .ai-container.chat-active .ai-chat { display: flex; }
 
         .ai-messages {
             display: flex;
@@ -819,6 +929,9 @@
             cursor: pointer;
             font-size: 0.85rem;
             transition: all 0.2s ease;
+            /* 不要被输入框挤扁：固定自身宽度，且文字永不折行 */
+            flex: 0 0 auto;
+            white-space: nowrap;
         }
 
         .ai-send-btn:hover { background: #4a8ae0; }
@@ -1340,8 +1453,32 @@
 
         body.retro-mode .ai-btn.primary { background: #000080; color: #fff; }
         body.retro-mode .ai-adv-toggle { color: #000; }
+        body.retro-mode .ai-settings-toggle {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
         body.retro-mode .ai-switch-track { background: #808080; }
         body.retro-mode .ai-status { color: #000; text-shadow: none; }
+
+        body.retro-mode .ai-adv-divider { background: #808080; height: 2px; }
+        body.retro-mode .ai-adv-group-title { color: #000; }
+
+        body.retro-mode .ai-macro-preview {
+            background: #fff;
+            color: #000;
+            border: 2px solid;
+            border-color: #808080 #fff #fff #808080;
+            border-radius: 0;
+            text-shadow: none;
+        }
+
+        body.retro-mode .ai-macro-preview b { text-shadow: none; }
+        body.retro-mode .ai-macro-preview code,
+        body.retro-mode .ai-hint code { background: #d0d0d0; color: #000; }
+        body.retro-mode .ai-hint { color: #000; opacity: 1; }
 
         body.retro-mode .ai-chat {
             background: #c0c0c0;
@@ -1385,6 +1522,124 @@
             body { padding-left: 0.5rem; padding-right: 0.5rem; }
             .clock-container { padding: 0 0.5rem; }
             .period-box { margin-right: 0.5rem; padding-right: 0.5rem; }
+        }
+
+        @media (max-width: 420px) {
+            .ai-macro-body .ai-row { flex-direction: column; }
+        }
+
+        /* ==========================================================================
+           AI 聊天窗口「放大」模式
+             手机 / 窄屏（≤600px）：铺满整个浏览器窗口
+             桌面 / 宽屏（>600px）：按手机比例（9 : 19.5）竖向居中显示
+           统一用 body 前缀选择器，保证能压过 body.retro-mode .glass-card
+           ========================================================================== */
+        .ai-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ai-max-btn.active {
+            background: rgba(255, 255, 255, 0.55);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+        }
+
+        /* 放大时的背景遮罩（挂在 body 的伪元素上，不新增 DOM 节点） */
+        body.ai-max-on { overflow: hidden; }
+
+        body.ai-max-on::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: rgba(8, 32, 48, 0.5);
+            backdrop-filter: blur(3px);
+            z-index: 900;
+        }
+
+        /* 放大后让聊天区撑满剩余高度，而不是被 max-height: 300px 卡住 */
+        body .ai-container.ai-maximized {
+            z-index: 950;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            overflow: visible;
+        }
+
+        body .ai-container.ai-maximized .ai-collapse-wrapper {
+            flex: 1;
+            min-height: 0;
+        }
+
+        body .ai-container.ai-maximized .ai-collapse-inner {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: visible;
+        }
+
+        /* 放大时若把设置面板展开，限制其高度并允许内部滚动 */
+        body .ai-container.ai-maximized .ai-settings-collapse-inner {
+            max-height: 45vh;
+            overflow-y: auto;
+        }
+
+        body .ai-container.ai-maximized .ai-chat {
+            flex: 1;
+            min-height: 0;
+        }
+
+        body .ai-container.ai-maximized .ai-messages {
+            flex: 1;
+            min-height: 0;
+            max-height: none;
+        }
+
+        /* 放大时隐藏「展开/折叠」按钮，避免把内容折进去 */
+        body .ai-container.ai-maximized .ai-collapse-toggle { display: none; }
+
+        /* —— 手机 / 窄屏 / 极扁窗口：铺满整个浏览器窗口 ——
+           max-height 那条是为了兜住「手机横屏」（如 844×390，宽度会误判成桌面） */
+        @media (max-width: 600px), (max-height: 480px) {
+            body .ai-container.ai-maximized {
+                position: fixed;
+                inset: 0;
+                margin: 0;
+                width: 100%;
+                max-width: none;
+                height: 100dvh;
+                border-radius: 0;
+                padding: 0.6rem 0.6rem calc(0.6rem + env(safe-area-inset-bottom, 0px)) 0.6rem;
+            }
+        }
+
+        /* —— 桌面 / 宽屏：竖向居中，宽度按窗口百分比（带上限）—— */
+        @media (min-width: 601px) and (min-height: 481px) {
+            body .ai-container.ai-maximized {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                margin: 0;
+                /* 宽度 = 窗口宽度的 85%，且不超过上限；
+                   最后一项只是保证「竖向」——窗口很矮时跟着收窄，正常屏幕上不生效 */
+                width: min(
+                    var(--ai-max-width-pct),
+                    var(--ai-max-width-max),
+                    calc((100dvh - 2rem) * 0.9)
+                );
+                max-width: none;
+                height: calc(100dvh - 2rem);
+                border-radius: 28px;
+                padding: clamp(0.75rem, 1.6vw, 1.1rem);
+                box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+            }
+        }
+
+        /* 复古皮肤下要避开窗口标题栏（.glass-card 的 padding-top: 26px） */
+        body.retro-mode .ai-container.ai-maximized {
+            padding-top: 28px;
+            border-radius: 0;
         }
     </style>
 </head>
@@ -1438,80 +1693,161 @@
     </div>
 
     <!-- AI 对话区域 -->
-    <div class="ai-container glass-card ai-collapsed ai-adv-collapsed" id="ai-card">
+    <div class="ai-container glass-card ai-collapsed ai-settings-collapsed ai-adv-collapsed" id="ai-card">
         <div class="ai-header">
             <span class="ai-title">🤖 AI 对话</span>
-            <button class="cal-btn toggle-btn" onclick="toggleAiArea()" title="展开/折叠">
-                <span class="toggle-icon ai-toggle-icon">▲</span>
-            </button>
+            <div class="ai-header-actions">
+                <button class="cal-btn toggle-btn ai-max-btn" id="ai-max-btn" type="button" onclick="toggleAiMaximize()" title="放大聊天窗口">
+                    <span class="ai-max-icon">⛶</span>
+                </button>
+                <button class="cal-btn toggle-btn ai-collapse-toggle" type="button" onclick="toggleAiArea()" title="展开/折叠">
+                    <span class="toggle-icon ai-toggle-icon">▲</span>
+                </button>
+            </div>
         </div>
 
-        <!-- 设置面板（折叠） -->
+        <!-- 主折叠（整个 AI 对话区域：模型设置 + 聊天） -->
         <div class="ai-collapse-wrapper">
             <div class="ai-collapse-inner">
-                <div class="ai-settings">
-                    <div class="ai-field">
-                        <label>服务商</label>
-                        <select id="ai-provider" onchange="syncAiProviderUI()"></select>
-                    </div>
-                    <div class="ai-field">
-                        <label>Base URL（自定义时填写）</label>
-                        <input id="ai-base-url" type="text" placeholder="https://api.example.com/v1" oninput="customBaseUrlDraft=this.value">
-                    </div>
-                    <div class="ai-field">
-                        <label>API Key</label>
-                        <input id="ai-api-key" type="password" placeholder="sk-..." autocomplete="off">
-                    </div>
-                    <div class="ai-field">
-                        <label>模型</label>
-                        <select id="ai-model"><option value="">先点击「获取模型」</option></select>
-                    </div>
-                    <button class="ai-btn" id="ai-fetch-btn" onclick="fetchModels()">获取模型</button>
 
-                    <!-- 高级设置（折叠） -->
-                    <button class="ai-adv-toggle" type="button" onclick="toggleAiAdvanced()">
-                        ⚙ 高级设置 <span class="ai-adv-icon">▾</span>
+                <!-- 模型设置（子展开，位于对话上方） -->
+                <div class="ai-settings-panel">
+                    <button class="ai-settings-toggle" type="button" onclick="toggleAiSettings()">
+                        ⚙ 模型设置 <span class="ai-adv-icon">▾</span>
                     </button>
-                    <div class="ai-adv-panel">
-                        <div class="ai-adv-inner">
-                            <div class="ai-adv-grid">
-                                <label class="ai-switch">
-                                    <input type="checkbox" id="ai-stream" onchange="updateAiStreamLabel()">
-                                    <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
-                                    <span class="ai-switch-label" id="ai-stream-label">流式输出</span>
-                                </label>
+                    <div class="ai-settings-collapse">
+                        <div class="ai-settings-collapse-inner">
+                            <div class="ai-settings">
                                 <div class="ai-field">
-                                    <label>温度：<span id="ai-temp-value">0.7</span></label>
-                                    <input id="ai-temperature" type="range" min="0" max="2" step="0.1" value="0.7" oninput="updateAiTempLabel()">
+                                    <label>服务商</label>
+                                    <select id="ai-provider" onchange="syncAiProviderUI()"></select>
                                 </div>
                                 <div class="ai-field">
-                                    <label>回复长度（max_tokens）</label>
-                                    <input id="ai-max-tokens" type="number" min="1" max="32768" value="1024">
+                                    <label>Base URL（自定义时填写）</label>
+                                    <input id="ai-base-url" type="text" placeholder="https://api.example.com/v1" oninput="customBaseUrlDraft=this.value">
                                 </div>
                                 <div class="ai-field">
-                                    <label>系统提示词</label>
-                                    <textarea id="ai-system-prompt" rows="3" placeholder="设定 AI 的角色与语气…"></textarea>
+                                    <label>API Key</label>
+                                    <input id="ai-api-key" type="password" placeholder="sk-..." autocomplete="off">
+                                </div>
+                                <div class="ai-field">
+                                    <label>模型</label>
+                                    <select id="ai-model"><option value="">先点击「获取模型」</option></select>
+                                </div>
+                                <button class="ai-btn" id="ai-fetch-btn" onclick="fetchModels()">获取模型</button>
+
+                                <!-- 高级设置（折叠） -->
+                                <button class="ai-adv-toggle" type="button" onclick="toggleAiAdvanced()">
+                                    ⚙ 高级设置 <span class="ai-adv-icon">▾</span>
+                                </button>
+                                <div class="ai-adv-panel">
+                                    <div class="ai-adv-inner">
+                                        <div class="ai-adv-grid">
+                                            <label class="ai-switch">
+                                                <input type="checkbox" id="ai-stream" onchange="updateAiStreamLabel()">
+                                                <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                                                <span class="ai-switch-label" id="ai-stream-label">流式输出</span>
+                                            </label>
+                                            <div class="ai-field">
+                                                <label>温度：<span id="ai-temp-value">0.7</span></label>
+                                                <input id="ai-temperature" type="range" min="0" max="2" step="0.1" value="0.7" oninput="updateAiTempLabel()">
+                                            </div>
+                                            <div class="ai-field">
+                                                <label>回复长度（max_tokens）</label>
+                                                <input id="ai-max-tokens" type="number" min="1" max="32768" value="1024">
+                                            </div>
+
+                                            <!-- SillyTavern 风格 {{user}} 宏 -->
+                                            <div class="ai-adv-divider"></div>
+                                            <div class="ai-adv-group">
+                                                <div class="ai-adv-group-title">
+                                                    <span>🎭 用户人设 · {{user}} 宏</span>
+                                                    <label class="ai-switch ai-switch-mini" title="启用 / 关闭宏替换">
+                                                        <input type="checkbox" id="ai-user-macro" onchange="onUserMacroFieldChange()">
+                                                        <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="ai-macro-body" id="ai-macro-body">
+                                                    <div class="ai-row">
+                                                        <div class="ai-field">
+                                                            <label>你的昵称</label>
+                                                            <input id="ai-user-name" type="text" placeholder="阿月" oninput="onUserMacroFieldChange()">
+                                                        </div>
+                                                        <div class="ai-field">
+                                                            <label>AI 角色名</label>
+                                                            <input id="ai-char-name" type="text" placeholder="Saki" oninput="onUserMacroFieldChange()">
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="ai-field">
+                                                        <label>称呼方式</label>
+                                                        <select id="ai-address-style" onchange="onUserMacroFieldChange()">
+                                                            <option value="plain">直接称呼昵称</option>
+                                                            <option value="prefix">前缀修饰（小 + 昵称）</option>
+                                                            <option value="suffix">后缀修饰（昵称 + 酱）</option>
+                                                            <option value="custom">自定义模板</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div class="ai-field" id="ai-address-affix-field">
+                                                        <label id="ai-address-affix-label">前缀修饰词</label>
+                                                        <input id="ai-address-affix" type="text" placeholder="小" oninput="onUserMacroFieldChange()">
+                                                    </div>
+
+                                                    <div class="ai-field" id="ai-address-template-field">
+                                                        <label>称呼模板（{{user}} 代表昵称）</label>
+                                                        <input id="ai-address-template" type="text" placeholder="{{user}}大人" oninput="onUserMacroFieldChange()">
+                                                    </div>
+
+                                                    <div class="ai-macro-preview" id="ai-macro-preview"></div>
+
+                                                    <label class="ai-switch">
+                                                        <input type="checkbox" id="ai-address-inject" onchange="onUserMacroFieldChange()">
+                                                        <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                                                        <span class="ai-switch-label">自动把称呼指令写入系统提示词</span>
+                                                    </label>
+
+                                                    <div class="ai-hint">
+                                                        系统提示词中可用 <code>{{user}}</code>（你的称呼）与 <code>{{char}}</code>（AI 角色名），发送时自动替换；你也可以直接在自己发的消息里写 <code>{{user}}</code>。
+                                                    </div>
+
+                                                    <div class="ai-actions">
+                                                        <button class="ai-btn ai-btn-mini" type="button" onclick="insertAiMacro('{{user}}')">插入 {{user}}</button>
+                                                        <button class="ai-btn ai-btn-mini" type="button" onclick="insertAiMacro('{{char}}')">插入 {{char}}</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="ai-adv-divider"></div>
+
+                                            <div class="ai-field">
+                                                <label>系统提示词</label>
+                                                <textarea id="ai-system-prompt" rows="3" placeholder="设定 AI 的角色与语气…"></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="ai-status" id="ai-status"></div>
+
+                                <div class="ai-actions">
+                                    <button class="ai-btn" onclick="saveAiSettings()">保存</button>
+                                    <button class="ai-btn primary" onclick="applyAiSettings()">应用</button>
                                 </div>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <div class="ai-status" id="ai-status"></div>
-
-                    <div class="ai-actions">
-                        <button class="ai-btn" onclick="saveAiSettings()">保存</button>
-                        <button class="ai-btn primary" onclick="applyAiSettings()">应用</button>
+                <!-- 聊天界面 -->
+                <div class="ai-chat" id="ai-chat">
+                    <div class="ai-messages" id="ai-messages"></div>
+                    <div class="ai-input-row">
+                        <input id="ai-input" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter')sendAiMessage()">
+                        <button class="ai-send-btn" id="ai-send-btn" onclick="sendAiMessage()">发送</button>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- 聊天界面（应用后显示） -->
-        <div class="ai-chat" id="ai-chat">
-            <div class="ai-messages" id="ai-messages"></div>
-            <div class="ai-input-row">
-                <input id="ai-input" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter')sendAiMessage()">
-                <button class="ai-send-btn" id="ai-send-btn" onclick="sendAiMessage()">发送</button>
             </div>
         </div>
     </div>
@@ -2673,7 +3009,15 @@
             stream: true,
             temperature: 0.7,
             maxTokens: 1024,
-            systemPrompt: '你是一只名叫 Saki 的小猫，用温柔可爱的语气和主人聊天。'
+            systemPrompt: '你是一只名叫 {{char}} 的小猫，用温柔可爱的语气和主人聊天。',
+            // —— SillyTavern 风格 {{user}} 宏 ——
+            userMacroEnabled: true,
+            userName: 'YanSaki',
+            charName: 'Saki',
+            addressStyle: 'plain',
+            addressAffix: '小',
+            addressTemplate: '{{user}}',
+            addressInject: true
         };
 
         let aiConfig = { ...AI_DEFAULTS };
@@ -2704,6 +3048,15 @@
             document.getElementById('ai-temp-value').textContent = Number(aiConfig.temperature).toFixed(1);
             document.getElementById('ai-max-tokens').value = aiConfig.maxTokens;
             document.getElementById('ai-system-prompt').value = aiConfig.systemPrompt || '';
+            // {{user}} 宏相关控件回填
+            document.getElementById('ai-user-macro').checked = aiConfig.userMacroEnabled !== false;
+            document.getElementById('ai-user-name').value = aiConfig.userName || '';
+            document.getElementById('ai-char-name').value = aiConfig.charName || '';
+            document.getElementById('ai-address-style').value = aiConfig.addressStyle || 'plain';
+            document.getElementById('ai-address-affix').value = aiConfig.addressAffix || '';
+            document.getElementById('ai-address-template').value = aiConfig.addressTemplate || '';
+            document.getElementById('ai-address-inject').checked = aiConfig.addressInject !== false;
+            syncUserMacroUI();
             setAiModelOption(aiConfig.model);
         }
 
@@ -2745,7 +3098,8 @@
                 stream: document.getElementById('ai-stream').checked,
                 temperature: parseFloat(document.getElementById('ai-temperature').value) || 0.7,
                 maxTokens: parseInt(document.getElementById('ai-max-tokens').value, 10) || 1024,
-                systemPrompt: document.getElementById('ai-system-prompt').value
+                systemPrompt: document.getElementById('ai-system-prompt').value,
+                ...readUserMacroInputs()
             };
         }
 
@@ -2764,6 +3118,122 @@
             document.getElementById('ai-stream-label').textContent = checked ? '流式输出' : '非流式输出';
         }
 
+        // ==========================================================================
+        // SillyTavern 风格 {{user}} 宏
+        //   {{user}} → 由「昵称 + 称呼方式」计算出的称呼
+        //   {{char}} → AI 角色名
+        // ==========================================================================
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        // 根据昵称与称呼方式算出最终称呼（纯函数）
+        function buildUserAddress(m) {
+            const name = (m.userName || '').trim();
+            if (!name) return '';
+            if (m.addressStyle === 'prefix') return (m.addressAffix || '') + name;
+            if (m.addressStyle === 'suffix') return name + (m.addressAffix || '');
+            if (m.addressStyle === 'custom') return (m.addressTemplate || '{{user}}').split('{{user}}').join(name);
+            return name;
+        }
+
+        function readUserMacroInputs() {
+            return {
+                userMacroEnabled: document.getElementById('ai-user-macro').checked,
+                userName: document.getElementById('ai-user-name').value.trim(),
+                charName: document.getElementById('ai-char-name').value.trim(),
+                addressStyle: document.getElementById('ai-address-style').value,
+                addressAffix: document.getElementById('ai-address-affix').value.trim(),
+                addressTemplate: document.getElementById('ai-address-template').value,
+                addressInject: document.getElementById('ai-address-inject').checked
+            };
+        }
+
+        // 只回写宏相关字段，避免顺手把未保存的 API Key / 模型一起落盘
+        function persistUserMacro() {
+            Object.assign(aiConfig, readUserMacroInputs());
+            try { localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig)); } catch (e) {}
+        }
+
+        // 发送时使用的宏上下文（以 aiConfig 为准）
+        function getMacroContext() {
+            return {
+                enabled: aiConfig.userMacroEnabled !== false,
+                address: buildUserAddress(aiConfig),
+                charName: (aiConfig.charName || '').trim() || 'Saki'
+            };
+        }
+
+        // 展开文本中的宏；未启用时原样返回
+        function applyUserMacros(text) {
+            if (!text) return text;
+            const ctx = getMacroContext();
+            if (!ctx.enabled) return text;
+            return text
+                .split('{{user}}').join(ctx.address || '主人')
+                .split('{{char}}').join(ctx.charName);
+        }
+
+        // 组装最终系统提示词：宏替换 + 可选注入称呼指令
+        function buildSystemPrompt() {
+            const raw = aiConfig.systemPrompt || '';
+            const ctx = getMacroContext();
+            let sys = applyUserMacros(raw);
+            if (ctx.enabled && aiConfig.addressInject !== false && ctx.address && raw.indexOf('{{user}}') < 0) {
+                sys = (sys ? sys + '\n\n' : '') + `（请用「${ctx.address}」来称呼我。）`;
+            }
+            return sys;
+        }
+
+        function syncUserMacroUI() {
+            const m = readUserMacroInputs();
+
+            // 按称呼方式显隐「修饰词 / 模板」输入框
+            const affixField = document.getElementById('ai-address-affix-field');
+            const tplField = document.getElementById('ai-address-template-field');
+            const affixLabel = document.getElementById('ai-address-affix-label');
+            const affixInput = document.getElementById('ai-address-affix');
+            const showAffix = (m.addressStyle === 'prefix' || m.addressStyle === 'suffix');
+            affixField.style.display = showAffix ? '' : 'none';
+            tplField.style.display = (m.addressStyle === 'custom') ? '' : 'none';
+            if (showAffix) {
+                const isPrefix = (m.addressStyle === 'prefix');
+                affixLabel.textContent = isPrefix ? '前缀修饰词' : '后缀修饰词';
+                affixInput.placeholder = isPrefix ? '小' : '酱';
+            }
+
+            // 关闭宏时整块置灰
+            document.getElementById('ai-macro-body').classList.toggle('ai-macro-off', !m.userMacroEnabled);
+
+            // 实时预览
+            const preview = document.getElementById('ai-macro-preview');
+            if (!m.userMacroEnabled) {
+                preview.innerHTML = '已关闭 · 提示词中的 <code>{{user}}</code> / <code>{{char}}</code> 会原样发送给模型。';
+                return;
+            }
+            const address = buildUserAddress(m);
+            const charName = (m.charName || '').trim() || 'Saki';
+            preview.innerHTML = address
+                ? `AI 将称呼你为：<b>${escapeHtml(address)}</b>　·　AI 角色名：<b>${escapeHtml(charName)}</b>`
+                : '请先填写你的昵称，否则 <code>{{user}}</code> 会展开为「主人」。';
+        }
+
+        function onUserMacroFieldChange() {
+            persistUserMacro();
+            syncUserMacroUI();
+        }
+
+        function insertAiMacro(macro) {
+            const ta = document.getElementById('ai-system-prompt');
+            const start = (typeof ta.selectionStart === 'number') ? ta.selectionStart : ta.value.length;
+            const end = (typeof ta.selectionEnd === 'number') ? ta.selectionEnd : ta.value.length;
+            ta.value = ta.value.slice(0, start) + macro + ta.value.slice(end);
+            ta.selectionStart = ta.selectionEnd = start + macro.length;
+            ta.focus();
+        }
+
         function expandAiAdvanced() {
             document.getElementById('ai-card').classList.remove('ai-adv-collapsed');
         }
@@ -2772,17 +3242,78 @@
             document.getElementById('ai-card').classList.toggle('ai-adv-collapsed');
         }
 
+        function toggleAiSettings() {
+            document.getElementById('ai-card').classList.toggle('ai-settings-collapsed');
+        }
+
         function toggleAiArea() {
             const card = document.getElementById('ai-card');
-            if (card.classList.contains('chat-active')) {
-                // 从聊天返回设置
-                card.classList.remove('chat-active', 'ai-collapsed');
+            card.classList.toggle('ai-collapsed');
+            if (!card.classList.contains('ai-collapsed')) {
+                // 展开整个 AI 对话时，同步展开模型设置与高级设置
+                card.classList.remove('ai-settings-collapsed');
                 expandAiAdvanced();
-            } else {
-                card.classList.toggle('ai-collapsed');
-                if (!card.classList.contains('ai-collapsed')) expandAiAdvanced();
             }
         }
+
+        // ===== AI 聊天窗口放大 =====
+        // 手机/窄屏 → 铺满整个浏览器窗口；桌面/宽屏 → 手机比例竖向居中
+        let aiMaxPrevState = null;
+
+        function scrollAiMessagesToBottom() {
+            requestAnimationFrame(() => {
+                const box = document.getElementById('ai-messages');
+                if (box) box.scrollTop = box.scrollHeight;
+            });
+        }
+
+        function toggleAiMaximize() {
+            const card = document.getElementById('ai-card');
+            const btn = document.getElementById('ai-max-btn');
+            const on = card.classList.toggle('ai-maximized');
+            document.body.classList.toggle('ai-max-on', on);
+
+            if (on) {
+                // 记下原来的展开状态；放大时收起设置面板，把高度让给聊天
+                aiMaxPrevState = {
+                    collapsed: card.classList.contains('ai-collapsed'),
+                    settingsCollapsed: card.classList.contains('ai-settings-collapsed'),
+                    advCollapsed: card.classList.contains('ai-adv-collapsed')
+                };
+                card.classList.remove('ai-collapsed');
+                card.classList.add('ai-settings-collapsed', 'ai-adv-collapsed');
+                btn.classList.add('active');
+                btn.title = '退出放大';
+            } else {
+                // 还原放大前的折叠状态
+                if (aiMaxPrevState) {
+                    card.classList.toggle('ai-collapsed', aiMaxPrevState.collapsed);
+                    card.classList.toggle('ai-settings-collapsed', aiMaxPrevState.settingsCollapsed);
+                    card.classList.toggle('ai-adv-collapsed', aiMaxPrevState.advCollapsed);
+                    aiMaxPrevState = null;
+                }
+                btn.classList.remove('active');
+                btn.title = '放大聊天窗口';
+            }
+
+            scrollAiMessagesToBottom();
+        }
+
+        function isAiMaximized() {
+            return document.getElementById('ai-card').classList.contains('ai-maximized');
+        }
+
+        // Esc 退出放大
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isAiMaximized()) toggleAiMaximize();
+        });
+
+        // 点击遮罩（body 空白处）退出放大
+        document.body.addEventListener('click', (e) => {
+            if (e.target === document.body && document.body.classList.contains('ai-max-on')) {
+                toggleAiMaximize();
+            }
+        });
 
         function saveAiSettings() {
             aiConfig = getAiConfigFromInputs();
@@ -2799,11 +3330,15 @@
             aiConfig = cfg;
             if (cfg.provider === 'custom') customBaseUrlDraft = cfg.baseUrl;
             try { localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig)); } catch (e) {}
-            const card = document.getElementById('ai-card');
-            card.classList.add('ai-collapsed', 'chat-active');
+            // 折叠模型设置（保留在对话上方作为子展开），聊天保持展开
+            document.getElementById('ai-card').classList.add('ai-settings-collapsed');
             updateAiStatus('');
             if (!chatHistory.length) {
-                appendAiBubble('ai', '你好呀～我是 Saki，现在可以和我聊天啦！🐾');
+                const ctx = getMacroContext();
+                const greet = (ctx.enabled && ctx.address)
+                    ? `你好呀～我是 ${ctx.charName}，以后就称呼你「${ctx.address}」啦，现在可以和我聊天啦！🐾`
+                    : `你好呀～我是 ${ctx.charName}，现在可以和我聊天啦！🐾`;
+                appendAiBubble('ai', greet);
             }
         }
 
@@ -2925,7 +3460,7 @@
             input.value = '';
 
             appendAiBubble('user', text);
-            chatHistory.push({ role: 'user', content: text });
+            chatHistory.push({ role: 'user', content: applyUserMacros(text) });
             if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
 
             const aiBubble = appendAiBubble('ai', '');
@@ -2937,7 +3472,8 @@
             sendBtn.disabled = true;
 
             const messages = [];
-            if (aiConfig.systemPrompt) messages.push({ role: 'system', content: aiConfig.systemPrompt });
+            const sysPrompt = buildSystemPrompt();
+            if (sysPrompt) messages.push({ role: 'system', content: sysPrompt });
             messages.push(...chatHistory);
 
             try {
