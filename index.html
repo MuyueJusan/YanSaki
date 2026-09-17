@@ -3143,6 +3143,29 @@
             margin-bottom: 5px;
         }
 
+        /* 真机预览：一个真的 iframe，跟运行时用的同一套包装。
+           底色调成画布同系的浅灰 —— 状态栏自己不设底色时就透出这个，
+           一眼能看出「这块我没上色」 */
+        .st-sb-frame-wrap {
+            border: 1px solid rgba(120, 150, 180, 0.45);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #e9eef3;
+        }
+
+        .st-sb-frame {
+            display: block;
+            width: 100%;
+            height: 340px;
+            border: 0;
+            background: #e9eef3;
+        }
+
+        body.retro-mode .st-sb-frame-wrap,
+        body.retro-mode .st-sb-frame {
+            background: #ffffff;
+        }
+
         .st-sb-dropend {
             margin-top: 8px;
             padding: 7px;
@@ -6967,12 +6990,43 @@
                 extraInner: '',
                 extraFill: '',
                 wrapExtra: '',
+                // 原稿元素上的 class。运行时的界面是**真 iframe、独立文档**，
+                // `<style>` 照常生效，所以「<style>.hp-k{}</style> + <span class="hp-k">」
+                // 是完全正当的写法 —— class 一丢那段 CSS 就落空，而且不报错，只是样子不对。
+                //
+                // 按**层**存，因为生成器每层都写固定结构，只有 class 是它画不出来的：
+                //   outer → 块最外层            label → 显示名那排
+                //   value → 数值那排            inner → 「底」（bar 轨道 / dots 装圆点层）
+                //   fill  → 「亮」（bar 填充 / dots 亮点层）
+                //   empty → dots 里没点亮那排   wrap  → 在分组里时外面那层「列」容器
+                clsMap: {
+                    outer: '', label: '', value: '',
+                    inner: '', fill: '', empty: '', wrap: ''
+                },
+                // 原稿在**这一层**的内联 style 里真正写过哪些属性名。
+                //
+                // 生成器要写的外观声明，凡是这份名单里没有的，一律**不写** ——
+                // 那条长相归 class（或者归浏览器默认），生成器一写内联就把它盖住了，
+                // 而且不报错，只是样子不对。
+                //
+                // 记到「属性」这一档、而不是「层」这一档：手写稿里一层常常是
+                // 字号自己写、颜色靠 class（`style="font-size:13px"` 挂在
+                // `<span class="hp-v">` 上），按层判就整层都放过，颜色当场被盖
+                clsOwn: {
+                    outer: [], label: [], value: [],
+                    inner: [], fill: [], empty: [], wrap: []
+                },
                 children: []
             };
         }
 
         function stBlankStatusBar() {
-            return { theme: 'dark', width: 0, shellExtra: '', shellOff: [], blocks: [] };
+            return {
+                theme: 'dark', width: 0, shellExtra: '', shellCls: '', shellOff: [], blocks: [],
+                // 卡里那条正则里、**围栏代码块之外**的文字。运行时只认围栏里的那一段，
+                // 外面的都是给读者看的说明，跟界面无关 —— 写回时原样带回去，一个字节不动
+                pre: '', post: ''
+            };
         }
 
         function stSbBlockFromRaw(raw) {
@@ -7008,6 +7062,18 @@
             b.extraInner = stStr(raw.extraInner).slice(0, 600);
             b.extraFill = stStr(raw.extraFill).slice(0, 600);
             b.wrapExtra = stStr(raw.wrapExtra).slice(0, 600);
+            const cm = (raw.clsMap && typeof raw.clsMap === 'object' && !Array.isArray(raw.clsMap))
+                ? raw.clsMap : {};
+            ST_SB_CLS_ROLES.forEach(r => { b.clsMap[r] = stSbSafeCls(cm[r]); });
+            const co = (raw.clsOwn && typeof raw.clsOwn === 'object' && !Array.isArray(raw.clsOwn))
+                ? raw.clsOwn : {};
+            ST_SB_CLS_ROLES.forEach(r => {
+                const list = Array.isArray(co[r]) ? co[r] : [];
+                b.clsOwn[r] = list
+                    .map(x => String(x == null ? '' : x).trim().toLowerCase())
+                    .filter(x => /^[a-z][a-z0-9-]*$/.test(x))
+                    .filter((x, i, a) => a.indexOf(x) === i).slice(0, 60);
+            });
             b.children = Array.isArray(raw.children) ? raw.children.map(stSbBlockFromRaw) : [];
             return b;
         }
@@ -7021,6 +7087,7 @@
             // 外壳附加样式：解析别人的状态栏时留下来的那些「主题表达不了」的声明
             // （阴影 / 渐变 / 模糊…）。长度封个顶，免得坏草稿把页面撑死
             sb.shellExtra = stStr(raw.shellExtra).slice(0, 2000);
+            sb.shellCls = stSbSafeCls(raw.shellCls);
             // 关掉的外壳属性：原稿没写、生成器就不该补的那几个。
             // 白名单过滤 —— 坏草稿塞进来的怪名字一律丢掉
             sb.shellOff = Array.isArray(raw.shellOff)
@@ -7028,6 +7095,9 @@
                     .filter((k, i, a) => a.indexOf(k) === i)
                 : [];
             sb.blocks = Array.isArray(raw.blocks) ? raw.blocks.map(stSbBlockFromRaw) : [];
+            // 围栏外的原文。封个长度顶（正常就是几句说明，几 KB 已经离谱了）
+            sb.pre = stStr(raw.pre).slice(0, 4000);
+            sb.post = stStr(raw.post).slice(0, 4000);
             return sb;
         }
 
@@ -7202,6 +7272,110 @@
         // 都往 extraInner 里塞一条我们自己写出来的声明
         const ST_SB_BAR_TRACK_DEFAULT = 'rgba(128,150,180,.28)';
 
+        // 原稿元素上的 class，原样带进产物。
+        //
+        // 为什么非得留：运行时的界面是**真 iframe、独立文档**，`<style>` 照常生效，
+        // 所以「`<style>.hp{...}</style>` + `<div class="hp">`」是完全正当的写法。
+        // class 一丢，那段 CSS 就整个落空 —— 而且不会报错，只是样子不对。
+        // 生成器自己从不写 class，所以这里记下的一定是原稿的
+        function stSbSafeCls(raw) {
+            return String(raw == null ? '' : raw)
+                .replace(/[<>"'`]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+        }
+
+        function stSbClassAttr(b) {
+            return stSbCls(b, 'outer');
+        }
+
+        // class 按「层」存。这七层就是生成器会产出的全部元素 —— 原稿的 class
+        // 挂在哪一层，就记到哪一层，写回时照原样贴回去
+        const ST_SB_CLS_ROLES = ['outer', 'label', 'value', 'inner', 'fill', 'empty', 'wrap'];
+        const ST_SB_CLS_ROLE_NAME = {
+            outer: '这个块自己', label: '显示名那排', value: '数值那排',
+            inner: '内部底色层', fill: '内部高亮层', empty: '未点亮那排',
+            wrap: '分组里的那一列'
+        };
+
+        function stSbClsOf(b, role) {
+            return stSbSafeCls(b && b.clsMap && b.clsMap[role]);
+        }
+
+        // 生成 ` class="…"` 那半截。空字符串 = 这层本来就没 class
+        function stSbCls(b, role) {
+            const c = stSbClsOf(b, role);
+            return c ? ' class="' + escapeHtml(c) + '"' : '';
+        }
+
+        // 把某个源元素上的 class —— 连同它内联里写过哪些属性 —— 记到块的某一层
+        function stSbKeepCls(b, role, el) {
+            if (!b || !el || !el.getAttribute) return;
+            b.clsMap[role] = stSbSafeCls(el.getAttribute('class'));
+            b.clsOwn[role] = Object.keys(stSbStyleMap(el));
+        }
+
+        // 这一层带 class 吗
+        function stSbHasCls(b, role) {
+            return !!stSbClsOf(b, role);
+        }
+
+        // 原稿在这一层的内联里写过哪些属性（小写属性名）
+        function stSbOwnProps(b, role) {
+            const o = b && b.clsOwn && b.clsOwn[role];
+            return Array.isArray(o) ? o : [];
+        }
+
+        // 这一层是不是「光靠 class」：有 class，自己一条内联声明都没有
+        function stSbBare(b, role) {
+            return stSbHasCls(b, role) && !stSbOwnProps(b, role).length;
+        }
+
+        // 外观性声明：这层带 class 时，**只写原稿自己内联写过的那几条**。
+        //
+        // 内联永远赢过 class。生成器照主题写一串内联上去，作者 <style> 里按
+        // class 定的那几条就全白写了 —— 而且不报错，只是样子不对。所以这里
+        // 逐条声明过一遍：属性名不在原稿内联名单里的，删掉。
+        //
+        // 不带 class 的层原样返回（生成物一直是这么写的，动它会动到字节）。
+        // 结构性的那几条（flex 布局、position / overflow、calc 宽度…）不走
+        // 这里 —— 那些是这个块能不能画出来的前提，得照写
+        function stSbLook(b, role, css) {
+            const s = String(css == null ? '' : css);
+            if (!stSbHasCls(b, role)) return s;
+            const own = stSbOwnProps(b, role);
+            const kept = s.split(';').filter(d => {
+                const i = d.indexOf(':');
+                if (i < 0) return false;
+                return own.indexOf(d.slice(0, i).trim().toLowerCase()) >= 0;
+            }).join(';');
+            // 末尾补回分号：调用方常常把这截拼在中间（后面还接别的声明）
+            return kept ? kept + ';' : '';
+        }
+
+        // 这个块的文字里有没有换行（原稿的 <br> 还原出来的）
+        function stSbNeedsPre(b) {
+            return /\n/.test(String((b && b.text) || ''));
+        }
+
+        // 标题 / 文字块要不要写 white-space:pre-wrap。
+        //
+        // 不带 class 的层照旧无条件写 —— 生成物一直是这么写的，改了会动到字节。
+        // 带 class 的层就得收敛：原稿没写过换行、CSS 里也没提 white-space 时，
+        // 它的默认是 normal，我们插一句 pre-wrap 就是凭空改样子（多余的空格
+        // 不再合并、行尾空格也露出来）。但只要文字里确实有换行，这句就非写
+        // 不可 —— 不写，那个换行会被浏览器压成一个空格，那是真丢内容
+        function stSbPreWrap(b) {
+            if (!stSbHasCls(b, 'outer')) return true;
+            if (stSbNeedsPre(b)) return true;
+            return stSbOwnProps(b, 'outer').indexOf('white-space') >= 0;
+        }
+
+        // style 属性：空的就整个不写。有些层本来就可能一条声明都没有，
+        // 留个 style="" 出去会改变产物的字节（自往返那一关过不去）
+        function stSbStyleAttr(css) {
+            const s = String(css == null ? '' : css);
+            return s ? ' style="' + s + '"' : '';
+        }
+
         function stSbBlockHtml(b, sample, theme) {
             const t = ST_SB_THEMES[theme] || ST_SB_THEMES.dark;
             const col = String(b.color || '').trim();
@@ -7216,6 +7390,9 @@
             const vcol = String(b.valueColor || '').trim();
             const fs = 'font-size:' + b.size + 'px;';
             const m0 = 'margin:3px 0;';
+            // 原稿元素上的 class。**必须留着** —— 运行时的界面是个真 iframe，
+            // 作者完全可以在 <style> 里按 class 定样式；class 一丢，那段 CSS 全落空
+            const cls = stSbClassAttr(b);
             // 解析别人的状态栏时留下的「生成器不会产出」的声明。追加在最后 ——
             // 同属性后者胜，所以它盖得住上面这些，原稿的样子就保下来了
             const ex = stSbSafeCss(b.extra);
@@ -7228,23 +7405,31 @@
             const bodyText = sample ? stSbSampleText(b.text) : b.text;
 
             if (b.type === 'title') {
-                // pre-wrap 是为了让解析出来的标题里那些换行（原稿的 <br>）还立得住
-                return '<div style="font-size:' + (b.size + 2) + 'px;font-weight:bold;color:' +
-                    accent + ';text-align:' + align + ';margin:0 0 6px;line-height:1.4;' +
-                    'white-space:pre-wrap;' + ex + '">' +
+                // pre-wrap 是为了让解析出来的标题里那些换行（原稿的 <br>）还立得住。
+                // 带 class 的标题：字号 / 加粗 / 颜色 / 对齐 / 间距全交给那段 CSS，
+                // 只有确实有换行时才补一句 pre-wrap
+                const look = stSbLook(b, 'outer',
+                    'font-size:' + (b.size + 2) + 'px;font-weight:bold;color:' +
+                    accent + ';text-align:' + align + ';margin:0 0 6px;line-height:1.4;') +
+                    (stSbPreWrap(b) ? 'white-space:pre-wrap;' : '');
+                return '<div' + cls + stSbStyleAttr(look + ex) + '>' +
                     escapeHtml(bodyText) + '</div>';
             }
             if (b.type === 'text') {
-                return '<div style="' + fs + bold + 'color:' + fg + ';text-align:' + align + ';' +
-                    m0 + 'white-space:pre-wrap;line-height:1.6;' + ex + '">' +
+                const look = stSbLook(b, 'outer',
+                        fs + bold + 'color:' + fg + ';text-align:' + align + ';' + m0) +
+                    (stSbPreWrap(b) ? 'white-space:pre-wrap;' : '') +
+                    stSbLook(b, 'outer', 'line-height:1.6;');
+                return '<div' + cls + stSbStyleAttr(look + ex) + '>' +
                     escapeHtml(bodyText) + '</div>';
             }
             if (b.type === 'divider') {
-                return '<div style="height:1px;background:' + (col || t.border) +
-                    ';margin:7px 0;' + ex + '"></div>';
+                return '<div' + cls + stSbStyleAttr(stSbLook(b, 'outer',
+                    'height:1px;background:' + (col || t.border) + ';margin:7px 0;') + ex) +
+                    '></div>';
             }
             if (b.type === 'space') {
-                return '<div style="height:' + b.height + 'px;' + ex + '"></div>';
+                return '<div' + cls + ' style="height:' + b.height + 'px;' + ex + '"></div>';
             }
             if (b.type === 'html') {
                 // 高级块：原样写出去（用户自己负责合法性）
@@ -7252,13 +7437,16 @@
             }
             if (b.type === 'var') {
                 const label = (b.showLabel && b.label)
-                    ? '<span style="color:' + lcol + '">' + escapeHtml(b.label) + '</span>' : '';
+                    ? '<span' + stSbCls(b, 'label') +
+                      stSbStyleAttr(stSbLook(b, 'label', 'color:' + lcol)) + '>' +
+                      escapeHtml(b.label) + '</span>' : '';
                 const val = b.showValue
-                    ? '<span style="color:' + fg + ';font-weight:bold">' +
-                      stSbVal(b, sample, false) + '</span>' : '';
-                return '<div style="display:flex;justify-content:space-between;align-items:baseline;' +
-                    'gap:8px;' + fs + bold + m0 + 'text-align:' + align + ';' + ex + '">' +
-                    label + val + '</div>';
+                    ? '<span' + stSbCls(b, 'value') +
+                      stSbStyleAttr(stSbLook(b, 'value', 'color:' + fg + ';font-weight:bold')) +
+                      '>' + stSbVal(b, sample, false) + '</span>' : '';
+                return '<div' + cls + ' style="display:flex;justify-content:space-between;align-items:baseline;' +
+                    'gap:8px;' + stSbLook(b, 'outer', fs + bold + m0 + 'text-align:' + align + ';') +
+                    ex + '">' + label + val + '</div>';
             }
             if (b.type === 'bar') {
                 const lo = Number.isFinite(Number(b.min)) ? Number(b.min) : 0;
@@ -7273,15 +7461,19 @@
                 const head = (b.showLabel && b.label) || b.showValue
                     ? '<div style="display:flex;justify-content:space-between;font-size:' +
                       Math.max(9, b.size - 2) + 'px;color:' + lcol + ';margin-bottom:3px">' +
-                      '<span>' + (b.showLabel && b.label ? escapeHtml(b.label) : '') + '</span>' +
-                      '<span' + (vcol ? ' style="color:' + vcol + '"' : '') + '>' +
+                      '<span' + stSbCls(b, 'label') + '>' +
+                      (b.showLabel && b.label ? escapeHtml(b.label) : '') + '</span>' +
+                      '<span' + stSbCls(b, 'value') +
+                      stSbStyleAttr(stSbLook(b, 'value', vcol ? 'color:' + vcol : '')) + '>' +
                       (b.showValue ? stSbVal(b, sample, false) : '') + '</span>' +
                       '</div>'
                     : '';
-                return '<div style="' + m0 + ex + '">' + head +
-                    '<div style="height:' + b.height + 'px;background:' + track +
+                return '<div' + cls + stSbStyleAttr(stSbLook(b, 'outer', m0) + ex) + '>' + head +
+                    '<div' + stSbCls(b, 'inner') + ' style="height:' + b.height +
+                    'px;background:' + track +
                     ';border-radius:' + rad + 'px;overflow:hidden;' + exIn + '">' +
-                    '<div style="height:100%;' + w + ';background:' + accent +
+                    '<div' + stSbCls(b, 'fill') + ' style="height:100%;' + w +
+                    ';background:' + accent +
                     ';border-radius:' + rad + 'px;' + exFill + '"></div></div></div>';
             }
             if (b.type === 'dots') {
@@ -7298,30 +7490,41 @@
                 const w = 'width:0px;width:calc((' + rv + ' - ' + lo + ') / ' + span +
                     ' * ' + (n * step) + 'px);max-width:100%';
                 const label = (b.showLabel && b.label)
-                    ? '<span style="color:' + lcol + ';font-size:' + b.size + 'px">' +
-                      escapeHtml(b.label) + '</span>' : '';
+                    ? '<span' + stSbCls(b, 'label') +
+                      stSbStyleAttr(stSbLook(b, 'label',
+                          'color:' + lcol + ';font-size:' + b.size + 'px')) +
+                      '>' + escapeHtml(b.label) + '</span>' : '';
                 const val = b.showValue
-                    ? '<span style="color:' + (vcol || fg) + ';font-weight:bold;font-size:' +
-                      b.size + 'px">' + stSbVal(b, sample, false) + '</span>' : '';
+                    ? '<span' + stSbCls(b, 'value') +
+                      stSbStyleAttr(stSbLook(b, 'value',
+                          'color:' + (vcol || fg) + ';font-weight:bold;font-size:' +
+                          b.size + 'px')) +
+                      '>' + stSbVal(b, sample, false) + '</span>' : '';
                 const just = align === 'center' ? 'center' : (align === 'right' ? 'flex-end' : 'flex-start');
-                return '<div style="display:flex;align-items:center;gap:8px;' + m0 +
-                    'font-size:' + b.size + 'px;justify-content:' + just + ';' + ex + '">' + label +
-                    '<span style="position:relative;display:inline-block;line-height:1;' +
+                return '<div' + cls + ' style="display:flex;align-items:center;gap:8px;' +
+                    stSbLook(b, 'outer', m0 + 'font-size:' + b.size + 'px;') +
+                    'justify-content:' + just + ';' + ex + '">' + label +
+                    '<span' + stSbCls(b, 'inner') +
+                    ' style="position:relative;display:inline-block;line-height:1;' +
                     'letter-spacing:' + (step - b.size) + 'px;white-space:nowrap;' + exIn + '">' +
-                    '<span style="color:' + ecol + '">' + escapeHtml(full) + '</span>' +
-                    '<span style="position:absolute;left:0;top:0;overflow:hidden;' + w +
-                    ';color:' + accent + ';' + exFill + '">' + escapeHtml(full) + '</span></span>' +
+                    '<span' + stSbCls(b, 'empty') +
+                    stSbStyleAttr(stSbLook(b, 'empty', 'color:' + ecol)) + '>' +
+                    escapeHtml(full) + '</span>' +
+                    '<span' + stSbCls(b, 'fill') +
+                    ' style="position:absolute;left:0;top:0;overflow:hidden;' + w +
+                    ';' + stSbLook(b, 'fill', 'color:' + accent + ';') + exFill + '">' +
+                    escapeHtml(full) + '</span></span>' +
                     val + '</div>';
             }
             if (b.type === 'row') {
                 const gap = Number.isFinite(Number(b.gap)) ? Number(b.gap) : 8;
                 const kids = (b.children || []).map(k =>
-                    '<div style="flex:1 1 0;min-width:0;' +
+                    '<div' + stSbCls(k, 'wrap') + ' style="flex:1 1 0;min-width:0;' +
                     stSbSafeCss(k.wrapExtra) + '">' +
                     stSbBlockHtml(k, sample, theme) + '</div>').join('');
                 if (!kids) return '';
-                return '<div style="display:flex;gap:' + gap + 'px;align-items:center;' +
-                    m0 + ex + '">' + kids + '</div>';
+                return '<div' + cls + ' style="display:flex;gap:' + gap + 'px;align-items:center;' +
+                    stSbLook(b, 'outer', m0) + ex + '">' + kids + '</div>';
             }
             return '';
         }
@@ -7362,7 +7565,16 @@
                 parts.push('width:' + Math.min(1200, Math.trunc(w)) + 'px');
                 parts.push('max-width:100%');
             }
-            return '<div style="' + parts.join(';') + ';' + stSbShellExtraCss(sb) + '">';
+            return '<div' + stSbShellClsAttr(sb) + ' style="' +
+                parts.join(';') + ';' + stSbShellExtraCss(sb) + '">';
+        }
+
+        // 外壳元素上的 class。运行时是真 iframe，`<style>` 照常生效 ——
+        // 「<style>.hp-panel{…}</style>」这种最外层的 class 恰恰是最要紧的一个：
+        // 丢了它，整张状态栏的底色 / 边框 / 内边距全没了
+        function stSbShellClsAttr(sb) {
+            const c = stSbSafeCls(sb && sb.shellCls);
+            return c ? ' class="' + escapeHtml(c) + '"' : '';
         }
 
         // sample=true 是画布预览（宏换成示例值），false 是真正写进卡里的
@@ -7374,14 +7586,40 @@
 
         // 写进卡里的那段。结构 base64 塞在注释里 —— 导出的 PNG / JSON
         // 转一圈回来还能接着编辑，而不是只剩一坨认不出结构的 HTML
+        //
+        // 形状必须**严格满足运行时的判定**：``` 围栏 + 含 <body></body>。
+        // 少了任何一条，酒馆助手就不认它是界面，玩家那边只会看到一坨源码。
+        // 围栏外的原文（pre / post）原样拼回去
         function stSbDocHtmlOf(sb) {
+            const pre = String((sb && sb.pre) || '');
+            const post = String((sb && sb.post) || '');
+            return pre + stSbFencedDoc(stSbMarkOf(sb) + stSbBodyHtml(sb, false)) + post;
+        }
+
+        // 结构注释。`stSbDetect` 靠它认出「这段是本编辑器画的」，`stSbAdopt` 靠它把
+        // 块列表读回来。位置在 <body> **里面** —— 注释不是元素，运行时不会多渲染，
+        // 解析时也不会多出块，对「围栏 + <body></body>」那两条判定毫无影响。
+        // base64 是必须的：JSON 里可能出现 `-->`，直接塞进注释会被提前截断
+        function stSbMarkOf(sb) {
+            return '<!--' + ST_SB_MARK + ':' + stSbB64Enc(JSON.stringify(sb)) + '-->\n';
+        }
+
+        // 把 body 包成一段「运行时认得出」的文档。真机预览也用这个 ——
+        // 编辑器里看到的和写进卡里的必须是同一套包装
+        function stSbFencedDoc(bodyHtml) {
             return '```html\n<!doctype html><html><head><meta charset="utf-8"></head><body>\n' +
-                '<!--' + ST_SB_MARK + ':' + stSbB64Enc(JSON.stringify(sb)) + '-->\n' +
-                stSbBodyHtml(sb, false) + '\n</body></html>\n```';
+                bodyHtml + '\n</body></html>\n```';
         }
 
         function stSbDocHtml() {
             return stSbDocHtmlOf(stEditor.card.statusBar);
+        }
+
+        // 真机预览用的整篇文档：宏换成示例值，且**不带结构注释**（那是给编辑器读的，
+        // 对运行时毫无意义）。包装和写进卡里的完全一致 —— 预览里什么样，玩的时候就是什么样
+        function stSbPreviewDoc(sb) {
+            return '<!doctype html><html><head><meta charset="utf-8"></head><body>\n' +
+                stSbBodyHtml(sb, true) + '\n</body></html>';
         }
 
         function stSbB64Enc(str) {
@@ -7446,6 +7684,77 @@
         //
         // 所有识别都只看**内联 style 的形状**，不做真正的 CSS 计算：
         // 我们只求认出自己（和常见写法）生成的那几种结构，认不出就退到高级块。
+
+        // ===== 运行时到底怎么认这段东西 =====
+        //
+        // 这是整页的**准绳**：酒馆助手怎么认，编辑器就怎么认。
+        //
+        // 官方判定「这个代码块会被渲染成前端界面」的条件（缺一不可）：
+        //   ① 代码放在 ``` 围栏里
+        //   ② 代码里同时有 <body> 和 </body>
+        // 满足之后，酒馆助手把它当成**一个独立网页**塞进 <iframe> 里渲染 ——
+        // 也就是说 <style> / <script> / 外链资源全都是可用的，vw / vh 以 iframe 为准
+        // （只有 min-height:*vh 被官方特判成以视口为准，免得 iframe 高度失控）。
+        //
+        // ⚠ 这两条以前理解错了。早期笔记写的是「沙盒 iframe 会剥掉 head 样式，
+        //   所以只能内联 style」—— 真相是真 iframe、独立文档，<style> 照常生效。
+        //   真正要守的只有上面那两条；不满足的话，玩家那边**什么都看不到**，
+        //   只会看到一坨源码。所以编辑器必须按同一套规则解析、也按同一套规则产出。
+        const ST_SB_RUNTIME_RULE = {
+            fence: '代码要放在 ``` 代码块里',
+            body: '代码里要同时有 <body> 和 </body>'
+        };
+
+        // 把一段文本里的围栏代码块找出来（``` 或 ~~~，三个以上）。
+        // 未闭合的围栏按 markdown 的规矩**延续到文末** —— 那种在酒馆里同样会变成代码块，
+        // 所以也算数
+        function stSbFences(text) {
+            const s = String(text == null ? '' : text);
+            const lines = s.split(/\r?\n/);
+            const starts = [];
+            let off = 0;
+            lines.forEach(l => { starts.push(off); off += l.length + 1; });
+            const out = [];
+            let open = null;
+            for (let i = 0; i < lines.length; i++) {
+                const m = /^ {0,3}(`{3,}|~{3,})\s*([A-Za-z0-9_+.-]*)\s*$/.exec(lines[i]);
+                if (!m) continue;
+                if (!open) {
+                    open = { ch: m[1].charAt(0), len: m[1].length, lang: m[2] || '', line: i };
+                    continue;
+                }
+                // 闭合行必须是同一种字符、不短于开头那串，且后面没别的东西
+                if (m[1].charAt(0) !== open.ch || m[1].length < open.len) continue;
+                out.push({
+                    lang: open.lang,
+                    code: s.slice(starts[open.line] + lines[open.line].length + 1, starts[i]),
+                    start: starts[open.line],
+                    end: starts[i] + lines[i].length
+                });
+                open = null;
+            }
+            if (open) {
+                out.push({
+                    lang: open.lang,
+                    code: s.slice(starts[open.line] + lines[open.line].length + 1),
+                    start: starts[open.line],
+                    end: s.length,
+                    unclosed: true
+                });
+            }
+            return out;
+        }
+
+        // 按运行时的规则挑出「会被渲染成界面」的代码块。
+        // live 可能不止一个（一张卡里塞了好几段界面）—— 编辑器只管第一个，
+        // 其余的写回时原样带着，不动
+        function stSbRuntimeInfo(text) {
+            const s = String(text == null ? '' : text);
+            const blocks = stSbFences(s);
+            const live = blocks.filter(b =>
+                /<body[\s>]/i.test(b.code) && /<\/body\s*>/i.test(b.code));
+            return { text: s, blocks: blocks, live: live };
+        }
 
         // 卡里那段通常是 ```html 围栏包着的整篇文档，先把围栏剥掉
         function stSbStripFence(s) {
@@ -7590,13 +7899,20 @@
             return /calc\(/.test(String(ost.width || '')) ? ov : null;
         }
 
-        // 往下找（最多两层）：轨道 / 亮点层通常裹在一个 wrapper 里
+        // 往下找（最多两层）：轨道 / 亮点层通常裹在一个 wrapper 里。
+        //
+        // ⚠ 只在「这条路是独苗」时才往下钻：一层里挂着好几个元素时，随便往下
+        //   认一层，就会把**整块**误认成里面某个小结构 —— 比如一个靠 class 定样式的
+        //   面板，里面某一行恰好是个圆点行，整张面板就会被读成一个圆点块，
+        //   其余内容当场全丢。这种情况必须一路退回高级 HTML 块，宁可认不出
         function stSbFindDeep(el, test, depth) {
             if (depth > 2) return null;
             const kids = Array.prototype.slice.call(el.children);
+            const only = kids.length === 1 && !stSbOwnText(el);
             for (let i = 0; i < kids.length; i++) {
                 const got = test(kids[i]);
                 if (got) return { el: kids[i], got: got };
+                if (!only) continue;
                 const sub = stSbFindDeep(kids[i], test, depth + 1);
                 if (sub) return sub;
             }
@@ -7722,6 +8038,12 @@
         // 省得把生成器自己的样式当成差异又抄一遍
         function stSbKeepStyle(b, themeId, outerEl, innerEl, fillEl) {
             if (!b) return b;
+            // class 先记 —— 生成器给这一层写什么，取决于原稿内联里写过什么
+            // （见 stSbLook）。顺序反了，基准就还是「照主题全写一遍」的那份，
+            // 差集算出来会把生成器本来就不该写的声明当成差异抄进 extra
+            stSbKeepCls(b, 'outer', outerEl);
+            stSbKeepCls(b, 'inner', innerEl);
+            stSbKeepCls(b, 'fill', fillEl);
             const own = stSbOwnMaps(b, themeId);
             if (outerEl) b.extra = stSbExtraOf(stSbStyleMap(outerEl), own.outer);
             if (innerEl && own.inner) {
@@ -7730,10 +8052,11 @@
             if (fillEl && own.fill) {
                 b.extraFill = stSbExtraOf(stSbStyleMap(fillEl), own.fill);
             }
-            // 文字 / 标题块里的 white-space **不能**进 extra。原稿的 <br> 被我们
-            // 换成了换行，靠的就是生成器那句 pre-wrap；要是让原稿的 normal 盖上去，
-            // 换行当场就没了 —— 那才是真的丢内容
-            if (b.type === 'text' || b.type === 'title') {
+            // 文字 / 标题块里**确实有换行**时，white-space 不能进 extra。原稿的
+            // <br> 被我们换成了换行，靠的就是生成器那句 pre-wrap；要是让原稿的
+            // normal 盖上去，换行当场就没了 —— 那才是真的丢内容。
+            // 没有换行的时候就不拦了：原稿写了 nowrap / pre，那是它的样子，得留
+            if (stSbNeedsPre(b)) {
                 b.extra = String(b.extra || '').split(';')
                     .filter(d => !/^\s*white-space\s*:/i.test(d)).join(';');
             }
@@ -7746,6 +8069,9 @@
         // 解析时保住了多少：带附加样式的块数 + 声明条数。这个数会写进解析报告 ——
         // 大于 0 就说明原稿里有生成器表达不了的东西，而它们**没被抹掉**
         const ST_SB_EXTRA_KEYS = ['extra', 'extraInner', 'extraFill', 'wrapExtra'];
+        // 能「丢掉」的保留项。cls 不在上面那组里 —— 它存的是 class 名不是 CSS
+        // 声明，自检的方式不一样（见 stSbParseDoc）
+        const ST_SB_KEEP_KEYS = ST_SB_EXTRA_KEYS.concat(['cls']);
         function stSbKeptStats(blocks) {
             let nb = 0, nd = 0;
             (function walk(list) {
@@ -7757,11 +8083,32 @@
                         if (!s) return;
                         n += s.split(';').filter(x => x.trim()).length;
                     });
+                    ST_SB_CLS_ROLES.forEach(r => { if (stSbClsOf(b, r)) n++; });
                     if (n) { nb++; nd += n; }
                     walk(b.children);
                 });
             })(blocks);
             return { blocks: nb, decls: nd };
+        }
+
+        // 原稿里有多少层是**靠 class 定长相**的，其中多少层「一条内联都没写」。
+        // 后一类是关键：那一层的长相完全由作者那段 CSS 说了算，生成器对它一句
+        // 内联都不能写 —— 报告里把它数出来，用户一眼就知道自己的 <style> 有没有
+        // 被认出来（被认出来了才谈得上「不写内联」）
+        function stSbClsStats(blocks) {
+            let cls = 0, bare = 0;
+            (function walk(list) {
+                (list || []).forEach(b => {
+                    if (!b || typeof b !== 'object') return;
+                    ST_SB_CLS_ROLES.forEach(r => {
+                        if (!stSbHasCls(b, r)) return;
+                        cls++;
+                        if (stSbBare(b, r)) bare++;
+                    });
+                    walk(b.children);
+                });
+            })(blocks);
+            return { cls: cls, bare: bare };
         }
 
         function stSbRawBlock(el) {
@@ -7872,6 +8219,7 @@
                 if (stSbIsBareWrapper(k, kst)) {
                     const ex = stSbExtraOf(kst, ST_SB_COL_STYLE);
                     if (ex) child.wrapExtra = ex;
+                    stSbKeepCls(child, 'wrap', k);
                 }
                 return child;
             }).filter(Boolean);
@@ -7915,6 +8263,9 @@
                     const vc = stSbThemeColorOr(themeId, stSbStyleMap(ms).color);
                     if (vc && vc !== b.labelColor) b.valueColor = vc;
                 }
+                // 生成器给「显示名」和「数值」各留了一个 span，class 就往这两层记
+                stSbKeepCls(b, 'label', spans.filter(s => s !== ms && stSbTextOf(s))[0]);
+                stSbKeepCls(b, 'value', ms);
             }
             return b;
         }
@@ -7950,11 +8301,14 @@
                 // 数值那排也是
                 const vb = kids.slice(ri + 1).filter(s => stSbTextOf(s))[0];
                 if (vb) b.valueColor = stSbThemeColorOr(themeId, stSbStyleMap(vb).color);
+                stSbKeepCls(b, 'label', lb);
+                stSbKeepCls(b, 'value', vb);
             }
             // 圆点里「没点亮」那排的颜色也是独立的 —— 不读回来就会被主题的边框色顶掉
             if (base && base.firstElementChild) {
                 b.emptyColor = stSbThemeColorOr(themeId,
                     stSbStyleMap(base.firstElementChild).color);
+                stSbKeepCls(b, 'empty', base.firstElementChild);
             }
             const jc = stSbStyleMap(el)['justify-content'];
             if (jc === 'center') b.align = 'center';
@@ -7978,6 +8332,8 @@
             // 显示名那排的颜色跟数值是分开的，也要读回来
             const lb = others.filter(s => stSbTextOf(s))[0];
             if (lb) b.labelColor = stSbThemeColorOr(themeId, stSbStyleMap(lb).color);
+            stSbKeepCls(b, 'label', lb);
+            stSbKeepCls(b, 'value', macroSpan);
             return b;
         }
 
@@ -8060,8 +8416,21 @@
 
         // 把卡里那段 HTML 拆成 { theme, width, shellExtra, blocks }。
         // 拆不动就 ok:false —— 调用方据此不改卡
+        //
+        // 找哪一段？**按运行时的规矩找**（`stSbRuntimeInfo`）：围栏代码块 + 含
+        // <body>/</body>。围栏外面那些说明文字、别的代码块都不属于界面，
+        // 记进 runtime.pre / runtime.post，写回时原样带回去 —— 一个字节都不动
         function stSbParseDoc(html) {
-            const src = stSbStripFence(html);
+            const raw = String(html == null ? '' : html);
+            if (!raw.trim()) return { ok: false, why: '卡里那条正则是空的。' };
+
+            const rt = stSbRuntimeInfo(raw);
+            // 运行时认的那一个。没有的话退到「第一个代码块」—— 不是要假装它合格，
+            // 而是作者明明写了东西，编辑器得先把它**读进来**才谈得上帮他修。
+            // 都不满足才把整段当内容（有人压根没写围栏，直接甩了一段裸 HTML）
+            const live = rt.live[0] || null;
+            const pick = live || rt.blocks[0] || null;
+            const src = stSbStripFence(pick ? pick.code : raw);
             if (!src) return { ok: false, why: '卡里那条正则是空的。' };
             let doc = null;
             try { doc = new DOMParser().parseFromString(src, 'text/html'); } catch (e) { doc = null; }
@@ -8073,12 +8442,35 @@
                     : '这段 HTML 里没有能解析的东西。' };
             }
 
-            // 外壳：顶层只有一个 div，而且它带边框 / 内边距 / 底色
+            // 运行时是**真 iframe、独立文档** —— `<style>` / `<link>` 写在 <head> 里
+            // 是正当写法，而且是最自然的写法。这些东西不在 body 里，但丢掉就是改稿：
+            // 捞出来原样留成「高级 HTML」块。只丢编码声明，那个我们自己会写
+            const headExtra = Array.prototype.slice.call(doc.head ? doc.head.children : [])
+                .filter(el => String(el.tagName).toLowerCase() !== 'meta');
+
+            // 外壳：顶层只有一个 div，而且它像个「盒子」。
+            //
+            // 判据有三条，满足一条就算：
+            //   ① 内联样式里有边框 / 圆角 / 内边距 / 底色 —— 老写法，一眼就是盒子
+            //   ② 带 class 且有子元素 —— 样式全写在 <style> 里、靠 class 命中的写法。
+            //      运行时是真 iframe，这条路本来就通，不能因为「内联样式里看不出来」
+            //      就把它当成普通块
+            //   ③ 有几个子元素，而且**它自己认不出是个块**（会退到高级 HTML）——
+            //      那就说明它是个容器，不是叶子
             let shell = null, shellStyle = {};
             if (roots.length === 1 && String(roots[0].tagName).toLowerCase() === 'div') {
                 const st = stSbStyleMap(roots[0]);
-                if (st.border || st['border-radius'] || st.padding ||
-                    st.background || st['background-color']) {
+                const visual = !!(st.border || st['border-radius'] || st.padding ||
+                    st.background || st['background-color']);
+                const kids = roots[0].children.length;
+                let asBlock = '';
+                if (!visual && kids) {
+                    const probe = stSbParseEl(roots[0], stSbThemeOfStyle(st).id, 0);
+                    asBlock = probe ? probe.type : '';
+                }
+                const byClass = kids > 0 && !!stSbSafeCls(roots[0].getAttribute('class'));
+                const byShape = kids > 0 && (!asBlock || asBlock === 'html');
+                if (visual || byClass || byShape) {
                     shell = roots[0];
                     shellStyle = st;
                 }
@@ -8103,7 +8495,21 @@
             }
 
             const blocks = [];
-            const stats = { raw: 0, styleTags: 0, total: 0, kept: 0, keptDecls: 0 };
+            const stats = {
+                raw: 0, styleTags: 0, total: 0, kept: 0, keptDecls: 0, head: 0,
+                cls: 0, clsBare: 0
+            };
+            // head 里的 style / link / script 排在最前面 —— 原稿里它们也确实先出现。
+            // 顺序不能反：样式块之间是靠先后定胜负的
+            headExtra.forEach(el => {
+                const b = stSbParseEl(el, theme.id, 0);
+                if (!b) return;
+                stats.total++;
+                stats.head++;
+                if (b.type === 'html') stats.raw++;
+                if (String(el.tagName).toLowerCase() === 'style') stats.styleTags++;
+                blocks.push(b);
+            });
             inner.forEach(el => {
                 if (String(el.tagName).toLowerCase() === 'style') stats.styleTags++;
                 const b = stSbParseEl(el, theme.id, 0);
@@ -8116,6 +8522,9 @@
             const ks = stSbKeptStats(blocks);
             stats.kept = ks.blocks;
             stats.keptDecls = ks.decls;
+            const cs = stSbClsStats(blocks);
+            stats.cls = cs.cls;
+            stats.clsBare = cs.bare;
 
             const width = stSbPx(shellStyle.width);
             const out = {
@@ -8124,6 +8533,7 @@
                 themeExact: theme.exact,
                 shell: !!shell,
                 shellExtra: shell ? stSbSplitShellStyle(shellStyle, theme.id) : '',
+                shellCls: shell ? stSbSafeCls(shell.getAttribute('class')) : '',
                 shellOff: shellOff,
                 width: (width !== null && width > 0) ? Math.min(1200, width) : 0,
                 blocks: blocks,
@@ -8139,6 +8549,7 @@
             // 这条把「我希望差集是对的」变成「验过了」
             const gen = stSbNormCss(genHtml);
             const missing = [];
+            const missingCls = [];
             (function walk(list) {
                 (list || []).forEach(b => {
                     if (!b || typeof b !== 'object') return;
@@ -8148,11 +8559,38 @@
                             if (t && gen.indexOf(t) < 0) missing.push(String(d).trim());
                         });
                     });
+                    // class 单独验：它不是 CSS 声明，得看 class="…" 在不在产物里
+                    ST_SB_CLS_ROLES.forEach(r => {
+                        const c = stSbClsOf(b, r);
+                        if (c && genHtml.indexOf('class="' + escapeHtml(c) + '"') < 0) {
+                            missingCls.push(c + '（' + (ST_SB_CLS_ROLE_NAME[r] || r) + '）');
+                        }
+                    });
                     walk(b.children);
                 });
             })(blocks);
-            out.keepOk = missing.length === 0;
-            out.keepMiss = missing.slice(0, 5);
+            // 外壳那个 class 也要在产物里（生成器是照主题重画外壳的，最容易漏）
+            const shellC = stSbSafeCls(out.shellCls);
+            if (shellC && genHtml.indexOf('class="' + escapeHtml(shellC) + '"') < 0) {
+                missingCls.push(shellC + '（外壳）');
+            }
+            out.keepOk = missing.length === 0 && missingCls.length === 0;
+            out.keepMiss = missing.concat(missingCls.map(c => 'class ' + c)).slice(0, 5);
+
+            // 运行时判定：这段在游戏里到底会不会被渲染成界面。
+            // 不会的话得**当面告诉作者** —— 他多半根本不知道自己的状态栏从来没显示过。
+            // 注意 ok 说的是**原稿**合不合格，不是解析成不成功：不合格也照样解析，
+            // 而且写回时会被补成合格的包装，等于顺手修好了
+            out.runtime = {
+                ok: !!live,
+                blocks: rt.blocks.length,
+                live: rt.live.length,
+                why: live ? '' : (rt.blocks.length
+                    ? '代码块里没有 <body> / </body>'
+                    : '整段没有一个 ``` 代码块'),
+                pre: pick ? raw.slice(0, pick.start) : '',
+                post: pick ? raw.slice(pick.end) : ''
+            };
             return out;
         }
 
@@ -13959,7 +14397,11 @@
 
             const tmp = stStatusBarFromRaw({
                 theme: r.theme, width: r.width, shellExtra: r.shellExtra,
-                shellOff: r.shellOff, blocks: r.blocks
+                shellCls: r.shellCls,
+                shellOff: r.shellOff, blocks: r.blocks,
+                // 围栏代码块**外面**的原文（说明文字 / 别的代码块）。运行时只认围栏里
+                // 那一段，外面这些跟界面无关 —— 但那是作者写的东西，一个字节都不能动
+                pre: r.runtime.pre, post: r.runtime.post
             });
             const total = stSbCount(tmp.blocks);
             const n0 = stSbCount(stEditor.card.statusBar.blocks);
@@ -13990,11 +14432,37 @@
             if (r.shellExtra) {
                 notes.push('· 外壳还有主题表达不了的样式（阴影 / 渐变等）→ 原样保留');
             }
+            if (r.shellCls) {
+                notes.push('· 外壳带 class（' + r.shellCls + '）→ 原样保留。' +
+                    '运行时是真 iframe，原稿 <style> 里按这个 class 写的规则照常生效');
+            }
             if (r.stats.styleTags) {
-                notes.push('· 卡里带了 ' + r.stats.styleTags + ' 个 <style> → 原样保留成「高级 HTML」');
+                notes.push('· 卡里带了 ' + r.stats.styleTags + ' 个 <style> → 原样保留成「高级 HTML」' +
+                    (r.stats.head ? '（其中 ' + r.stats.head + ' 个在 <head> 里）' : ''));
+            }
+            if (r.stats.cls) {
+                notes.push('· 原稿有 ' + r.stats.cls + ' 层挂着 class → 全部原样带回产物' +
+                    (r.stats.clsBare
+                        ? '。其中 ' + r.stats.clsBare + ' 层自己没写内联样式，' +
+                          '长相完全由那段 CSS 说了算 —— 编辑器对这几层一条内联都不写，' +
+                          '免得把 CSS 盖掉'
+                        : '') +
+                    '。运行时是真 iframe，按 class 写的规则照常生效');
             }
             notes.push(textOk ? '· 文字内容对得上'
                 : '⚠ 文字内容和原稿对不上，接管后请对着原稿核一遍');
+            // 运行时判定 —— 这条最要紧。不满足条件的话玩家那边**什么都没显示过**，
+            // 作者八成一直在纳闷；写回时会被补成合格包装，等于顺手修好了
+            if (r.runtime.ok) {
+                if (r.runtime.live > 1) {
+                    notes.push('· 这段里有 ' + r.runtime.live +
+                        ' 个代码块都满足运行时的渲染条件，玩家那边可能一起冒出来');
+                }
+            } else {
+                notes.push('🚫 这段**不满足运行时的渲染条件**（' + r.runtime.why + '）——' +
+                    '也就是说玩家那边从来没显示过它，只会看到源码。' +
+                    '接管后写回的是合格包装，等于顺手修好了');
+            }
 
             const head = '卡里那条「状态栏界面」不是本编辑器画的，试着把它拆成可编辑的块：';
             const tail = (n0 ? '画布上现在的 ' + n0 + ' 个块会被替换。\n\n' : '') +
@@ -14011,7 +14479,12 @@
                 total: total, raw: r.stats.raw, theme: r.theme, themeExact: r.themeExact,
                 extra: !!r.shellExtra, styleTags: r.stats.styleTags, textOk: textOk,
                 kept: r.stats.kept, keptDecls: r.stats.keptDecls, keepOk: r.keepOk,
-                noShell: !r.shell
+                noShell: !r.shell, shellCls: r.shellCls,
+                // 运行时判定 + 围栏外原文的规模（原文已经进了 statusBar.pre/post）
+                runtimeOk: r.runtime.ok, runtimeWhy: r.runtime.why,
+                runtimeLive: r.runtime.live, head: r.stats.head,
+                cls: r.stats.cls, clsBare: r.stats.clsBare,
+                pre: r.runtime.pre, post: r.runtime.post
             };
             stSbSync(true);            // 明确覆盖：跳过「还认得出是本编辑器画的」那道闸
             stSaveDraft();
@@ -14124,6 +14597,84 @@
             const el = document.getElementById('st-sb-canvas');
             if (!el) return;
             el.innerHTML = stSbCanvasHtml();
+            stSbSchedulePreview();
+        }
+
+        // ---------- 真机预览 ----------
+        //
+        // 运行时把这段代码当成**一个独立网页**塞进 iframe 渲染，所以预览也必须
+        // 用 iframe —— 拿 div 假装是没用的：<style> 的作用域、vw / vh 的参照物、
+        // 外链字体能不能加载，全都不一样。这里跑的就是写进卡里的那套包装，
+        // 只把宏换成示例值。
+        //
+        // sandbox 故意**不给 allow-same-origin**：里面跑的脚本碰不到编辑器本体。
+        // 脚本本身是放行的 —— 运行时放行，预览就该放行，不然预览会骗人
+        function stSbFrameHtml() {
+            stSbRuntimeCache = '';      // 节点是新造的，缓存跟着作废
+            return '<div class="st-mvu-col-head" style="margin-top:10px">真机预览' +
+                    ' <span class="st-hint-inline">跟写进卡里的是同一套包装；宏换成示例值</span>' +
+                '</div>' +
+                '<div class="st-sb-frame-wrap">' +
+                    '<iframe class="st-sb-frame" id="st-sb-frame" title="状态栏真机预览"' +
+                        ' sandbox="allow-scripts allow-forms allow-popups"' +
+                        ' srcdoc="' + escapeHtml(stSbPreviewDoc(stEditor.card.statusBar)) + '">' +
+                    '</iframe>' +
+                '</div>' +
+                stSbRuntimeReportHtml();
+        }
+
+        // 打字时别每敲一下都重载 iframe —— 画布已经给了即时反馈，
+        // 预览慢半拍（240ms）反而看得清
+        let stSbPreviewTimer = 0;
+        function stSbSchedulePreview() {
+            if (!document.getElementById('st-sb-frame')) return;
+            clearTimeout(stSbPreviewTimer);
+            stSbPreviewTimer = setTimeout(stSbPaintPreview, 240);
+        }
+
+        function stSbPaintPreview() {
+            // 体检那句**先刷**。围栏外的原文（pre / post）改了的时候预览文档是
+            // 不变的，要是把它排在「文档没变就返回」后面，这行就永远不更新了 ——
+            // 而那恰恰是最需要更新的一行（玩家那边看不看得到，全看它）
+            stSbPaintRuntimeNote();
+            const f = document.getElementById('st-sb-frame');
+            if (!f) return;
+            const doc = stSbPreviewDoc(stEditor.card.statusBar);
+            if (f.getAttribute('srcdoc') === doc) return;
+            f.setAttribute('srcdoc', doc);
+        }
+
+        let stSbRuntimeCache = '';
+        function stSbPaintRuntimeNote() {
+            const r = document.getElementById('st-sb-runtime');
+            if (!r) return;
+            const html = stSbRuntimeReportHtml();
+            if (html === stSbRuntimeCache) return;   // 一样就别动，免得打字时闪
+            stSbRuntimeCache = html;
+            r.outerHTML = html;
+        }
+
+        // 运行时体检：把**现在这份**产物按运行时的规矩验一遍。
+        //
+        // 编辑器自己吐出来的包装永远合格，真正会踩雷的是围栏外的原文 ——
+        // 作者在围栏外面又留了一个 ``` 或一个 <body>，判定就可能被搅乱。
+        // 那种情况玩家那边**什么都看不到**，得当面说
+        function stSbRuntimeReportHtml() {
+            const rt = stSbRuntimeInfo(stSbDocHtml());
+            // 文案只有一处拼外壳 —— 三个分支各写一遍整个 div 的话，
+            // 「字面量 id 有没有重复」那项静态检查会当成真重复报出来（它只看源码文本）
+            let msg;
+            if (!rt.live.length) {
+                msg = '🚫 <b>玩家那边看不到这个状态栏。</b>运行时要同时满足' +
+                    '「' + escapeHtml(ST_SB_RUNTIME_RULE.fence) + '」和「' +
+                    escapeHtml(ST_SB_RUNTIME_RULE.body) + '」，现在这段不满足。';
+            } else if (rt.live.length > 1) {
+                msg = '✅ 运行时会把它渲染成界面。但这段里还有 ' + (rt.live.length - 1) +
+                    ' 个代码块也满足那两个条件 —— 玩家那边可能一起冒出来，建议只留一个。';
+            } else {
+                msg = '✅ 运行时会把它渲染成界面（围栏 + <code>&lt;body&gt;</code> 都齐了）。';
+            }
+            return '<div class="st-note st-sb-report" id="st-sb-runtime">' + msg + '</div>';
         }
 
         // 只刷图层上的一行（名字 / 类型标签）
@@ -14345,6 +14896,7 @@
                     '<div class="st-sb-canvas-wrap">' +
                         '<div class="st-mvu-col-head">画布（所见即所得 · 点一下选中 · 双击改字 · 拖着换位置）</div>' +
                         '<div class="st-sb-canvas" id="st-sb-canvas">' + stSbCanvasHtml() + '</div>' +
+                        stSbFrameHtml() +
                     '</div>' +
                     '<div class="st-sb-insp">' +
                         '<div class="st-mvu-col-head">属性</div>' +
@@ -14359,18 +14911,32 @@
         // 而主题仍然管着块内部的默认色。没有就不显示这一格，免得平白多个空框
         function stSbShellExtraField(sb) {
             const v = String(sb.shellExtra || '').trim();
-            if (!v) return '';
-            return '<div class="st-field st-wide" style="margin-top:8px">' +
-                '<label for="st-sb-shell-extra">外壳附加样式' +
-                    ' <span class="st-hint-inline">接管时从卡里读来的，追加在主题之后</span>' +
-                '</label>' +
-                '<textarea id="st-sb-shell-extra" rows="2"' +
-                    ' oninput="stSet(\'card.statusBar.shellExtra\',this.value)">' +
-                    escapeHtml(v) + '</textarea>' +
-                '<div class="st-actions">' +
+            const c = stSbSafeCls(sb.shellCls);
+            if (!v && !c) return '';
+            // 外壳的 class 单独一格 —— 它往往就是整张状态栏的主样式
+            const clsField = c
+                ? '<div class="st-field" style="margin-top:8px">' +
+                    '<label for="st-sb-shell-cls">外壳 class' +
+                        ' <span class="st-hint-inline">原稿最外层那个 class，写回时照原样贴回去</span>' +
+                    '</label>' +
+                    '<input id="st-sb-shell-cls" type="text" value="' + escapeHtml(c) + '"' +
+                        ' oninput="stSet(\'card.statusBar.shellCls\',this.value)">' +
+                  '</div>'
+                : '';
+            const extraField = v
+                ? '<div class="st-field st-wide" style="margin-top:8px">' +
+                    '<label for="st-sb-shell-extra">外壳附加样式' +
+                        ' <span class="st-hint-inline">接管时从卡里读来的，追加在主题之后</span>' +
+                    '</label>' +
+                    '<textarea id="st-sb-shell-extra" rows="2"' +
+                        ' oninput="stSet(\'card.statusBar.shellExtra\',this.value)">' +
+                        escapeHtml(v) + '</textarea>' +
+                  '</div>'
+                : '';
+            return clsField + extraField +
+                '<div class="st-actions" style="margin-top:6px">' +
                     '<button class="st-mini" type="button" onclick="stSbClearShellExtra()">' +
                         '🧹 按主题重画外壳（丢掉这些）</button>' +
-                '</div>' +
                 '</div>';
         }
 
@@ -14404,9 +14970,10 @@
             stRerender();
         }
 
-        // 丢掉外壳附加样式，外壳回到纯主题的样子
+        // 丢掉外壳附加样式 / 外壳 class，外壳回到纯主题的样子
         function stSbClearShellExtra() {
             stSet('card.statusBar.shellExtra', '');
+            stSet('card.statusBar.shellCls', '');
             stRerender();
             stExportMsg('已按主题重画外壳。', 'ok');
         }
@@ -14475,12 +15042,26 @@
             if (r.noShell) bits.push('原稿没有外壳，没套主题盒子');
             if (r.extra) bits.push('外壳带附加样式');
             if (r.styleTags) bits.push(r.styleTags + ' 个 <style> 原样保留');
+            if (r.shellCls) bits.push('外壳 class 保住了');
+            if (r.cls) {
+                bits.push(r.cls + ' 层 class 保住了' +
+                    (r.clsBare ? '（其中 ' + r.clsBare + ' 层完全交给 CSS）' : ''));
+            }
+            if (r.head) bits.push('其中 ' + r.head + ' 个在 <head> 里，也捞出来了');
+            if (r.pre || r.post) {
+                bits.push('围栏外的原文原样带着（前 ' + String(r.pre || '').length +
+                    ' / 后 ' + String(r.post || '').length + ' 字）');
+            }
             return '<div class="st-note st-sb-report">🔍 上次解析：' + escapeHtml(bits.join(' · ')) +
                 '；外壳认作「' + escapeHtml(themeName) + '」主题' +
                 (r.themeExact ? '（底色一致）' : '（底色不同，按明暗挑的）') + '。' +
                 (r.textOk ? '文字内容对得上。'
                     : '<b>⚠ 文字内容和原稿对不上</b> —— 对着原稿核一遍。') +
                 (r.keepOk === false ? '<b>⚠ 有几条保下来的样式没写进产物。</b>' : '') +
+                (r.runtimeOk === false
+                    ? '<br><b>🚫 原稿不满足运行时的渲染条件（' + escapeHtml(r.runtimeWhy || '') +
+                      '）—— 玩家那边本来看不到它。</b>写回的是合格包装，已经顺手修好了。'
+                    : '') +
                 (stSbParseBackup
                     ? ' <button class="st-mini" type="button" onclick="stSbRestoreParsed()">' +
                       '↩ 还原解析前的 HTML</button>'
@@ -14615,10 +15196,18 @@
 
         // 丢掉一层「原样保留的样式」。跟上面同理：path 必须是**块**的路径，
         // key 必须是白名单里的 —— 不然一个拼错的路径就能把别的东西写成 ''
+        // class 那几层的 key 写成 `cls:<层名>`，跟 CSS 声明层区分开
         function stSbDropExtra(path, key) {
-            if (ST_SB_EXTRA_KEYS.indexOf(String(key)) < 0) return;
+            const k = String(key);
+            const isCls = /^cls:/.test(k);
+            if (isCls) {
+                if (ST_SB_CLS_ROLES.indexOf(k.slice(4)) < 0) return;
+            } else if (ST_SB_KEEP_KEYS.indexOf(k) < 0) return;
             if (!/^card\.statusBar\.blocks\[\d+\](?:\.children\[\d+\])*$/.test(String(path))) return;
-            stSet(String(path) + '.' + key, '');
+            // class 丢掉时**不用**管同一层的 clsOwn（原稿内联里写过哪些属性）：
+            // 那份名单只在「这层有 class」时才被查（见 stSbLook），class 一空它
+            // 就是死数据。而 class 只可能来自解析，解析时两个字段是同时写的
+            stSet(String(path) + '.' + (isCls ? 'clsMap.' + k.slice(4) : k), '');
             stRerender();
         }
 
@@ -14800,6 +15389,14 @@
                     const v = String(b[pair[0]] || '').trim();
                     if (v) kept.push({ key: pair[0], name: pair[1], css: v });
                 });
+            // class 也是原稿的东西，也得看得见、删得掉
+            ST_SB_CLS_ROLES.forEach(r => {
+                const c = stSbClsOf(b, r);
+                if (c) {
+                    kept.push({ key: 'cls:' + r, name: 'class 属性 · ' +
+                        (ST_SB_CLS_ROLE_NAME[r] || r), css: 'class="' + c + '"' });
+                }
+            });
             const keptSection = kept.length
                 ? '<details class="st-mvu-preview"><summary>原样保留的样式（' +
                   kept.length + ' 层）</summary>' +
@@ -14809,10 +15406,15 @@
                       '<button class="st-mini st-danger" type="button" ' +
                       'onclick="stSbDropExtra(\'' + p + '\',\'' + k.key + '\')">' +
                       '✕ 丢掉这一层</button></div>').join('') +
-                  '<div class="st-note">这些是原稿里有、编辑器自己画不出来的声明' +
-                  '（自定义轨道色、阴影、额外间距…）。它们追加在生成样式的<b>后面</b>，' +
-                  '同属性后者胜 —— 所以原稿长什么样，写回卡里还是什么样。' +
-                  '丢掉就回到编辑器自己的样子。</div></details>'
+                  '<div class="st-note">这些是原稿里有、编辑器自己画不出来的东西' +
+                  '（自定义轨道色、阴影、额外间距、按 class 命中的样式…）。' +
+                  '样式声明追加在生成样式的<b>后面</b>，同属性后者胜 —— ' +
+                  '所以原稿长什么样，写回卡里还是什么样。' +
+                  '丢掉就回到编辑器自己的样子。' +
+                  '<br>class 尤其别丢：运行时的界面是个真 iframe，' +
+                  '原稿很可能在 <code>&lt;style&gt;</code> 里按 class 定样式，' +
+                  'class 一没，那段 CSS 就整个落空 —— 而且不报错，只是样子不对。</div>' +
+                  '</details>'
                 : '';
 
             const chain = stSbChain(b.id) || [];
@@ -14850,15 +15452,36 @@
         }
 
         function stSbPreviewHtml() {
+            const sb = stEditor.card.statusBar;
+            const pre = String(sb.pre || '');
+            const post = String(sb.post || '');
+            // 围栏外的原文。运行时只认围栏里那一段，外面这些跟界面无关 ——
+            // 但那是作者写的说明文字，得让他看得见、改得动
+            let outside = '';
+            if (pre || post) {
+                outside = '<div class="st-sub">围栏外的原文' +
+                        ' <span class="st-hint-inline">运行时只认围栏里那段，这些不参与渲染；' +
+                        '写回时原样带着</span></div>' +
+                    '<div class="st-field"><label for="st-sb-pre">代码块之前</label>' +
+                        '<textarea id="st-sb-pre" rows="2"' +
+                            ' oninput="stSet(\'card.statusBar.pre\',this.value)">' +
+                            escapeHtml(pre) + '</textarea></div>' +
+                    '<div class="st-field"><label for="st-sb-post">代码块之后</label>' +
+                        '<textarea id="st-sb-post" rows="2"' +
+                            ' oninput="stSet(\'card.statusBar.post\',this.value)">' +
+                            escapeHtml(post) + '</textarea></div>';
+            }
             return '<details class="st-mvu-preview">' +
                 '<summary>写进卡里的替换内容（' +
                     (stEditor.sbOwn ? '画布一改就自动重写' : '接管之后才会写回') + '）</summary>' +
+                outside +
                 '<div class="st-sub">正则「状态栏界面」的 replaceString</div>' +
                 '<pre class="st-json st-mvu-code">' + escapeHtml(stSbDocHtml()) + '</pre>' +
-                '<div class="st-note">开头那行注释里塞了画布结构（base64，' +
-                    '这样 JSON 里的 <code>--&gt;</code> 截不断注释）。' +
+                '<div class="st-note">结构注释（base64）塞在 <code>&lt;body&gt;</code> 里面 ——' +
+                    '注释不是元素，运行时不会多渲染，解析时也不会多出块。' +
                     '导出的 PNG / JSON 带着它转一圈回来，还能接着在这里编辑，' +
-                    '而不是只剩一坨认不出结构的 HTML。</div>' +
+                    '而不是只剩一坨认不出结构的 HTML。base64 是必须的：' +
+                    'JSON 里可能出现 <code>--&gt;</code>，直接塞进注释会被提前截断。</div>' +
                 '</details>';
         }
 
