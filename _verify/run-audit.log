@@ -1,0 +1,23 @@
+== 清单对账 ==
+  目录里 30 个 .js：套件 12 + 非套件 9 + 临时 9
+  ✓ 全部有归属（没有「没登记就静默跳过」的空间）
+
+== 逐套运行 ==
+  ✅ check.js                5 通过 / 0 失败  [zh] 1.8s
+  ✅ sb-verify.js           84 通过 / 0 失败  [en] 15.4s
+  ✅ sb-verify2.js          62 通过 / 0 失败  [en] 13.6s
+  ✅ sb-verify3.js          99 通过 / 0 失败  [en] 8.6s
+  ✅ sb-verify4.js         101 通过 / 0 失败  [zh] 12.1s
+  ✅ sb-verify5.js          62 通过 / 0 失败  [zh] 13.8s
+  ✅ sb-verify6.js          93 通过 / 0 失败  [zh] 10.5s
+  ✅ sb-verify7.js         100 通过 / 0 失败  [zh] 10.2s
+  ✅ st-ai.js              336 通过 / 0 失败  [zh] 23.5s
+  ✅ st-code.js            670 通过 / 0 失败  [zh] 37.1s
+  ✅ sb-keep-compare.js     32 通过 / 0 失败  [zh] 11.6s
+  ✅ smoke.js               27 通过 / 0 失败  [en] 6.1s
+
+== 合计 ==
+  12 套，共 **1671 通过 / 0 失败**
+  （对照 `markdown/README.md` 里的「共 N 条」；这里故意不写死期望值，见文件头）
+
+✅ 全部通过
