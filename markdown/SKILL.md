@@ -5083,3 +5083,64 @@ suite crashed, its last line was `-1/0 通过`; the regex skipped the `-` and ma
   **Different summary formats have different failure modes; fix the one that has the bug and say why the
   other does not.**
 
+
+## Three gates that lie about which side is broken
+
+All three were hit on the same project in one afternoon. The shape is identical: **an assertion's
+*premise* stopped being true because of legitimate content, and the red looked like a product bug.**
+The rule: **before believing a red, go `grep` the product for the thing the gate names.**
+
+### 1. Counting tags? Strip comments first
+
+A static check asserted "exactly one `<style` … `</style>` pair outside `<script>`" — as a gate that the
+script-stripping regex had not mis-sliced. It went red: `2 open / 1 close`.
+
+Cause: a **CSS comment** inside the style block that *mentioned* the tag — `` /* this CSS sits at the end
+of `<style>` on purpose */ ``. The literal was counted as a second opening tag. Extraction was
+**completely correct** (1 block, braces balanced, every other check green).
+
+Fix the **gate**, not the product: strip `/* … */` and `<!-- … -->` before counting. Then pin it with a
+control group, because a gate you loosened is a gate you must re-prove:
+
+| input | expected |
+|---|---|
+| the real file | ✅ green |
+| one stray `<style>` (unclosed) | ❌ red (2 open / 1 close) |
+| one stray `</style>` (unopened) | ❌ red (1 open / 2 close) |
+| a comment that mentions `<style>` | ✅ green |
+
+### 2. "Appending at the end is zero-displacement" is usually false
+
+A comment in the product claimed new CSS was appended at the **end of the `<style>` block** so that
+"no anchor moves". An anchor-table audit said otherwise: **nine rows off by exactly +65**.
+
+Anything inserted inside `<style>` still shifts every line **after `</style>`** — appending only keeps
+anchors *inside* the block from moving. The claim was simply wrong, and it had been trusted.
+
+⇒ Re-measure line-number tables after **any** insertion; never compute them by addition. And when a
+comment states a property ("zero-displacement"), **verify it once** — a false comment is invisible to
+every static check.
+
+### 3. Enumerate *cascading* reds — and never assume a control group stays green
+
+In reverse testing (inject one fault, assert exactly which checks go red), a probe expected **11** reds
+and produced **38**. The extra ones were real: removing a `push` meant a downstream index landed on the
+*previous* record, so checks reading `entries[i-1]` now read someone else's data.
+
+- Write **every** cascading red into the expected list. Do not relax the gate, and do not "fix" the
+  product to make the gate quiet.
+- The inverse also holds: if the cascade **did not** happen, your fault injection never reached the code
+  path — *that* is the broken probe.
+- **A control group is not automatically green.** Its premise is "the tested path was actually taken";
+  when the fault changes which object is examined, a control can legitimately go red too.
+
+### 4. Verifying the deployed copy: check the **byte count** before the hash
+
+Polling a live URL until its sha1 matches the local file is the right check. But a **truncated
+download** produces a sha1 mismatch that looks exactly like "the CDN is still serving the old version".
+Here the "old version" was **98 304 bytes** — exactly 96 KiB, i.e. the transfer was cut, not stale.
+
+⇒ On mismatch, look at the size first. An absurdly round or clearly-too-small size means **re-download**;
+only a plausible full size means you are really looking at an older revision. (And keep polling — CDN lag
+is real: the previous round needed three tries.)
+
