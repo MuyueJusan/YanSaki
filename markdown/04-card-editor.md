@@ -1657,6 +1657,31 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
    否则升级上来的用户会突然发现卡名不再喂给 AI —— 一个**静默的行为变化**，
    而面板上那个勾选框照样显示「勾着」。跟 `personaTplOpen` 一样是**会话级**的、不落盘。
    ⚠ 卡里还没写名字时**不禁用**它（禁用看着像坏了），把事实写进标签：「（这张卡还没写名字）」。
+8. **「追加到世界书」有一个跨点击的记账**（第十六轮加的）。点过一次之后再点，先弹一个
+   **三选一**（`取消` / `覆盖` / `追加为新条目`），标题是「「<名字>」已经添加过了，请选择」。
+   - 记账是 `stEditor.personaBookRef`，存的是**条目 `id`**，不是下标 —— 下标会被世界书页的
+     增删改挪走。⚠ 世界书条目里**没有任何字段**能标出「这条是人设生成器写的」，所以只能自己记。
+   - **覆盖**只改 `content` / `comment` / `keys`，条目对象本身留着（`id` 不变）⇒ 它还在原位，
+     用户在世界书页里给它调过的启用开关 / 正则开关**不会被抹掉**。
+   - **取消**等于什么都不做，**记账也不动** ⇒ 再点还会问。
+   - **重新生成一份人设 ⇒ 记账清零**（在 `stPersonaRun()` 里），于是「第一次点直接追加、
+     第二次点才问」—— 这就是需求里那句「重置计数，在第二次点击时再次显示」。
+   - ⚠ 记账里那条**被用户在世界书页删了**时，当新条目处理，而且提示要**说出来**
+     （「上一次那条已经不在了，这次当新条目」）—— 否则「点了却没弹窗」看着像记账失灵了。
+   - ⚠ 弹窗**从状态渲染**（`stEditor.personaBookAsk`），不是凭空 `appendChild`：
+     这样 `stRerender()` 重建面板时它不会掉、也不会出现两个。
+   - ⚠ 它是 `position: fixed`，而 `#st-overlay` 带 `backdrop-filter`（**会改变 fixed 的包含块**）——
+     正好 `#st-overlay` 是 `inset: 0`，所以弹窗仍然铺满视口。套件用**命中测试**
+     （屏幕正中必须点到弹窗自己）钉住这件事：**量 rect 是量不出「被别的层盖住」的**。
+   - ⚠ 弹窗里那三个按钮**不是一直都在**，所以套件点它们一律走**空安全**版本 ——
+     直接 `.click()` 会在反向测试里抛 `TypeError`，套件当场炸掉、**连汇总行都没有**，那一针就白跑。
+   - ⚠ 这段 CSS 放在 `<style>` **末尾是故意的**：往中间插会让后面所有锚点整体后移，
+     而 README §2 那张锚点表是按行号写的。放末尾 = 零位移。
+9. **四个按钮按下去都有反馈**（第十六轮加的），而且**都带人物名**：
+   「已将「<名字>」写入角色描述」/「已将「<名字>」追加到角色描述」/
+   「已将「<名字>」追加为新的世界书条目（第 N 条）」/「已复制「<名字>」的人设」。
+   名字统一走 `stPersonaOutName(out)`（取「姓名:」，取不到回落卡名）——
+   四个按钮说的是同一个人。⚠ 两处都没有时**整段省掉**，不印一对空引号（「已将「」写入…」）。
 
 ### 默认模板
 
@@ -1687,6 +1712,8 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 | `personaTpl` | 自定义模板。**`null` = 还没从 `localStorage` 读过**（懒加载） |
 | `personaTplOpen` | 「模板」折叠块展开没有。**默认 `false`（收起）**，**不落盘**（见上面第 4 条） |
 | `personaNameUse` | 要不要把角色卡名字当人物姓名。**默认 `true`**，**不落盘**（见上面第 7 条） |
+| `personaBookRef` | 「追加到世界书」上一次写出的**条目 `id`**。**默认 `null`**，**不落盘**（见上面第 8 条）。存 id 不存下标 |
+| `personaBookAsk` | 非 `null` = 正弹着三选一，值是 `{ name }`。**不落盘**、**从状态渲染**（见上面第 8 条） |
 
 ⚠ **模板清空 = 回到默认**（面板上就是这么写的），所以有两条容易写错的规矩：
 
@@ -1712,8 +1739,13 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 | `stPersonaSysPrompt()` / `stPersonaUserPrompt(req, tpl)` | 拼提示词。user 里带上**用户的要求原文 + 模板全文**，以及**开关打开时**「这张卡现在的名字」 |
 | `stPersonaText(raw)` | **只做围栏清洗**（`\`\`\`` 包着就去掉）。⚠ 再多的「智能」清洗（比如删掉开头那句「好的，这是人设：」）会顺手吃掉真正的第一行，而那种错**看不出来** —— 输出照样有内容、照样能写进卡 |
 | `stPersonaNameFromOut(text)` | 从生成结果里取**「姓名:」后面的字符**（半角 `:` / 全角 `：` 都认）。「追加到世界书」的备注和关键词都用它。⚠ 先把 CRLF 归一成 LF —— JS 的 `.` **不匹配 `\r`**、多行模式下 `$` 也不认 `\r`，不归一化就会**整行匹配不上**，症状是「名字悄悄取不到、回落成卡名」。⚠ 只剥行首 `- ` / `*` 和值两端的 `*` / 反引号 |
-| `stPersonaRun()` | 主流程：校验 → 忙态 → `stAiChat` → 清洗 → 进状态 → 报「对上了几项」 |
-| `stPersonaApply(mode)` | `'replace'` 写入角色描述 / `'append'` 追加到角色描述 / `'book'` 追加成一条世界书条目（见上面第 6 条）。追加时描述本来是空的就当写入（不留空行开头）；替换非空描述前弹 `confirm` |
+| `stPersonaOutName(out)` | 生成结果里的**人物名** + `fromOut` 标记（四个按钮的反馈都用它）。取「姓名:」，取不到回落**卡名**；⚠ `fromOut` 是给提示用的 —— 「用的是卡名」从结果文本里看不出来，必须说出来。两处都没有时 `name` 是空串，调用方把「」整段省掉 |
+| `stPersonaBookRefEntry()` | 按 `id` 找「上一次那个世界书条目」。找不到（被用户删了）返回 `null` ⇒ 调用方当新条目处理并说出来 |
+| `stPersonaRun()` | 主流程：校验 → 忙态 → `stAiChat` → 清洗 → **记账清零** → 进状态 → 报「对上了几项」 |
+| `stPersonaApply(mode)` | `'replace'` 写入角色描述 / `'append'` 追加到角色描述 / `'book'` **转给 `stPersonaBookStart()`**（见上面第 6、8 条）。追加时描述本来是空的就当写入（不留空行开头）；替换非空描述前弹 `confirm` |
+| `stPersonaBookStart()` | 「追加到世界书」的入口：上一次那条还在 ⇒ 弹三选一；不在 ⇒ 直接 `stPersonaBookWrite('new')` |
+| `stPersonaBookWrite(action)` | `'new'` 追加为新条目 / `'overwrite'` **只改 content / comment / keys**、条目对象留着（`id` 不变）。写完把 `personaBookRef` 更新成这一条的 `id`、关掉弹窗 |
+| `stPersonaBookAnswer(choice)` | 弹窗三个出口：`'overwrite'` / `'new'` 转给上面那个；**其余（含 `'cancel'`）什么都不做**（记账也不动） |
 | `stPersonaCopy()` | `navigator.clipboard`，失败退回 `textarea` + `execCommand` |
 | `stPanePersona()` | 面板本身 |
 
@@ -1728,6 +1760,11 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 
 折叠那一组：`st-persona-tpl-fold`（外层，挂 `.st-fold` / `.st-fold-open`）/
 `st-persona-tpl-toggle`（折叠头，带 `aria-expanded`）/ `st-persona-tpl-body`（被折叠的网格）。
+
+三选一弹窗那一组（**只在 `personaBookAsk` 非 `null` 时才渲染**）：
+`st-persona-book-ask`（`position: fixed` 的整屏遮罩）/ `st-persona-book-ask-title`（标题）/
+`st-persona-book-cancel` / `st-persona-book-overwrite` / `st-persona-book-new`。
+⚠ 这三个按钮**不是一直都在** —— 套件点它们必须走空安全版本（见上面第 8 条最后一条 ⚠）。
 ⚠ 折叠头里的标题**仍然带 `.st-sub` 类** —— 它是「这份是默认还是自定义」的可见标签，
 而且 `persona-verify.js` 就是按 `.st-sub` 找它、读它的 `textContent`（换类名那些断言会红）。
 

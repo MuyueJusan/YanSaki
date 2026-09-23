@@ -783,7 +783,7 @@ window.fetch = async function (url, init) {
     await sleep(200);
     check('空描述 ⇒ 直接写进去', await desc(), OK_REPLY);
     check('空描述 ⇒ **不弹** confirm（没东西可覆盖）', (await dlg()).length, 0);
-    check('提示说已写入', await msgText(), v => /已写入角色描述/.test(v), '含「已写入角色描述」');
+    check('提示说写入角色描述', await msgText(), v => /写入角色描述/.test(v), '含「写入角色描述」');
     check('提示是 ok', await msgKind(), '');
 
     // 追加：不弹窗，保留原文
@@ -795,7 +795,8 @@ window.fetch = async function (url, init) {
       await desc(), v => v.indexOf(OK_REPLY) === 0, '以原文开头');
     check('追加之后新内容接在后面（中间空一行）',
       await desc(), OK_REPLY + '\n\n' + OK_REPLY);
-    check('追加的提示说「已追加」', await msgText(), v => /已追加/.test(v), '含「已追加」');
+    check('追加的提示说「追加到角色描述」',
+      await msgText(), v => /追加到角色描述/.test(v), '含「追加到角色描述」');
 
     // 写入覆盖非空描述：必须问
     await dlgClear();
@@ -836,6 +837,25 @@ window.fetch = async function (url, init) {
 
     // ============ I2. 追加到世界书 + 姓名开关 ============
     section('I2. 生成结果追加到世界书 / 要不要拿卡名当人物姓名');
+
+    // 「又生成了一份新的人设」= 记账清零。**真实路径在 stPersonaRun 里**（I3 的 ⑥ 去证它）；
+    // 下面这些单测写入逻辑的地方先手动清一下 —— 不清的话第二次点会变成「弹窗问」
+    // 而不是「直接追加」，那些断言会红得莫名其妙。
+    const freshBook = () => ev(`(stEditor.personaBookRef = null, stEditor.personaBookAsk = null, true)`);
+    const askEl = () => ev(`!!document.getElementById('st-persona-book-ask')`);
+    const askTitle = () =>
+      ev(`(document.getElementById('st-persona-book-ask-title') || {}).textContent || ''`);
+    const bookAt = i => `(stEditor.card.bookEntries[${i}] || {})`;
+    const bookIds = () =>
+      ev(`JSON.stringify(stEditor.card.bookEntries.map(e => (e || {}).id))`);
+    // ⚠ 弹窗里那三个按钮**不是一直都在**（没弹窗时它们压根不存在）。
+    //   直接 `.click()` 会在反向测试里抛 `TypeError` ⇒ 套件**当场炸掉、连汇总行都没有**，
+    //   那一针就白跑了（RULES.md 六之二十四）。所以一律走这个空安全版本。
+    const clickIf = id => ev(`(function(){
+      const el = document.getElementById(${JSON.stringify(id)});
+      if (!el) return false;
+      el.click();
+      return true; })()`);
 
     // —— ① 把生成结果追加成一条世界书条目 ——
     // ⚠⚠ 这里**故意**让生成结果里的「姓名:」跟卡名**不一样**（艾莉丝 vs 夜乃）。
@@ -900,7 +920,10 @@ window.fetch = async function (url, init) {
       await ev(`String(${NE}.comment || '')`), '艾莉丝');
     check('新条目的关键词也是「姓名:」后面的字符',
       await ev(`JSON.stringify(${NE}.keys || [])`), JSON.stringify(['艾莉丝']));
-    check('提示说已追加到世界书', await msgText(), v => /已追加到世界书/.test(v), '含「已追加到世界书」');
+    // ⚠ 文案本轮改过（用户要求「按下后有反馈，比如『已将（名字）追加为新的世界书条目』」）
+    //   ⇒ **改需求先改断言**，不是把产品改回去
+    check('提示说「追加为新的世界书条目」',
+      await msgText(), v => /追加为新的世界书条目/.test(v), '含「追加为新的世界书条目」');
     check('提示里报的名字是「艾莉丝」（不是卡名）',
       await msgText(), v => /艾莉丝/.test(v), '含「艾莉丝」');
     check('提示是 ok', await msgKind(), '');
@@ -933,6 +956,8 @@ window.fetch = async function (url, init) {
     // 生成结果里没有「姓名:」⇒ **回落卡名**，而且提示要说清用的是卡名（不静默）
     await ev(`stSet('card.name', '夜乃')`);
     await ev(`stPersonaOutSet('一段没有姓名的结果')`);
+    // ⚠ 这里要的是「直接追加」那条路 —— 账上还记着上一次那条的话，点下去会**弹窗**
+    await freshBook();
     await ev(`stPersonaApply('book')`);
     await sleep(150);
     const b2 = await ev(`stEditor.card.bookEntries.length`);
@@ -945,6 +970,7 @@ window.fetch = async function (url, init) {
     // 两边都没有 ⇒ 关键词留空，而且要**明说**让用户去补（不静默）
     await ev(`stSet('card.name', '')`);
     await ev(`stPersonaOutSet('一段没有姓名的结果')`);
+    await freshBook();
     await ev(`stPersonaApply('book')`);
     await sleep(150);
     const b3 = await ev(`stEditor.card.bookEntries.length`);
@@ -1014,6 +1040,181 @@ window.fetch = async function (url, init) {
     check('勾回去 ⇒ 提示词里又有卡名了（对照组）',
       await ev(`stPersonaUserPrompt('x', '姓名:')`),
       v => /这张卡现在的名字/.test(v || ''), true);
+
+    // ============ I3. 「已经添加过了」的三选一弹窗 ============
+    section('I3. 「已经添加过了」：取消 / 覆盖 / 追加为新条目');
+
+    await ev(`stSet('card.name', '夜乃')`);
+    await ev(`(function(){
+      stEditor.card.bookEntries = [];
+      const e = stBlankEntry();
+      e.comment = '原有条目'; e.content = '原有正文'; e.keys = ['原有'];
+      stEditor.card.bookEntries.push(e);
+      stSaveDraft(); return true; })()`);
+    await ev(`stPersonaOutSet(${JSON.stringify(BOOK_REPLY)})`);
+    await freshBook();
+    await ev(`stRerender()`);
+    await sleep(150);
+
+    // —— ① 第一次点：还没追加过 ⇒ 直接追加，**不弹窗** ——
+    check('（前置）现在没有弹窗', await askEl(), false);
+    await ev(`document.getElementById('st-persona-to-book').click()`);
+    await sleep(200);
+    check('第一次点 ⇒ 不弹窗（还没追加过）', await askEl(), false);
+    check('第一次点 ⇒ 世界书多了一条', await ev(`stEditor.card.bookEntries.length`), 2);
+    const firstId = await ev(`String(${bookAt(1)}.id || '')`);
+
+    // —— ② 第二次点：弹三选一，而且**什么都不许写** ——
+    await ev(`document.getElementById('st-persona-to-book').click()`);
+    await sleep(200);
+    check('第二次点 ⇒ 弹出三选一', await askEl(), true);
+    check('弹窗标题里有名字「艾莉丝」', await askTitle(), v => /艾莉丝/.test(v || ''), '含「艾莉丝」');
+    check('弹窗标题说的是「已经添加过了」',
+      await askTitle(), v => /已经添加过了/.test(v || ''), '含「已经添加过了」');
+    check('弹窗有三个选项按钮',
+      await ev(`['st-persona-book-cancel','st-persona-book-overwrite','st-persona-book-new']
+        .every(id => !!document.getElementById(id))`), true);
+    check('三个按钮的文案是「取消 / 覆盖 / 追加为新条目」',
+      await ev(`['st-persona-book-cancel','st-persona-book-overwrite','st-persona-book-new']
+        .map(id => String((document.getElementById(id) || {}).textContent || '')).join('|')`),
+      v => v === '取消|覆盖|追加为新条目', '取消|覆盖|追加为新条目');
+    // ⚠ 光「问」不许写：条数、备注一样都不许动
+    check('（弹窗期间）条数没变', await ev(`stEditor.card.bookEntries.length`), 2);
+    check('（弹窗期间）没有多出条目、备注也没被改写',
+      await ev(`JSON.stringify(stEditor.card.bookEntries.map(e => String((e || {}).comment || '')))`),
+      JSON.stringify(['原有条目', '艾莉丝']));
+    // ⚠ 量 rect 量不出「被别的层盖住」⇒ 用**命中测试**：屏幕正中必须点到弹窗自己。
+    //   这条同时盯着「position:fixed 的包含块还对不对」（#st-overlay 带 backdrop-filter）
+    check('弹窗真的盖在屏幕正中（命中测试）',
+      await ev(`(function(){
+        const el = document.getElementById('st-persona-book-ask');
+        if (!el) return 'NO-MODAL';
+        const hit = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+        if (!hit) return 'NOTHING';
+        return el.contains(hit) ? 'OK' : ('OTHER:' + hit.tagName + '.' + hit.className);
+      })()`), 'OK');
+
+    // —— ③ 取消：什么都不做 ——
+    await clickIf('st-persona-book-cancel');
+    await sleep(200);
+    check('点「取消」⇒ 弹窗关掉', await askEl(), false);
+    check('点「取消」⇒ 条数不变', await ev(`stEditor.card.bookEntries.length`), 2);
+    check('点「取消」⇒ 提示说「已取消」', await msgText(), v => /已取消/.test(v), '含「已取消」');
+    check('点「取消」⇒ 原来那条正文没动',
+      await ev(`String(${bookAt(1)}.content || '')`), BOOK_REPLY);
+    // 「取消」不该改任何状态 ⇒ 再点还是要问
+    await ev(`document.getElementById('st-persona-to-book').click()`);
+    await sleep(200);
+    check('取消之后再点 ⇒ 照样弹窗（取消不改记账）', await askEl(), true);
+
+    // —— ④ 追加为新条目 ——
+    await clickIf('st-persona-book-new');
+    await sleep(250);
+    check('点「追加为新条目」⇒ 弹窗关掉', await askEl(), false);
+    check('点「追加为新条目」⇒ 条数 +1', await ev(`stEditor.card.bookEntries.length`), 3);
+    check('新条目是**另一条**（id 跟原来那条不同）',
+      await ev(`String(${bookAt(2)}.id || '')`), v => !!v && v !== firstId, '非空且 != 上一条的 id');
+    check('新条目的备注还是「艾莉丝」', await ev(`String(${bookAt(2)}.comment || '')`), '艾莉丝');
+    check('提示说「追加为新的世界书条目」',
+      await msgText(), v => /追加为新的世界书条目/.test(v), '含「追加为新的世界书条目」');
+
+    // —— ⑤ 覆盖：条数不变、原位不动、只换内容 ——
+    // ⚠ 换一份**不一样**的结果：否则「覆盖成功」和「什么都没做」读出来是一样的
+    const BOOK_REPLY2 = '姓名: 艾莉丝\n年龄: 25\n性别: 女';
+    await ev(`stPersonaOutSet(${JSON.stringify(BOOK_REPLY2)})`);
+    // 把当前那条的开关改掉 —— 覆盖**不该**把它们抹掉
+    await ev(`(function(){
+      const a = stEditor.card.bookEntries;
+      const e = a[a.length - 1];
+      e.enabled = false; e.useRegex = true; e.comment = '用户改过的备注';
+      stSaveDraft(); return true; })()`);
+    const beforeIds = await bookIds();
+    await ev(`document.getElementById('st-persona-to-book').click()`);
+    await sleep(200);
+    check('（覆盖前）又弹窗了', await askEl(), true);
+    await clickIf('st-persona-book-overwrite');
+    await sleep(250);
+    check('点「覆盖」⇒ 弹窗关掉', await askEl(), false);
+    check('点「覆盖」⇒ 条数**不变**（不是新建）', await ev(`stEditor.card.bookEntries.length`), 3);
+    check('点「覆盖」⇒ 所有条目的 id 都没变（原位覆盖）', await bookIds(), beforeIds);
+    check('点「覆盖」⇒ 那条的正文换成了新结果',
+      await ev(`String(${bookAt(2)}.content || '')`), BOOK_REPLY2);
+    check('点「覆盖」⇒ 备注被新结果里的名字改写',
+      await ev(`String(${bookAt(2)}.comment || '')`), '艾莉丝');
+    // ⚠ 对照组：覆盖只该动 content / comment / keys，用户在世界书页调过的**不许被抹掉**
+    check('（对照）覆盖没有把启用开关改回去', await ev(`${bookAt(2)}.enabled`), false);
+    check('（对照）覆盖没有把正则开关改回去', await ev(`${bookAt(2)}.useRegex`), true);
+    check('（对照）原有那条一点没动',
+      await ev(`String(${bookAt(0)}.comment || '')`), '原有条目');
+    check('提示说「覆盖」', await msgText(), v => /覆盖/.test(v), '含「覆盖」');
+
+    // —— ⑥ 又生成了一份新的人设 ⇒ 记账清零，第一次点直接追加 ——
+    await script({ reply: BOOK_REPLY, delay: 0 });
+    await typeIn('st-persona-req', REQ);
+    await gen();
+    check('重新生成之后 ⇒ 记账清零', await ev(`String(stEditor.personaBookRef || '')`), '');
+    check('重新生成之后 ⇒ 没有弹窗', await askEl(), false);
+    const n4 = await ev(`stEditor.card.bookEntries.length`);
+    await ev(`document.getElementById('st-persona-to-book').click()`);
+    await sleep(200);
+    check('清零之后**第一次**点 ⇒ 不弹窗、直接追加', await askEl(), false);
+    check('清零之后**第一次**点 ⇒ 条数 +1', await ev(`stEditor.card.bookEntries.length`), n4 + 1);
+    await ev(`document.getElementById('st-persona-to-book').click()`);
+    await sleep(200);
+    check('清零之后**第二次**点 ⇒ 又弹窗了', await askEl(), true);
+    await clickIf('st-persona-book-cancel');
+    await sleep(200);
+
+    // —— ⑦ 记账里那条被用户删了 ⇒ 当新条目，而且要**说出来** ——
+    await freshBook();
+    await ev(`stPersonaOutSet(${JSON.stringify(BOOK_REPLY)})`);
+    await ev(`document.getElementById('st-persona-to-book').click()`);
+    await sleep(200);
+    const n5 = await ev(`stEditor.card.bookEntries.length`);
+    await ev(`(function(){ stEditor.card.bookEntries.pop(); stSaveDraft(); return true; })()`);
+    await ev(`document.getElementById('st-persona-to-book').click()`);
+    await sleep(200);
+    check('记账里那条已经不在 ⇒ 不弹窗（没什么可覆盖的）', await askEl(), false);
+    check('记账里那条已经不在 ⇒ 照样写了一条新的',
+      await ev(`stEditor.card.bookEntries.length`), n5);
+    check('记账里那条已经不在 ⇒ 提示说清了这件事',
+      await msgText(), v => /已经不在了/.test(v), '含「已经不在了」');
+
+    // —— ⑧ 四个按钮的反馈都带名字 ——
+    // ⚠ 需求是「四个按钮按下后都要有反馈」。名字统一取「姓名:」后面的字符，
+    //   所以四条提示里都该出现「艾莉丝」；卡名是「夜乃」，出现卡名就说明取错了源。
+    await ev(`stSet('card.name', '夜乃')`);
+    await ev(`stPersonaOutSet(${JSON.stringify(BOOK_REPLY)})`);
+    await ev(`stSet('card.description', '原来的描述')`);
+    await ev(`document.getElementById('st-persona-write').click()`);
+    await sleep(150);
+    check('「写入角色描述」的反馈里有名字',
+      await msgText(), v => /已将「艾莉丝」写入角色描述/.test(v), '含「已将「艾莉丝」写入角色描述」');
+    await ev(`document.getElementById('st-persona-append').click()`);
+    await sleep(150);
+    check('「追加到角色描述」的反馈里有名字',
+      await msgText(), v => /已将「艾莉丝」追加到角色描述/.test(v), '含「已将「艾莉丝」追加到角色描述」');
+    await ev(`document.getElementById('st-persona-copy').click()`);
+    await sleep(250);
+    check('「复制」的反馈里有名字',
+      await msgText(), v => /已复制「艾莉丝」的人设/.test(v), '含「已复制「艾莉丝」的人设」');
+    // 名字取不到时**整段省掉**，不许印一对空引号
+    await ev(`stSet('card.name', '')`);
+    await ev(`stSet('card.description', '')`);
+    await ev(`stPersonaOutSet('一段没有姓名的结果')`);
+    await freshBook();
+    await ev(`document.getElementById('st-persona-write').click()`);
+    await sleep(150);
+    check('名字取不到 ⇒ 反馈里不出现空的「」',
+      await msgText(), v => /已写入角色描述/.test(v) && !/「」/.test(v),
+      '含「已写入角色描述」且不含「「」」');
+
+    // 收尾：把状态还原，别影响后面的 J
+    await ev(`stSet('card.name', '夜乃')`);
+    await ev(`stPersonaNameUseSet(true)`);
+    await freshBook();
+    await ev(`stRerender()`);
+    await sleep(150);
 
     // ============ J. 复制 + 忙态 + 失败路径 ============
     section('J. 复制 / 忙态 / 失败路径');

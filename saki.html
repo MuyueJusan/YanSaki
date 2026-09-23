@@ -5234,6 +5234,71 @@
         }
 
         body.retro-mode .mobile-nav-item:hover { background: #000080; color: #ffffff; }
+
+        /* —— 人设生成器「已经添加过了」的三选一弹窗 ——
+           ⚠ 为什么不用 `window.confirm`：它只有「确定 / 取消」两个出口，而这里要**三选一**
+             （取消 / 覆盖 / 追加为新条目），而且「取消」的语义是**什么都不做** ——
+             塞进 confirm 就只能靠「确定=覆盖、取消=追加」这种猜谜。
+           ⚠ 它是**从状态渲染**的（`stEditor.personaBookAsk`），不是凭空 `appendChild` ——
+             所以 `stRerender()` 重建面板时它不会掉、也不会出现两个。
+           ⚠ `position: fixed` 的包含块是 `#st-overlay`（它带 `backdrop-filter`），
+             而 `#st-overlay` 正好是 `inset: 0` ⇒ 这个弹窗仍然铺满视口。
+             （套件里有一条**命中测试**盯着这件事：屏幕正中必须点到弹窗本身，
+               量 rect 是量不出「被别的层盖住」的。）
+           ⚠⚠ 这段 CSS 放在 `<style>` **末尾**，但**别以为它零位移** —— 往 `<style>` 里插东西，
+             `</style>` **之后**的锚点照样整体后移（第十六轮实测 **+65 行**，README §2 那 9 行
+             全跟着挪了）。加完样式**必须重跑 `_audit-anchors.js` 重取 §2 行号**，别按加法推。 */
+        .st-ask {
+            position: fixed;
+            inset: 0;
+            z-index: 40;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(8, 32, 48, 0.45);
+        }
+
+        .st-ask-box {
+            width: 100%;
+            max-width: 420px;
+            padding: 16px 18px 14px;
+            background: #ffffff;
+            color: #1a2b3c;
+            border: 1px solid rgba(121, 174, 210, 0.55);
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(8, 32, 48, 0.3);
+        }
+
+        .st-ask-title {
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        .st-ask-note {
+            margin-bottom: 4px;
+            font-size: 0.78rem;
+            line-height: 1.7;
+            color: #33546b;
+        }
+
+        /* 弹窗里的按钮排一行、右对齐 —— 跟面板里那些 `.st-actions` 区分开：
+           那一条是左对齐铺开，这一条是「确认类」动作，靠右更符合习惯 */
+        .st-ask-box .st-actions { justify-content: flex-end; margin-top: 12px; }
+
+        /* 复古皮肤下也保持能读：Win98 的对话框就是灰底 + 立体边框 */
+        body.retro-mode .st-ask-box {
+            background: #c0c0c0;
+            color: #000000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 2px 2px 0 #000000;
+        }
+
+        body.retro-mode .st-ask-note { color: #000000; opacity: 1; }
     </style>
 </head>
 <body>
@@ -15403,6 +15468,16 @@
             // ⚠ 跟 personaTplOpen 同一类：它是「这一次怎么生成」的面板参数，
             //   跟 personaReq / personaOut 一起当会话级状态，不落盘。
             personaNameUse: true,
+            // 「追加到世界书」的记账：上一次那个动作写出的**条目 id**。
+            // ⚠ 世界书条目里**没有任何字段**能标出「这条是人设生成器写的」——
+            //   所以「已经添加过了」只能靠这里记着。存 id 不存下标：下标会被
+            //   世界书页的增删改挪走，id 不会。
+            personaBookRef: null,
+            // 非 null = 正弹着那个三选一（取消 / 覆盖 / 追加为新条目），值是 { name }。
+            // ⚠ 跟 personaTplOpen 一样是**会话级**状态、不落盘：重开编辑器不该带着
+            //   上一次没回答完的问题。**从状态渲染**（见 stPanePersona），
+            //   这样 stRerender() 重建面板时弹窗不会掉、也不会出现两个。
+            personaBookAsk: null,
             // 画布上的拖动是「自由摆放（像素级）」还是「结构排序（换顺序）」。
             // **默认自由摆放** —— 「像编辑 ppt 一样」的默认动作就是把东西拖到想放的
             // 地方，而不是让编辑器猜「你想插到第几行」
@@ -22236,6 +22311,33 @@
             return m[1].replace(/^[*`\s]+|[*`\s]+$/g, '');
         }
 
+        // 生成结果里的「人物名」—— 四个按钮的反馈都用它。取「姓名:」后面的字符，
+        // 取不到回落**卡名**。
+        //
+        // ⚠ 返回值里必须带上 `fromOut`：「用的是卡名」这件事**从结果文本里完全看不出来**，
+        //   所以调用方要能在提示里把它说出来（回落 = 把失败伪装成成功）。
+        // ⚠ 两处都没有时 name 是空串 —— 调用方要把「」整段省掉，而不是印一对空引号。
+        function stPersonaOutName(out) {
+            const inName = stPersonaNameFromOut(out);
+            return {
+                name: inName || stStr((stEditor.card || {}).name),
+                fromOut: !!inName
+            };
+        }
+
+        // 「上一次那个世界书条目」—— 按 **id** 找，不按下标：下标会被世界书页的增删改挪走。
+        // 找不到（用户自己在世界书页删掉了）返回 null，调用方据此当新条目处理、并说出来。
+        function stPersonaBookRefEntry() {
+            const id = stEditor.personaBookRef;
+            if (!id) return null;
+            const a = (stEditor.card && Array.isArray(stEditor.card.bookEntries))
+                ? stEditor.card.bookEntries : [];
+            for (let i = 0; i < a.length; i++) {
+                if (a[i] && a[i].id === id) return a[i];
+            }
+            return null;
+        }
+
         async function stPersonaRun() {
             if (stEditor.personaBusy) return;
             if (!stEditor.card) return;
@@ -22285,6 +22387,12 @@
                 return;
             }
             stEditor.personaOut = out;
+            // 生成了**新的人设** ⇒ 把「已经添加过」的记账清掉。
+            // ⚠ 这是需求的一部分（用户原话：「如果后续又生成了新的人设，则重置计数，
+            //   在第二次点击时再次显示」）：新结果跟旧条目没有关系，所以接下来**第一次**点
+            //   「追加到世界书」应该直接追加、不弹窗，**第二次**才该问。
+            stEditor.personaBookRef = null;
+            stEditor.personaBookAsk = null;
             stRerender();
             // 「对上了几项」—— 跟预制块那边报「几条路径对得上」同一个口径：
             // 只说「成功」的话，模型悄悄改写了标题用户是看不见的
@@ -22303,42 +22411,17 @@
             if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn', 'persona'); return; }
             if (!stEditor.card) return;
             // —— 追加到世界书 ——
-            // 跟「追加到角色描述」同一条理由：**不覆盖任何东西**，所以不用弹 confirm。
-            //
-            // 备注和关键词都取**生成结果里「姓名:」后面的字符**（用户指定）；
-            // 取不到才回落卡名 —— 这样按钮永远不会「点了个寂寞」。
-            // ⚠ 一条既没有关键词、也不是常驻的条目**永远不会触发**，
-            //   而「按钮点了、条目也建了、聊起来却像没生效」是最难查的一种坏。
-            // ⚠ 回落这件事**必须在提示里说出来**：用的是卡名而不是生成结果里的名字，
-            //   从条目本身完全看不出来（照样建好了、照样有内容）。
-            if (mode === 'book') {
-                if (!Array.isArray(stEditor.card.bookEntries)) stEditor.card.bookEntries = [];
-                const a = stEditor.card.bookEntries;
-                const inName = stPersonaNameFromOut(out);   // 生成结果里「姓名:」后面的字符
-                const nm = inName || stStr(stEditor.card.name);
-                const e = stBlankEntry();
-                e.content = out;
-                // 备注留空的话，世界书列表里那一行只剩「（没写备注）」+ 关键词，很难认出来
-                e.comment = nm || '人设';
-                if (nm) e.keys = [nm];
-                a.push(e);
-                stSaveDraft();
-                stRerender();
-                stExportMsg('✅ 已追加到世界书（第 ' + a.length + ' 条 · ' +
-                    (nm ? '名称 / 关键词：' + nm : '⚠ 没有关键词') + '）' +
-                    (inName ? ''
-                        : (nm ? ' —— 生成结果里没有「姓名:」，用的是卡名'
-                              : ' —— 生成结果里没有「姓名:」、卡里也没写名字，' +
-                                '去世界书页补一个关键词它才会触发')) + '。',
-                    nm ? 'ok' : 'warn', 'persona');
-                return;
-            }
+            // 走 stPersonaBookStart()：它先看「上一次那条还在不在」，在就先弹三选一。
+            if (mode === 'book') { stPersonaBookStart(); return; }
+            // 名字取不到时**整段省掉**，别印一对空引号（「已将「」写入…」）
+            const nm = stPersonaOutName(out).name;
+            const head = nm ? '已将「' + nm + '」' : '已';
             const cur = stStr(stEditor.card.description);
             if (mode === 'append') {
                 // 描述本来是空的就当成写入 —— 不然会留一个空行开头
                 if (!cur.trim()) { stPersonaApply('replace'); return; }
                 stSet('card.description', cur.replace(/\s+$/, '') + '\n\n' + out);
-                stExportMsg('✅ 已追加到角色描述（现在 ' +
+                stExportMsg('✅ ' + head + '追加到角色描述（现在 ' +
                     stStr(stEditor.card.description).length + ' 字符）。', 'ok', 'persona');
                 return;
             }
@@ -22348,14 +22431,91 @@
                 return;
             }
             stSet('card.description', out);
-            stExportMsg('✅ 已写入角色描述（' + out.length + ' 字符）。', 'ok', 'persona');
+            stExportMsg('✅ ' + head + '写入角色描述（' + out.length + ' 字符）。', 'ok', 'persona');
+        }
+
+        // 「追加到世界书」的入口：上一次那条**还在**就先弹三选一，否则直接写成新条目。
+        //
+        // ⚠ 「已经添加过了」只能靠**记账**知道 —— 世界书条目里没有任何字段能标出
+        //   「这条是人设生成器写的」。账在 `stEditor.personaBookRef`（条目 id），
+        //   生成新结果时由 `stPersonaRun` 清掉，所以「重置计数」是它的副作用。
+        function stPersonaBookStart() {
+            const out = String(stEditor.personaOut || '').trim();
+            if (stPersonaBookRefEntry()) {
+                stEditor.personaBookAsk = { name: stPersonaOutName(out).name };
+                stRerender();
+                return;
+            }
+            stPersonaBookWrite('new');
+        }
+
+        // action：'new' 追加为新条目 / 'overwrite' 覆盖上一次那条
+        //
+        // ⚠ 覆盖时**只改 content / comment / keys**，条目对象本身留着（`id` 不变）——
+        //   这样它还在原位、还是同一条，用户在世界书页里给它调过的东西
+        //   （启用开关、正则开关、顺序）不会跟着被抹掉。
+        function stPersonaBookWrite(action) {
+            const out = String(stEditor.personaOut || '').trim();
+            if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn', 'persona'); return; }
+            if (!stEditor.card) return;
+            if (!Array.isArray(stEditor.card.bookEntries)) stEditor.card.bookEntries = [];
+            const a = stEditor.card.bookEntries;
+            const r = stPersonaOutName(out);
+            // ⚠ 记过账、但那条已经不在了（用户在世界书页删掉了）⇒ 当新条目处理。
+            //   这件事也要**说出来**，否则「点了却没弹窗」看着像记账失灵了。
+            const stale = !!(stEditor.personaBookRef && !stPersonaBookRefEntry());
+            const prev = (action === 'overwrite') ? stPersonaBookRefEntry() : null;
+            const e = prev || stBlankEntry();
+            e.content = out;
+            // 备注留空的话，世界书列表里那一行只剩「（没写备注）」+ 关键词，很难认出来
+            e.comment = r.name || '人设';
+            e.keys = r.name ? [r.name] : [];
+            let idx;
+            if (prev) { idx = a.indexOf(prev); }
+            else { a.push(e); idx = a.length - 1; }
+            stEditor.personaBookRef = e.id;
+            stEditor.personaBookAsk = null;
+            stSaveDraft();
+            stRerender();
+            // ⚠ 提示里那个「第 N 条」是**这次操作自己算出来的数**，所以它天然为真 ——
+            //   push 被拆掉时 `a.length` 根本不会变，提示照样说得出口。
+            //   ⇒ 断言别盯这句话，盯状态（条数 / 正文 / 备注 / 关键词）。见 RULES.md 六之二十五。
+            //
+            // ⚠ 一条既没有关键词、也不是常驻的条目**永远不会触发**，
+            //   而「按钮点了、条目也建了、聊起来却像没生效」是最难查的一种坏。
+            // ⚠ 回落这件事**必须在提示里说出来**：用的是卡名而不是生成结果里的名字，
+            //   从条目本身完全看不出来（照样建好了、照样有内容）。
+            const tail = r.fromOut ? ''
+                : (r.name ? ' —— 生成结果里没有「姓名:」，用的是卡名'
+                          : ' —— 生成结果里没有「姓名:」、卡里也没写名字，' +
+                            '去世界书页补一个关键词它才会触发');
+            stExportMsg('✅ 已将' + (r.name ? '「' + r.name + '」' : '结果') +
+                (prev ? '覆盖到世界书第 ' + (idx + 1) + ' 条'
+                      : '追加为新的世界书条目（第 ' + (idx + 1) + ' 条）') +
+                (stale ? '（上一次那条已经不在了，这次当新条目）' : '') + tail + '。',
+                r.name ? 'ok' : 'warn', 'persona');
+        }
+
+        // 弹窗里的三个选择。⚠ 用「按钮 → 函数」而不是 `window.confirm`：
+        //   confirm 只有两个出口，而这里要**三选一**，且「取消」必须等于**什么都不做**。
+        function stPersonaBookAnswer(choice) {
+            if (!stEditor.personaBookAsk) return;   // 没在问就别理（防重复点）
+            if (choice === 'overwrite') { stPersonaBookWrite('overwrite'); return; }
+            if (choice === 'new') { stPersonaBookWrite('new'); return; }
+            stEditor.personaBookAsk = null;
+            stRerender();
+            stExportMsg('已取消 —— 世界书没动。', 'warn', 'persona');
         }
 
         function stPersonaCopy() {
             const out = String(stEditor.personaOut || '');
             if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn', 'persona'); return; }
+            // 名字跟另外三个按钮同源（取「姓名:」，取不到回落卡名）—— 四个按钮的反馈
+            // 说的是同一个人，不然「复制」那条会看起来像在说别的东西
+            const nm = stPersonaOutName(out).name;
             const done = ok => stExportMsg(ok
-                ? '✅ 已复制（' + out.length + ' 字符）。'
+                ? '✅ ' + (nm ? '已复制「' + nm + '」的人设' : '已复制') +
+                  '（' + out.length + ' 字符）。'
                 : '复制失败，请手动选中预览框里的文字。', ok ? 'ok' : 'warn', 'persona');
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(out).then(() => done(true), () => done(false));
@@ -22489,11 +22649,46 @@
                     '模板里<b>每一行都以冒号结尾</b>，AI 会在冒号后面填内容 —— ' +
                     '所以你可以自由增删行、改字段名，它会跟着变。<br>' +
                     '⚠ 生成结果<b>要你点一下才进卡</b>；角色描述里已经有内容时，' +
-                    '「写入」还会先问一句，两种「追加」都不用问（它们不覆盖已有内容）。<br>' +
-                    '「📖 追加到世界书」会把结果存成<b>一条新的世界书条目</b>，' +
+                    '「写入」还会先问一句，「追加到角色描述」不用问（它不覆盖已有内容）。<br>' +
+                    '「📖 追加到世界书」把结果存成一条世界书条目，' +
                     '名称和关键词都取生成结果里<b>「姓名:」后面的字符</b>；' +
-                    '生成结果里没写「姓名:」就回落卡名，两处都没有才会留空。' +
-                '</div>';
+                    '生成结果里没写「姓名:」就回落卡名，两处都没有才会留空。<br>' +
+                    '⚠ <b>已经追加过一次</b>之后再点，它会先问一句：' +
+                    '「覆盖」改写原来那条、「追加为新条目」再建一条、「取消」什么都不做；' +
+                    '重新生成一份人设之后，这个记账会<b>清零</b>（第一次点直接追加）。' +
+                '</div>' +
+                // 三选一弹窗。**从状态渲染**（`stEditor.personaBookAsk`）——
+                // 不是凭空 appendChild，所以 `stRerender()` 重建面板时它不会掉、也不会出现两个。
+                // 放在面板最后：它是盖住全屏的一层，DOM 位置不影响它盖住谁。
+                (stEditor.personaBookAsk
+                    ? '<div class="st-ask" id="st-persona-book-ask">' +
+                        '<div class="st-ask-box" role="dialog" aria-modal="true"' +
+                            ' aria-labelledby="st-persona-book-ask-title">' +
+                            '<div class="st-ask-title" id="st-persona-book-ask-title">' +
+                                (stEditor.personaBookAsk.name
+                                    ? '「' + escapeHtml(stEditor.personaBookAsk.name) +
+                                      '」已经添加过了，请选择'
+                                    : '这份人设已经添加过了，请选择') +
+                            '</div>' +
+                            '<div class="st-ask-note">' +
+                                '世界书里还留着上一次「追加到世界书」写出的那条。' +
+                                '<b>覆盖</b>会改写那一条（位置和它的开关都不动）；' +
+                                '<b>追加为新条目</b>会再建一条。' +
+                            '</div>' +
+                            '<div class="st-actions">' +
+                                '<button class="st-big st-plain" type="button"' +
+                                    ' id="st-persona-book-cancel"' +
+                                    ' onclick="stPersonaBookAnswer(\'cancel\')">取消</button>' +
+                                '<button class="st-big" type="button"' +
+                                    ' id="st-persona-book-overwrite"' +
+                                    ' onclick="stPersonaBookAnswer(\'overwrite\')">覆盖</button>' +
+                                '<button class="st-big st-plain" type="button"' +
+                                    ' id="st-persona-book-new"' +
+                                    ' onclick="stPersonaBookAnswer(\'new\')">追加为新条目</button>' +
+                            '</div>' +
+                        '</div>' +
+                      '</div>'
+                    : '');
         }
 
         function stPaneSys() {
