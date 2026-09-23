@@ -147,7 +147,9 @@ bash setup-dev.sh --go --force # 连已存在的也覆盖（在别的设备上�
 （排队阶段被取消**根本不会创建 deployment**）。
 **解锁**：`POST /actions/workflows/static.yml/dispatches {"ref":"main"}` ——
 `workflow_dispatch` 只触发被点的那一条，独占并发组（实测 21 秒、7 个 step 全绿）。
-**真正的修法是把这两条删掉**；⚠ 删之前先问（删掉会连带清掉它们的历史记录）。
+**已处理（2026-09-23）**：两条都**停用**了（`disabled_manually`，用户选的是「停用」而不是「删」）——
+不再被 push 触发 ⇒ 并发组不再被抢，而且**历史 run 记录保留着**（hugo.yml 0 成 9 败那些还在）。
+想恢复任意一条：`PUT /actions/workflows/<文件名>/enable`。
 诊断工具 `_verify/deploy-check.js`（只读）；细节见 `SKILL-git-push.md` §9 与 `RULES.md` 六之二十。
 
 > ⚠⚠ **`git push` 绿 + 远端 blob 一致，只证明「仓库对了」，不证明「站点对了」。**

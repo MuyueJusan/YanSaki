@@ -1171,8 +1171,34 @@ POST /repos/<o>/<r>/actions/workflows/static.yml/dispatches  { "ref": "main" }  
 ```
 
 本项目实测 21 秒跑完、7 个 step 全绿、线上立刻变成新版。
-**真正的修法**是删掉那两条不用的 workflow（否则以后每次 push 都有概率被静默吞掉，
+**真正的修法**是让那两条不用的 workflow 不再跑（否则以后每次 push 都有概率被静默吞掉，
 而且它们会在**每个 commit** 上持续刷假的 `build : failure`）—— 但那是改用户的仓库，**要先问**。
+
+⚠⚠ **「停用」比「删掉」好，能选可逆方案时就选可逆方案。** 实测：
+
+```js
+PUT /repos/<o>/<r>/actions/workflows/<文件名>/disable   // → 204，状态变 disabled_manually
+PUT /repos/<o>/<r>/actions/workflows/<文件名>/enable    // → 204，随时能回来
+```
+
+停用**完全可逆**、且保住了「这两条曾经存在、且每次都败」的证据；删除会把证据一起抹掉。
+（同一条原则：`_purge-tmp.js` 默认只数不删、`setup-dev.sh` 默认 dry-run。）
+本项目 2026-09-23 已把 `hugo.yml` / `jekyll-gh-pages.yml` 停用，`static.yml` 保持 active。
+
+⚠ **`/actions/workflows` 的 `workflow_id` 可以直接传文件名**（`hugo.yml`），不必先查数字 id。
+
+**固化成了工具**：`_verify/deploy-check.js`（只读，`--runs` 顺带查 Actions / deployment / workflow 条数）。
+⚠ 它不是套件（依赖网络），必须登记进 `run-all.js` 的 `NOT_A_SUITE`，否则 runner 会当「未分类 `.js`」报硬错误。
+⚠ 比字节数**不能用 HEAD** —— HEAD 的 `content-length` 是压缩后的。
+
+#### ⚠ 一条流程教训：文档里「纯噪声，不影响部署」那句是**上一轮自己写的**
+
+README 里那句错话，是**接入 GitHub 那一轮**写的 —— 当时**观察到了「互相取消」这个现象**，
+却把它判成了「不影响部署」。下一轮它就以「推送成功、线上没变」的形式回来收账了。
+⇒ **观察到了现象 ≠ 判对了后果。** 「它俩会互相取消」和「这不影响部署」是两句不同的话，
+中间那步「**取消的到底是谁**」当时没查。
+⇒ **现象写进文档时要写「我查到了什么」，不要写「所以没事」** —— 后者是结论，结论要证据；
+而一句错的结论会在文档里躺很久，还会被下一次的自己当成前提读。
 
 #### ⚠ 取令牌：别用 `sed`，也别把变量放错位置
 
