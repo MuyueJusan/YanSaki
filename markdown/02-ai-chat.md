@@ -33,7 +33,7 @@
 ## 二、供应商（`AI_PROVIDERS`）
 
 **一张表管全站**（第十八轮合并）：编写器那份 `ST_AI_PROVIDERS` 现在**就是它**
-（`const ST_AI_PROVIDERS = AI_PROVIDERS;`，见产品 16582 行）。以前是两份重复维护的清单，
+（`const ST_AI_PROVIDERS = AI_PROVIDERS;`，跳转 `grep` 这句原文，别照抄行号）。以前是两份重复维护的清单，
 加一个服务商要改两个地方 —— 漏一个就是「编写器下拉里有、取不到」。
 
 **37 项**，分 6 组（下拉按 `<optgroup>` 分组）：
@@ -374,7 +374,7 @@ const retryable = (opts.retryable !== undefined) ? opts.retryable : !isUser;
 
 | 名字 | 存哪 | 是什么 |
 |---|---|---|
-| `apiGlobal` | `localStorage['apiGlobalCfg']` | **全站唯一真相源**：服务商 / Base URL / Key / 模型 / 温度 / max_tokens / 流式 / **第一段** |
+| `apiGlobal` | `localStorage['apiGlobalCfg']` | **全站唯一真相源**：服务商 / Base URL / Key / 模型 / 温度 / max_tokens / 流式 / **第一段**，以及 Vertex 专用的四格 `authMode`（`key` 快速 / `sa` 完整）/ `project` / `location` / `saJson`（第十八轮加的）|
 | `aiConfig.followGlobal` | `localStorage['aiChatConfig']` | 本选项卡的配置来源：`true`（默认）跟随全局 / `false` 用自己那份 |
 | `aiConfig.own` | `localStorage['aiChatConfig']` | 「独立配置」时自己那一套 |
 
@@ -401,8 +401,13 @@ const retryable = (opts.retryable !== undefined) ? opts.retryable : !isUser;
 - 主页 **【🔌 API 全局配置】**（`#api-global-btn`，在【🐱 小游戏】**上方**）⇒ 弹窗 `#apiGlobalModal`
   （复用 `.modal-overlay` / `.game-card`，含复古皮肤覆盖）。里面：服务商 / Base URL / Key /
   模型（含**获取模型列表**）/ 流式 / 温度 / max_tokens / 第一段 + **测试连接** + **保存**。
-  ⚠ 卡片是白底，而 `.ai-btn` / `.ai-switch-track` 是「白字 / 半透明白」—— 直接搬进来**看不见**，
-  所以按弹窗作用域覆盖了一遍（`.apig-*` + `body.retro-mode` 那几条）。
+  - **模型是 `input` + `datalist`**（第十八轮改的，原来是个死下拉）：候选能拉，也能**直接敲**
+    一个列表里没有的模型名。⚠ 「候选」和「当前值」从此是**两个元素**（`#apig-model-list` 与
+    `#apig-model`）—— 再写 `sel.options` 会当场崩。
+  - **Vertex 那四格只在选 `vertex` 时出现**（认证模式 / project / location / Service Account JSON），
+    其余服务商看不到。⚠ 三格的值进草稿（切走再切回来不丢），切服务商不会被冲掉。
+  - ⚠ 卡片是白底，而 `.ai-btn` / `.ai-switch-track` 是「白字 / 半透明白」—— 直接搬进来**看不见**，
+    所以按弹窗作用域覆盖了一遍（`.apig-*` + `body.retro-mode` 那几条）。
 - 本选项卡面板顶部两个按钮：**🔗 跟随 API 全局配置 / 🔑 独立配置**；折叠状态下也有角标显示当前来源。
 - ⚠ 跟随时那批 API 控件是**真 `disabled`**（不是 readonly）—— **绝不留「能改、但下次刷新又变回去」
   的假输入框**；旁边给一个「打开 API 全局配置」的出口，`applyAiSettings()` 的缺项提示也会指到全局去。

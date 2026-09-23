@@ -1,12 +1,15 @@
 # 04 · SillyTavern 角色卡编写器
 
-> 对应代码（行号**会漂**，跳转请 `grep` 横幅原文，别照抄数字）：
-> HTML —— 入口卡片 `#st-card` 在 `5421` 行、浮层 `#st-overlay` 在 `5460` 行；
-> CSS —— `2355` 行起（`SillyTavern 角色卡编写器` 多行大横幅），到 `4106` 行的
-> `Code（Agent）页` 横幅为止；
-> JS —— 编写器的函数一律 `st*` 前缀，`const ST_TABS` 在 `14200` 行、
-> `function stInit()` 在 `14255` 行、`function stSbParseDoc()` 在 `10123` 行。
-> ⚠ 「当前卡名」那条链是 `renderStCard()`（`14366`）→ `stRenderNavName()`（`14358`）——
+> 对应代码（⚠ 行号**会漂** —— 这里**故意不写数字**，跳转一律 `grep` 下面这些原文）：
+> HTML —— 入口卡片搜 `id="st-card"`、浮层搜 `id="st-overlay"`；
+> CSS —— 从 `SillyTavern 角色卡编写器` 那个多行大横幅起，到 `Code（Agent）页` 横幅为止；
+> JS —— 编写器的函数一律 `st*` 前缀，关键入口搜 `const ST_TABS`、`function stInit()`、
+> `function stSbParseDoc()`。
+>
+> ⚠ **这里原来写的是一串行号**（`5421` / `5460` / `2355` / `4106` / `14200` …），
+> 第十八轮实测**全都漂了**（HTML +445、CSS +242 那种量级）—— 所以改成只给 `grep` 关键词。
+> 分册的行号**没有任何工具在管**（`_verify/*.js` 零命中），写死就是等着过期。
+> ⚠ 「当前卡名」那条链是 `renderStCard()` → `stRenderNavName()`（两个函数名直接 `grep`）——
 > 后者把名字同步给手机菜单里那个标注（`#mobile-nav-name`，在面板内、「角色卡编写器」下面），
 > 见 02 的「手机比例下的入口菜单」。
 >
@@ -572,7 +575,8 @@ name / type / desc / value / int / min / max / options[] / children[]
 
 ## 十三、MVU 状态栏外观页（`stPaneSb`）
 
-> 对应代码：CSS `.st-sb-*`（`2836–3100` 一带），JS `stPaneSb` 起的整段「MVU 状态栏（外观）编辑器」
+> 对应代码（⚠ 行号会漂，跳转请 `grep` 横幅原文）：CSS 搜 `MVU 状态栏外观编辑器` 那个横幅；
+> JS 搜 `stPaneSb` 起的整段「MVU 状态栏（外观）编辑器」。
 
 **这一页管什么**：聊天里那块状态栏长什么样。它在卡里**只是一条正则** —— MVU 五件套里
 「状态栏界面」（`sbShow`）的 `replaceString`。所以「编辑外观」= 可视化地搭一段 HTML，
