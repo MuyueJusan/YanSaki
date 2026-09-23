@@ -181,6 +181,49 @@
             padding: 0 3px;
         }
 
+        /* SA JSON 的掩码条：存过之后就只显示「存的是哪一份」，不把私钥摊在屏幕上 */
+        .apig-sa-masked {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            color: #1a7f37;
+            background: #eef7f0;
+            border: 1px solid #b7dfc4;
+            border-radius: 8px;
+            padding: 7px 10px;
+        }
+
+        .apig-sa-masked[hidden] { display: none; }
+
+        .apig-sa-who {
+            flex: 1;
+            word-break: break-all;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        .apig-btn-mini {
+            font-size: 0.74rem;
+            padding: 4px 10px;
+            flex: none;
+        }
+
+        /* 「验证 JSON」的分步结果 */
+        .apig-verify-out {
+            font-size: 0.74rem;
+            line-height: 1.75;
+            color: #1a2b3c;
+            background: #f7f8fa;
+            border: 1px solid #dfe3e9;
+            border-radius: 8px;
+            padding: 8px 10px;
+            word-break: break-all;
+        }
+
+        .apig-verify-out[hidden] { display: none; }
+
         .apig-status {
             flex: 1;
             font-size: 0.75rem;
@@ -235,6 +278,21 @@
             border: 2px solid;
             border-color: #808080 #ffffff #ffffff #808080;
             border-radius: 0;
+        }
+        /* 掩码条与验证输出：复古下也照 Win98 的白底黑字，别留一块浅绿毛玻璃 */
+        body.retro-mode .apig-sa-masked {
+            background: #fff;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+            color: #000;
+        }
+        body.retro-mode .apig-verify-out {
+            background: #fff;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+            color: #000;
         }
         body.retro-mode .api-global-card .ai-field input,
         body.retro-mode .api-global-card .ai-field select,
@@ -6086,9 +6144,22 @@
 
                     <div class="ai-field" id="apig-sa-field">
                         <label for="apig-sa">Service Account JSON</label>
+                        <!-- 掩码态：存过之后就只显示「存的是哪一份」，不把私钥明文摊在屏幕上
+                             （照酒馆的做法）。⚠ 只是把 textarea 藏起来，value 一直留着 ⇒
+                             打开面板看一眼再点保存，密钥不会因此丢掉 -->
+                        <div id="apig-sa-masked" class="apig-sa-masked" hidden>
+                            <span class="apig-sa-who" id="apig-sa-who"></span>
+                            <button class="apig-btn apig-btn-mini" type="button"
+                                    onclick="apigSaEditMode()">🔑 换一份</button>
+                        </div>
                         <textarea id="apig-sa" rows="4" spellcheck="false"
                                   placeholder='把下载的密钥 JSON 整个粘进来（含 type / project_id / private_key / client_email）'
                                   oninput="apigSaDraft=this.value"></textarea>
+                        <div class="apig-actions" style="justify-content:flex-start">
+                            <button class="apig-btn" type="button" id="apig-verify-btn"
+                                    onclick="apigVerifyJson()">✅ 验证 JSON（分步）</button>
+                        </div>
+                        <div class="apig-verify-out" id="apig-verify-out" hidden></div>
                         <div class="apig-hint" id="apig-vertex-note"></div>
                     </div>
                 </div>
@@ -16988,6 +17059,34 @@
                 return { ok: false, why: '还没配 Base URL。' + where + '选一个服务商' +
                     (cfg.mode === 'own' ? '' : '，或者在本页切到「独立配置」自己填一套') + '。' };
             }
+            // ⚠⚠ Vertex 单独判：它的预设 baseUrl 是**写死的**（`https://aiplatform.googleapis.com`），
+            //   而完整模式下 `apiKey` **本来就是空的** ⇒ 走下面那条通用检查会永远报
+            //   「还没填 API Key」，完整模式**根本跑不起来**（第一版就是这个 bug）。
+            if (stAiIsVertex(cfg)) {
+                if (cfg.authMode === 'sa') {
+                    if (!cfg.saJson) {
+                        return { ok: false, why: '完整模式还没粘 Service Account JSON。' + where +
+                            '切到「完整模式（Service Account）」那一档，把密钥 JSON 粘进去。' };
+                    }
+                    const sa = stAiSaParse(cfg.saJson);
+                    if (!sa.ok) return { ok: false, why: sa.why };
+                    // 项目 ID：填了用填的，没填从 JSON 的 `project_id` 取（见 stAiVertexProject）。
+                    // 两处都没有就**明说拒绝** —— 否则拼出 `/v1/projects//locations/...` 拿一个
+                    // 404 回来，报错里看不出是「少了项目」（RULES 六之二十七：别把失败伪装成别的失败）
+                    if (!stAiVertexProject(cfg)) {
+                        return { ok: false, why: '这份 Service Account JSON 里没有 project_id，' +
+                            '也没在「项目 ID」那一格填 —— 完整模式的 URL 必须有项目，' +
+                            '补一个（密钥文件里的 project_id）。' };
+                    }
+                } else if (!cfg.apiKey) {
+                    return { ok: false, why: 'Vertex 快速模式还没填 API Key。' + where + '填一个。' };
+                }
+                if (needModel && !cfg.model) {
+                    return { ok: false, why: '还没填模型名。' + where +
+                        '直接输入一个（例如 gemini-2.5-flash），或点「获取模型列表」再挑。' };
+                }
+                return { ok: true, why: '' };
+            }
             if (!cfg.apiKey && !stAiIsLocal(cfg.baseUrl)) {
                 return { ok: false, why: '还没填 API Key。' + where + '填一个' +
                     (cfg.mode === 'own' ? '。' : '，或者在本页切到「独立配置」自己填一套。') };
@@ -17048,7 +17147,7 @@
         // 一个协议盖三条路，它们**请求体完全一样**，只有 URL 和鉴权不同：
         //
         //   · AI Studio 原生    https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent
-        //   · Vertex 快速模式   https://aiplatform.googleapis.com/v1/publishers/google/models/{m}:generateContent
+        //   · Vertex 快速模式   https://{loc}-aiplatform.googleapis.com/v1/publishers/google/models/{m}:generateContent
         //   · Vertex 完整模式   https://{loc}-aiplatform.googleapis.com/v1/projects/{proj}/locations/{loc}/publishers/google/models/{m}:generateContent
         //
         // 鉴权：
@@ -17058,8 +17157,25 @@
         // ⚠ `location = 'global'` 时**端点不带地区前缀** —— 是 `aiplatform.googleapis.com`
         //   而不是 `global-aiplatform.googleapis.com`。写成后者是 DNS 直接解析失败，
         //   报错信息里根本看不出是「global 这个特例」
-        // ⚠ 快速模式的路径里**没有 projects 那一段**（Express 的 Key 自己带项目），
-        //   照完整模式的形状拼会 404
+        // ⚠ **location 在快速模式下也真的生效**（进 hostname，不是摆设）——
+        //   我原来在这里写过「快速模式只能是 global」，那是错的。
+        //   参考酒馆 `src/endpoints/google.js`：两种模式都是
+        //   `region === 'global' ? 'https://aiplatform.googleapis.com/v1'
+        //                        : https://${region}-aiplatform.googleapis.com/v1`
+        // ⚠ 快速模式的路径里**默认没有 projects 那一段**（Express 的 Key 自己带项目），
+        //   照完整模式的形状拼会 404；但**填了项目就该带上** ——
+        //   酒馆就是这么做的（`vertexai_express_project_id` 有值就走 projects 形状）。
+        //
+        // ⚠⚠ **项目 ID 一律从 Service Account JSON 里取**（`project_id`），
+        //   酒馆是 `getProjectIdFromServiceAccount()`，不让用户手填。
+        //   我第一版要求手填 ⇒ 不填就拼出 `/v1/projects//locations/...`，
+        //   服务端回 404，而报错里看不出是「少了项目」。见 stAiVertexProject()。
+        //
+        // ⚠⚠ **两个模式都要发 safetySettings，而且阈值是 `OFF`。**
+        //   不发的话 Gemini 按默认策略拦，角色扮演内容很容易撞上 ——
+        //   表现是 `candidates` **根本不存在**（或 `finishReason: SAFETY`），
+        //   前端拿到空串，看着像「AI 没说话」。酒馆的 GEMINI_SAFETY / VERTEX_SAFETY
+        //   全是 `threshold: 'OFF'`，Vertex 还多 5 类（含 JAILBREAK 与 IMAGE_*）。
         // ==========================================================================
 
         // 模型名归一：用户可能从文档里连前缀一起抄过来。带前缀拼进 URL 会 404，
@@ -17072,6 +17188,20 @@
                 .replace(/^publishers\/google\/models\//, '');
         }
 
+        // 项目 ID：**用户填了就用用户的，没填就从 Service Account JSON 里取**。
+        // 酒馆就是这么做的（`getProjectIdFromServiceAccount()` 直接读 `project_id`），
+        // 界面上根本没有让用户手填项目这一格。
+        //
+        // ⚠ 两处都不给就是空串 ⇒ URL 变成 `/v1/projects//locations/global/...`，
+        //   服务端回 404，而报错只说「找不到」，看不出是「少了项目」。
+        //   所以 stAiReady() 里还有一道「完整模式必须有项目」的明说闸门。
+        function stAiVertexProject(cfg) {
+            const typed = String((cfg && cfg.project) || '').trim();
+            if (typed) return typed;
+            const sa = stAiSaParse((cfg && cfg.saJson) || '');
+            return sa.ok ? String(sa.projectId || '').trim() : '';
+        }
+
         // 这家服务商是不是 Vertex（AI Studio 与 Vertex 共用 gemini 协议，靠这个分叉）
         function stAiIsVertex(cfg) {
             const p = AI_PROVIDERS.find(x => x.value === (cfg && cfg.provider)) || {};
@@ -17079,9 +17209,14 @@
             return /aiplatform|vertex/.test(String((cfg && cfg.baseUrl) || '').toLowerCase());
         }
 
+        // 区域。两种模式都真的用它 —— 进 hostname（`global` 是唯一不带前缀的特例）
+        function stAiGeminiLoc(cfg) {
+            return String((cfg && cfg.location) || 'global').trim() || 'global';
+        }
+
         function stAiGeminiHost(cfg) {
             if (!stAiIsVertex(cfg)) return 'https://generativelanguage.googleapis.com';
-            const loc = String((cfg && cfg.location) || 'global').trim() || 'global';
+            const loc = stAiGeminiLoc(cfg);
             return loc === 'global'
                 ? 'https://aiplatform.googleapis.com'
                 : 'https://' + loc + '-aiplatform.googleapis.com';
@@ -17090,12 +17225,15 @@
         function stAiGeminiPath(cfg, model, action) {
             const m = stAiGeminiModel(model);
             if (!stAiIsVertex(cfg)) return '/v1beta/models/' + m + ':' + action;
-            if ((cfg && cfg.authMode) === 'sa') {
-                const loc = String(cfg.location || 'global').trim() || 'global';
-                const proj = String(cfg.project || '').trim();
+            const loc = stAiGeminiLoc(cfg);
+            const proj = stAiVertexProject(cfg);
+            // 有项目就走带 `projects/` 的形状 —— 完整模式**必须**有（没项目服务端只会回 404）；
+            // 快速模式填了也认（酒馆的 `vertexai_express_project_id` 就是这个意思）
+            if (proj) {
                 return '/v1/projects/' + proj + '/locations/' + loc +
                     '/publishers/google/models/' + m + ':' + action;
             }
+            // 没项目 = Express 的短路径（Key 自己带项目）
             return '/v1/publishers/google/models/' + m + ':' + action;
         }
 
@@ -17110,12 +17248,87 @@
         // 列模型的路径（AI Studio 与 Vertex 都是 GET models）
         function stAiGeminiModelsUrl(cfg) {
             if (!stAiIsVertex(cfg)) return 'https://generativelanguage.googleapis.com/v1beta/models';
-            if ((cfg && cfg.authMode) === 'sa') {
-                const loc = String(cfg.location || 'global').trim() || 'global';
-                const proj = String(cfg.project || '').trim();
+            const loc = stAiGeminiLoc(cfg);
+            const proj = stAiVertexProject(cfg);
+            if (proj) {
                 return stAiGeminiHost(cfg) + '/v1/projects/' + proj + '/locations/' + loc + '/publishers/google/models';
             }
             return stAiGeminiHost(cfg) + '/v1/publishers/google/models';
+        }
+
+        // 安全阈值 —— **照抄酒馆**（`src/constants.js` 的 GEMINI_SAFETY / VERTEX_SAFETY）。
+        //
+        // ⚠⚠ 不发这个字段时 Gemini 按**默认策略**拦，角色扮演内容很容易撞上，
+        //   而表现是 `candidates` **根本不存在**（或 `finishReason: 'SAFETY'`）——
+        //   前端拿到空串，看着像「AI 没说话」。第一版我一个都没发。
+        // ⚠ Vertex 比 AI Studio **多 5 类**（含 JAILBREAK 与 IMAGE_*），所以分开两份。
+        // ⚠ 阈值全是 `OFF`（酒馆就是这么写的）。⚠ 个别新模型会拒收某些类别的 OFF，
+        //   那时服务端会回 400 并点名是哪个 category —— 报错要原样带出来，别吞。
+        const ST_GEMINI_SAFETY = [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'OFF' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'OFF' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'OFF' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
+            { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'OFF' }
+        ];
+
+        const ST_VERTEX_SAFETY = [
+            { category: 'HARM_CATEGORY_IMAGE_HATE', threshold: 'OFF' },
+            { category: 'HARM_CATEGORY_IMAGE_DANGEROUS_CONTENT', threshold: 'OFF' },
+            { category: 'HARM_CATEGORY_IMAGE_HARASSMENT', threshold: 'OFF' },
+            { category: 'HARM_CATEGORY_IMAGE_SEXUALLY_EXPLICIT', threshold: 'OFF' },
+            { category: 'HARM_CATEGORY_JAILBREAK', threshold: 'OFF' }
+        ];
+
+        function stAiGeminiSafety(cfg) {
+            return ST_GEMINI_SAFETY.concat(stAiIsVertex(cfg) ? ST_VERTEX_SAFETY : []);
+        }
+
+        // 为什么「一个字都没有」？把服务端给的**原因**翻出来。
+        //
+        // ⚠ 空响应有三种完全不同的成因，前端一律返回空串就是**把失败伪装成成功**
+        //   （RULES 六之二十七）：① 提示词被拦（`promptFeedback.blockReason`，
+        //   这时**没有 candidates**）；② 生成被中断（`finishReason` 是 SAFETY /
+        //   RECITATION / MAX_TOKENS / OTHER，不是 STOP）；③ 真的是空回复。
+        function stAiGeminiWhy(data) {
+            if (!data || typeof data !== 'object') return '';
+            const fb = data.promptFeedback;
+            if (fb && fb.blockReason) {
+                return '提示词被 Google 的安全策略拦下了（promptFeedback.blockReason = ' + fb.blockReason + '）';
+            }
+            const cands = Array.isArray(data.candidates) ? data.candidates : [];
+            if (!cands.length) return '响应里没有 candidates（多半也是被安全策略拦了）';
+            const fr = cands[0] && cands[0].finishReason;
+            if (fr && fr !== 'STOP') {
+                if (fr === 'MAX_TOKENS') return '生成被 maxOutputTokens 截断了（finishReason = MAX_TOKENS）';
+                return '生成被中断（finishReason = ' + fr + '）';
+            }
+            return '';
+        }
+
+        // 空响应的原因，按协议分派 —— 三种协议的字段名又不一样：
+        //   · gemini    —— promptFeedback.blockReason / candidates[0].finishReason
+        //   · anthropic —— stop_reason（max_tokens / refusal）
+        //   · openai    —— choices[0].finish_reason（content_filter / length）
+        //
+        // ⚠⚠ 存在的意义：**空串是个合法返回值**，所以「被拦了」和「真的回了空」在
+        //   调用方看起来**一模一样**。不把原因翻出来，用户看到的就是「AI 没说话」，
+        //   而真正发生的是「被安全策略拦了」—— 这就是把失败伪装成成功（RULES 六之二十七）。
+        // ⚠ 只在**正文为空**时才追问原因：正常 STOP 但内容为空，那是真的空回复，不算错。
+        function stAiWhyEmpty(proto, data) {
+            if (!data || typeof data !== 'object') return '';
+            if (proto === 'gemini') return stAiGeminiWhy(data);
+            if (proto === 'anthropic') {
+                const sr = data.stop_reason;
+                if (sr === 'refusal') return '模型拒绝了这次请求（stop_reason = refusal）';
+                if (sr === 'max_tokens') return '生成被 max_tokens 截断了（stop_reason = max_tokens）';
+                return '';
+            }
+            const ch = data.choices && data.choices[0];
+            const fr = ch && ch.finish_reason;
+            if (fr === 'content_filter') return '内容被服务商的内容过滤拦下了（finish_reason = content_filter）';
+            if (fr === 'length') return '生成被 max_tokens 截断了（finish_reason = length）';
+            return '';
         }
 
         // OpenAI 形状的 messages → Gemini 的 contents + systemInstruction
@@ -17145,6 +17358,8 @@
             const mt = Math.trunc(stAiNum(o.maxTokens, cfg.maxTokens, 64, 32000));
             if (mt > 0) gc.maxOutputTokens = mt;
             body.generationConfig = gc;
+            // ⚠ 一定要带 —— 不带就等于把拦截阈值交给 Google 的默认值（见上面那串注释）
+            body.safetySettings = stAiGeminiSafety(cfg);
             return body;
         }
 
@@ -17198,12 +17413,27 @@
             return buf;
         }
 
-        async function stAiSaAccessToken(saJson, force) {
+        // Service Account 的**概览**：给界面显示「存的是哪一份」，也用来判「能不能用」。
+        // ⚠ 只回 client_email / project_id —— **绝不把 private_key 往界面送**。
+        function stAiSaSummary(saJson) {
             const sa = stAiSaParse(saJson);
-            if (!sa.ok) throw new Error(sa.why);
-            const now = Math.floor(Date.now() / 1000);
-            const hit = stAiSaTokens[sa.email];
-            if (!force && hit && hit.exp - 60 > now) return hit.token;
+            if (!sa.ok) return { ok: false, why: sa.why, email: '', projectId: '', label: '' };
+            return {
+                ok: true,
+                why: '',
+                email: sa.email,
+                projectId: String(sa.projectId || ''),
+                label: sa.email + (sa.projectId ? ' · ' + sa.projectId : '')
+            };
+        }
+
+        // PEM（PKCS#8）→ CryptoKey。单独抽出来是为了「验证 JSON」能只做到这一步
+        // （不换 token、不发任何网络请求）就把私钥的问题报出来。
+        // ⚠ 导入结果按 client_email 缓存 —— importKey 不便宜，而每次发消息都要签一次
+        let stAiSaKeys = {};
+
+        async function stAiSaKey(sa) {
+            if (stAiSaKeys[sa.email]) return stAiSaKeys[sa.email];
             if (!(typeof crypto !== 'undefined' && crypto.subtle)) {
                 throw new Error('这个环境没有 WebCrypto（或不是安全上下文），完整模式签不了 JWT。' +
                     '换「快速模式」，或用 https 打开本页。');
@@ -17215,6 +17445,16 @@
             } catch (e) {
                 throw new Error('私钥读不出来（private_key 不是 PKCS#8 PEM？）：' + ((e && e.message) || e));
             }
+            stAiSaKeys[sa.email] = key;
+            return key;
+        }
+
+        // 签一个 RS256 的 JWT。claims 与酒馆 `generateJWTToken()` 逐字段一致：
+        //   iss = client_email · scope = cloud-platform · aud = token 端点 · iat / exp(1h)
+        // ⚠ `aud` 必须**等于**真正去换 token 的那个地址（用 sa.tokenUri 而不是写死），
+        //   否则服务端会以 `invalid_grant: audience mismatch` 拒收
+        async function stAiSaJwt(sa, now) {
+            const key = await stAiSaKey(sa);
             const signingInput = stAiB64UrlText(JSON.stringify({ alg: 'RS256', typ: 'JWT' })) + '.' +
                 stAiB64UrlText(JSON.stringify({
                     iss: sa.email,
@@ -17225,14 +17465,42 @@
                 }));
             const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key,
                 new TextEncoder().encode(signingInput));
-            const jwt = signingInput + '.' + stAiB64Url(sig);
+            return signingInput + '.' + stAiB64Url(sig);
+        }
 
-            const resp = await fetch(sa.tokenUri, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'grant_type=' + encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer') +
-                    '&assertion=' + encodeURIComponent(jwt)
-            });
+        // ⚠ 「发不出去」和「发出去被拒」要分开说 —— 完整模式最容易卡在**前者**：
+        //   浏览器直连 oauth2.googleapis.com 要是被 CORS 挡住，`fetch` 抛的是
+        //   `TypeError: Failed to fetch`，跟「Key 不对」长得完全不一样。
+        function stAiIsFetchBlocked(e) {
+            const m = (e && e.message) ? String(e.message) : String(e);
+            return (e instanceof TypeError) ||
+                /Failed to fetch|NetworkError|Load failed|CORS|ERR_/i.test(m);
+        }
+
+        async function stAiSaAccessToken(saJson, force) {
+            const sa = stAiSaParse(saJson);
+            if (!sa.ok) throw new Error(sa.why);
+            const now = Math.floor(Date.now() / 1000);
+            const hit = stAiSaTokens[sa.email];
+            if (!force && hit && hit.exp - 60 > now) return hit.token;
+            const jwt = await stAiSaJwt(sa, now);
+
+            let resp;
+            try {
+                resp = await fetch(sa.tokenUri, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'grant_type=' + encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer') +
+                        '&assertion=' + encodeURIComponent(jwt)
+                });
+            } catch (e) {
+                if (stAiIsFetchBlocked(e)) {
+                    throw new Error('换 access token 的请求**发不出去**（' + ((e && e.message) || e) + '）—— ' +
+                        '这一步要浏览器直连 ' + sa.tokenUri + '，被 CORS / 网络挡了。' +
+                        '完整模式依赖浏览器直连 Google，被挡就只能用「快速模式」。');
+                }
+                throw e;
+            }
             if (!resp.ok) {
                 let t = '';
                 try { t = (await resp.text()).slice(0, 300); } catch (e) {}
@@ -17421,7 +17689,19 @@
                     : { 'Authorization': 'Bearer ' + c.apiKey };
                 url = stAiJoin(c.baseUrl, '/models');
             }
-            const resp = await fetch(url, { headers: headers });
+            let resp;
+            try {
+                resp = await fetch(url, { headers: headers });
+            } catch (e) {
+                // ⚠ 「连不出去」和「服务端拒绝」是两件事，文案要分开 ——
+                //   否则用户会去改 Key，而真正的问题是 CORS
+                if (stAiIsFetchBlocked(e)) {
+                    throw new Error('列模型的请求发不出去（' + ((e && e.message) || e) + '）—— ' +
+                        '这一步要浏览器直连 ' + url.split('/v1')[0] +
+                        '，被 CORS / 网络挡了');
+                }
+                throw e;
+            }
             if (!resp.ok) {
                 let t = '';
                 try { t = (await resp.text()).slice(0, 200); } catch (e) {}
@@ -17481,6 +17761,12 @@
                 }
                 const data = await resp.json();
                 const full = stAiFullText(plan.proto, data);
+                // ⚠ 正文为空时**追问原因**再返回 —— 空串是合法返回值，所以「被拦了」
+                //   和「真的空回复」在调用方看来一模一样（见 stAiWhyEmpty）
+                if (!full) {
+                    const why = stAiWhyEmpty(plan.proto, data);
+                    if (why) throw new Error(why);
+                }
                 if (o.onDelta) o.onDelta(full);
                 return full;
             } finally {
@@ -17492,6 +17778,9 @@
             const reader = resp.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '', full = '';
+            // ⚠ 留一份**最后一条** JSON：空输出时它的 finishReason 就是唯一线索
+            //   （流式下每一行都是一个完整响应，最后那行带着结束原因）
+            let last = null;
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
@@ -17505,9 +17794,15 @@
                     if (!payload || payload === '[DONE]') continue;
                     let json = null;
                     try { json = JSON.parse(payload); } catch (e) { continue; }
+                    last = json;
                     const d = stAiSseText(proto, json);
                     if (d) { full += d; if (onDelta) onDelta(full); }
                 }
+            }
+            // 一个字都没出来的流式响应，同样要问原因（被安全策略拦时服务端就返这样一段）
+            if (!full && last) {
+                const why = stAiWhyEmpty(proto, last);
+                if (why) throw new Error(why);
             }
             return full;
         }
@@ -27928,6 +28223,8 @@
             document.getElementById('apig-project').value = apigProjectDraft;
             document.getElementById('apig-location').value = apigLocationDraft;
             document.getElementById('apig-sa').value = apigSaDraft;
+            // 存过就进掩码态（不把私钥明文摊在屏幕上）。⚠ 必须在灌完值之后调
+            apigSaRender();
             syncApigProviderUI();
             document.getElementById('apig-api-key').value = apiGlobal.apiKey || '';
             // 模型：**可手输**的 input + datalist。把缓存里拉过的列表灌进 datalist，
@@ -27978,7 +28275,12 @@
             const saF = document.getElementById('apig-sa-field');
             const keyF = document.getElementById('apig-key-field');
             const note = document.getElementById('apig-vertex-note');
-            // 区域两种模式都要（完整模式进 URL，快速模式只能是 global）
+            // 区域**两种模式都要**：完整模式进 URL 的 `locations/{loc}`，
+            // 快速模式进 hostname（`{loc}-aiplatform.googleapis.com`）。
+            // ⚠ 我原来在这里写过「快速模式只能是 global」——**那是错的**，
+            //   参考酒馆 src/endpoints/google.js：两种模式都是
+            //   `region === 'global' ? 'https://aiplatform.googleapis.com/v1'
+            //                        : https://${region}-aiplatform.googleapis.com/v1`
             if (locF) locF.hidden = false;
             if (projF) projF.hidden = (mode !== 'sa');
             if (saF) saF.hidden = (mode !== 'sa');
@@ -27986,12 +28288,17 @@
             if (keyF) keyF.hidden = (mode === 'sa');
             if (note) {
                 note.innerHTML = (mode === 'sa')
-                    ? '完整模式：把 Service Account 密钥 JSON 整个粘进来。' +
+                    ? '完整模式：把 Service Account 密钥 JSON 整个粘进来（粘完点「验证 JSON」分步体检）。' +
                       '应用会在<b>本机</b>用私钥签一个 JWT 去换 access token（私钥不上传、不落盘）。' +
-                      '⚠ 区域要跟项目对得上；<code>global</code> 的端点<b>不带地区前缀</b>。'
+                      '⚠ <b>项目 ID 不用手填</b> —— 自动取 JSON 里的 <code>project_id</code>，' +
+                      '填了就以你填的为准。' +
+                      '⚠ <code>global</code> 的端点<b>不带地区前缀</b>；别的区域才带。'
                     : '快速模式：只填一个 API Key（Express mode）。' +
-                      '⚠ 快速模式<b>只支持 <code>global</code></b>，填别的区域会 404。';
+                      '⚠ 区域<b>照样生效</b> —— <code>global</code> 走 <code>aiplatform.googleapis.com</code>，' +
+                      '别的区域走 <code>{区域}-aiplatform.googleapis.com</code>。';
             }
+            // 切回「完整模式」时按草稿决定是掩码态还是编辑态（存过就掩码）
+            apigSaRender();
         }
 
         function updateApigStreamLabel() {
@@ -28045,6 +28352,8 @@
             aiPersist();
             syncAiCfgSourceUI();
             refreshStAiCfgViews();
+            // 保存完立刻回到掩码态：刚粘完的私钥不该继续摊在屏幕上
+            apigSaRender();
             apigStatus(ok ? '✅ 已保存，全站立即生效' : '⚠️ 存不进 localStorage（隐私模式？），本次会话内有效',
                 ok ? 'ok' : 'warn');
         }
@@ -28056,7 +28365,14 @@
             if (p.vertex) {
                 if (cfg.authMode === 'sa') {
                     if (!cfg.saJson) return '完整模式要先把 Service Account JSON 粘进去';
-                    if (!cfg.project) return '完整模式要填项目 ID project（密钥 JSON 里的 project_id）';
+                    const sa = stAiSaParse(cfg.saJson);
+                    if (!sa.ok) return sa.why;
+                    // ⚠ 项目 ID **不用手填** —— 没填就从 JSON 的 project_id 取（stAiVertexProject）。
+                    //   两处都没有才拦：否则拼出 `/v1/projects//locations/...` 拿一个 404 回来，
+                    //   报错里看不出是「少了项目」
+                    if (!stAiVertexProject(cfg)) {
+                        return '这份 Service Account JSON 里没有 project_id，也没填「项目 ID」—— 完整模式的 URL 必须有项目';
+                    }
                 } else if (!cfg.apiKey) {
                     return '快速模式要填 API Key';
                 }
@@ -28066,6 +28382,125 @@
             if (!cfg.baseUrl) return '请填写服务商或 Base URL';
             if (!cfg.apiKey && !stAiIsLocal(cfg.baseUrl)) return '请先填写 API Key';
             return '';
+        }
+
+        // ── SA JSON 的掩码态 ────────────────────────────────────────────
+        // 存过之后只显示「存的是哪一份」，不把私钥明文摊在屏幕上（照酒馆的做法）。
+        // ⚠ 只是把 textarea **藏起来**，它的 value 一直留着 ⇒ apigGather() 读到的还是
+        //   那份 JSON，「打开面板看一眼再点保存」不会把密钥弄丢。
+        function apigSaRender() {
+            const box = document.getElementById('apig-sa-masked');
+            const ta = document.getElementById('apig-sa');
+            const who = document.getElementById('apig-sa-who');
+            if (!box || !ta) return;
+            const sum = stAiSaSummary(apigSaDraft);
+            if (sum.ok) {
+                box.hidden = false;
+                ta.hidden = true;
+                if (who) who.textContent = '已保存：' + sum.label;
+            } else {
+                box.hidden = true;
+                ta.hidden = false;
+            }
+        }
+
+        // 「换一份」：把 textarea 显出来并**全选**（方便直接粘覆盖）。
+        // ⚠ **不清空** —— 清空之后用户要是改主意直接点保存，密钥就没了。
+        //   真粘一份新的进来时 oninput 会覆盖掉
+        function apigSaEditMode() {
+            const ta = document.getElementById('apig-sa');
+            const box = document.getElementById('apig-sa-masked');
+            const out = document.getElementById('apig-verify-out');
+            if (box) box.hidden = true;
+            if (out) out.hidden = true;
+            if (ta) {
+                ta.hidden = false;
+                try { ta.focus(); ta.select(); } catch (e) {}
+            }
+        }
+
+        // ── 「验证 JSON」：**分步**做，每步失败都说清是哪一步、为什么 ──────────
+        // 酒馆那个按钮就是这个用意：把「JSON 粘错了」「私钥不对」「被 CORS 挡了」
+        // 「项目 / 区域 / 权限不对」这四种**完全不同的**失败分开。
+        // 笼统一句「请求失败」等于什么都没说 —— 用户没法据此改任何东西。
+        //
+        // ① ② ③ ④ 全是**纯本地**（不发一个网络请求）：JSON 语法 → 必填字段 →
+        // 私钥导入 WebCrypto → 签 JWT。⑤ 才是第一次真的发请求。
+        async function apigVerifyJson() {
+            const out = document.getElementById('apig-verify-out');
+            const btn = document.getElementById('apig-verify-btn');
+            if (!out) return;
+            const raw = apigSaDraft || '';
+            const lines = [];
+            const show = () => { out.hidden = false; out.innerHTML = lines.join('<br>'); };
+            const ok = t => { lines.push('✅ ' + escapeHtml(t)); show(); };
+            const no = t => { lines.push('❌ ' + escapeHtml(t)); show(); };
+            const tip = t => { lines.push('　　⚠ ' + t); show(); };
+            if (btn) { btn.disabled = true; btn.textContent = '验证中…'; }
+            show();
+            try {
+                // ① JSON 语法
+                let obj = null;
+                try { obj = JSON.parse(String(raw || '')); } catch (e) { obj = null; }
+                if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+                    no('① JSON 不合法 —— 多半是粘漏了开头的 { 或结尾的 }');
+                    tip('密钥文件有 2~3 KB，用「复制全部」再粘，别手动划选');
+                    return;
+                }
+                ok('① JSON 合法');
+
+                // ② 必填字段
+                const sa = stAiSaParse(raw);
+                if (!sa.ok) { no('② ' + sa.why); return; }
+                ok('② 必填字段齐（client_email / private_key）');
+                if (!sa.projectId) tip('这份 JSON 里没有 project_id —— 完整模式的 URL 需要它，请手动填「项目 ID」');
+
+                // ③ 私钥导入（纯本地）
+                try {
+                    await stAiSaKey(sa);
+                } catch (e) {
+                    no('③ 私钥导入失败：' + ((e && e.message) || e));
+                    tip('前面两步都过了，所以问题**只在 private_key 本身**');
+                    return;
+                }
+                ok('③ 私钥能导入 WebCrypto（PKCS#8 · RS256）');
+
+                // ④ 签 JWT（纯本地）
+                try {
+                    await stAiSaJwt(sa, Math.floor(Date.now() / 1000));
+                } catch (e) {
+                    no('④ 签 JWT 失败：' + ((e && e.message) || e));
+                    return;
+                }
+                ok('④ JWT 签得出来（本地签名，没发网络请求）');
+
+                // ⑤ 换 access token —— 第一次真的发请求
+                let token = '';
+                try {
+                    token = await stAiSaAccessToken(raw, true);
+                } catch (e) {
+                    no('⑤ 换 access token 失败：' + ((e && e.message) || e));
+                    tip('走到这一步说明 <b>JSON 和私钥都没问题</b>，是网络 / 凭证这一层');
+                    return;
+                }
+                ok('⑤ 换到 access token（' + escapeHtml(String(token).slice(0, 12)) + '…）');
+
+                // ⑥ 真列一次模型 —— 验证项目 / 区域 / 权限
+                const cfg = apigGather();
+                cfg.authMode = 'sa';
+                cfg.saJson = raw;
+                try {
+                    const ids = await stAiFetchModels(cfg);
+                    ok('⑥ 列模型成功（' + ids.length + ' 个）—— 项目 / 区域 / 权限都对得上');
+                    tip('可以点「保存」了');
+                } catch (e) {
+                    no('⑥ 列模型失败：' + ((e && e.message) || e));
+                    tip('token 已经拿到了，所以问题在 <b>项目 ID / 区域 / 该账号的权限</b>' +
+                        '（还要确认这个 API 允许浏览器直连）');
+                }
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '✅ 验证 JSON（分步）'; }
+            }
         }
 
         async function apigFetchModels() {
@@ -28438,7 +28873,14 @@
             });
             if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (await safeErrorText(resp)));
             const data = await resp.json();
-            return stAiFullText(plan.proto, data);
+            const full = stAiFullText(plan.proto, data);
+            // ⚠ 空正文要问原因（同 stAiChat）—— 本页以前是**静默返回空串**，
+            //   用户看到「AI 没说话」，而真实原因多半是被安全策略拦了
+            if (!full) {
+                const why = stAiWhyEmpty(plan.proto, data);
+                if (why) throw new Error(why);
+            }
+            return full;
         }
 
         async function streamChat(messages, onDelta) {
@@ -28456,6 +28898,10 @@
             if (!resp.body || typeof resp.body.getReader !== 'function') {
                 const data = await resp.json();
                 const full = stAiFullText(plan.proto, data);
+                if (!full) {
+                    const why = stAiWhyEmpty(plan.proto, data);
+                    if (why) throw new Error(why);
+                }
                 if (onDelta) onDelta(full);
                 return full;
             }

@@ -493,3 +493,35 @@ const retryable = (opts.retryable !== undefined) ? opts.retryable : !isUser;
 3. ⚠ **半成品 `cfg` 要兜底**：`apigGather()` / `getAiConfigFromInputs()` 返回的对象里**没有 `proto`**
    （协议是推导出来的）⇒ 一律过一遍 `stAiEnsureProto(cfg)`。少了这步，gemini / vertex 会被
    当成 openai 发出去（拿 Bearer 去打 Google、URL 里也不带模型名）。
+
+### 第十九轮：照**酒馆（SillyTavern）**对出来的六处
+
+用户贴了一张酒馆的 Vertex 配置截图说「这部分有问题」。去读酒馆的 `src/endpoints/google.js` /
+`src/constants.js` / connection-manager 前端，逐条对差异 —— **对出六处，其中一处是「完整模式根本跑不起来」**。
+
+| # | 原来 | 改成 | 不改会怎样 |
+|---|---|---|---|
+| 1 | **不发 `safetySettings`** | 两个模式都发；AI Studio 5 条 + Vertex 另 5 条（含 `JAILBREAK`），阈值一律 **`OFF`** | Gemini 按**默认策略**拦，角色扮演很容易撞上。表现**不是报错**：`candidates` 根本不存在 ⇒ 前端拿到空串 ⇒ 用户以为「模型没理我」 |
+| 2 | 项目 ID 要**手填**，不填就拼出 `/v1/projects//locations/…` | 手填优先，**没填就从 SA JSON 的 `project_id` 派生**（酒馆的 `getProjectIdFromServiceAccount()`）；两处都没有就**明说「缺项目」并拒发** | 服务端回 404，而报错里**看不出是少了项目** |
+| 3 | `stAiReady()` **没有 Vertex 分支** | 加 `stAiIsVertex(cfg)` 分支：完整模式看 SA JSON 而不是看 Key | ⚠⚠ **完整模式永远跑不起来** —— 它 `apiKey` 本来就是空的（鉴权走 token），通用那条「没填 Key」把它拦下。而这条路径**一条断言都没有**，所以 105 条全绿的套件里完全隐身 |
+| 4 | `stAiWhyEmpty()` **定义了、零调用点** | 接进 `stAiChat` / `streamChat` / `nonStreamChat` | 「空响应要说得出原因」只写在函数里，实际路径上没有任何人问 |
+| 5 | SA JSON 每次打开面板都**明文摊在 textarea 里** | 存过之后显示**掩码摘要**（`client_email · project_id`）+ 「🔑 换一份」+ **「✅ 验证 JSON」分步验证** | 私钥反复明文暴露；且用户没法自查「卡在哪一步」（CORS？凭证？） |
+| 6 | 注释写「快速模式只能是 `global`」 | **错的**：酒馆 express 模式把 region 拼进 hostname ⇒ location 在快速模式下**真的生效** | 注释是错的，界面就不敢给这一格 |
+
+⚠ **`safetySettings` 的阈值是 `OFF` 不是 `BLOCK_NONE`** —— 照抄酒馆 `GEMINI_SAFETY` / `VERTEX_SAFETY`
+的原值。`BLOCK_NONE` 看起来更「对」，但那是另一个语义档位。
+
+⚠⚠ **掩码态只藏不给**：`apigGather()` 在掩码态下**必须仍拿得到**那份 JSON（`value` 一直留着）。
+改成「掩码时清空 textarea」的话，用户**打开面板看一眼再点保存**，密钥就**静默**没了。
+
+⚠ **「验证 JSON」六步**：① JSON 语法 → ② 必填字段 → ③ 私钥导入 WebCrypto → ④ 签 JWT
+（**前四步纯本地、不发一个网络请求**）→ ⑤ 换 access token → ⑥ 列模型。
+每步失败都说清是哪一步 —— 尤其要把「**被浏览器 CORS 挡住**」和「**凭证不对**」分开，
+否则用户会一直去改 Key，而真正的问题是 CORS。
+
+⚠ **列模型的报错也分了这两类**（`stAiFetchModels` 里 `stAiIsFetchBlocked(e)` 那一支）——
+这是第 ⑥ 步能说话的前提。
+
+⚠ **一条做不到的事**：想在本地实测三个 Google 端点的 CORS，但沙箱代理只放行 GitHub
+（`oauth2.googleapis.com` / `aiplatform` / `generativelanguage` **全部超时**）⇒ 端到端实测做不了。
+方案因此改成「**让产品自己把卡在哪一步说出来**」，而不是替用户猜能不能直连。

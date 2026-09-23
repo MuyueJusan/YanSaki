@@ -12,16 +12,17 @@
 //   · Vertex 完整模式（Service Account）—— 浏览器里用 WebCrypto 签 RS256 JWT 换
 //     access token（oauth2.googleapis.com/token），路径带 projects/{p}/locations/{l}
 //
-// 十一段：
+// 十九段：
 //   A. 页面加载零报错
 //   B. 服务商表（合并 / 分组 / custom 留末位 / 只有 custom 允许不写死 proto）
 //   C. 协议判定（⚠ 必须测 **resolver** `stAiProtoOf`，只测 `stAiGuessProto` 会漏）
 //   C2. 半成品 cfg（全局面板 apigGather 不给 proto ⇒ 兜底那一步必须存在）
 //   D. gemini URL 三条路（快速模式**不带** projects/，完整模式带）
-//   E. gemini 请求体 + 取文（contents 非空 / 首条必须 user / 被安全拦截不炸）
+//   E. gemini 请求体 + 取文 + **safetySettings** + **空响应为什么**（第二轮补的）
 //   F. Service Account 解析与换 token（假私钥必须抛错，不能静默成功）
 //   G. 弹窗 UI：Vertex 显隐 + 手输模型名
-//   H. apigReadyCheck 的必填判据（两种模式各自的必填项）
+//   G2. SA JSON 掩码态 + 「验证 JSON」分步（第二轮补的）
+//   H. apigReadyCheck 的必填判据（两种模式各自的必填项 + project 派生）
 //   I. 主页【ai对话】走共用协议层（第十七轮并过去的）
 //   J. 收尾
 //
@@ -359,7 +360,20 @@ class CDP {
         text: stAiFullText('gemini', { candidates:[{ content:{ parts:[{text:'AB'},{text:'CD'},{thought:true}] } }] }),
         sse: stAiSseText('gemini', { candidates:[{ content:{ parts:[{text:'X'}] } }] }),
         empty: stAiFullText('gemini', {}),
-        blocked: stAiFullText('gemini', { promptFeedback:{ blockReason:'SAFETY' } })
+        blocked: stAiFullText('gemini', { promptFeedback:{ blockReason:'SAFETY' } }),
+        // 安全阈值（照抄酒馆的 GEMINI_SAFETY / VERTEX_SAFETY）
+        safety: plan.body.safetySettings,
+        safetyVertex: stAiRequest(Object.assign({}, cfg, { provider:'vertex', authMode:'key',
+          baseUrl:'https://aiplatform.googleapis.com' }), [{role:'user',content:'hi'}], {stream:false})
+          .body.safetySettings,
+        // 「为什么一个字都没有」—— 空响应必须说得出原因
+        whyBlocked: stAiWhyEmpty('gemini', { promptFeedback:{ blockReason:'SAFETY' } }),
+        whyNoCand: stAiWhyEmpty('gemini', {}),
+        whySafety: stAiWhyEmpty('gemini', { candidates:[{ finishReason:'SAFETY' }] }),
+        whyMax: stAiWhyEmpty('gemini', { candidates:[{ finishReason:'MAX_TOKENS' }] }),
+        whyStop: stAiWhyEmpty('gemini', { candidates:[{ finishReason:'STOP' }] }),
+        whyFilter: stAiWhyEmpty('openai', { choices:[{ finish_reason:'content_filter' }] }),
+        whyRefusal: stAiWhyEmpty('anthropic', { stop_reason:'refusal' })
       };
     })()`);
     check('gemini plan 带 x-goog-api-key', body.keyHeader, 'K');
@@ -378,6 +392,37 @@ class CDP {
     check('SSE 取文', body.sse, 'X');
     check('空响应取文不炸', body.empty, '');
     check('被安全拦截时取文不炸', body.blocked, '');
+    // ⚠⚠ safetySettings：不发它 Gemini 就按**默认策略**拦，角色扮演很容易撞上，
+    //   而表现是 candidates 根本不存在 ⇒ 前端拿到空串、看着像「AI 没说话」
+    check('⚠ 请求体带 safetySettings（不发就会被默认策略拦）',
+      body.safety, v => Array.isArray(v) && v.length === 5, '5 条');
+    // ⚠⚠ 取元素一律 `(x || [])` —— 注入把它整个删掉时，`undefined.every` 会抛，
+    //   套件会**当场炸掉、连汇总行都没有**，反向测试拿不到「红了几条」，
+    //   那一针就等于白跑（RULES 六之二十六：新断言要崩不掉）。
+    // ⚠⚠ **但 `[].every(...)` 恒为 `true`** —— 光加 `|| []` 会把这条变成
+    //   「**天生为真**」：整个字段被删掉时它**照样绿**（第十九轮反向测试 R3 实测：
+    //   注入删掉 `body.safetySettings` 之后，这一条没红，而它名字里写的正是这件事）。
+    //   ⇒ 形状必须是「**数出来跟期望比**」：字段没了 ⇒ 0 ≠ 5 ⇒ 红；
+    //     阈值写错 ⇒ 少于 5 条是 OFF ⇒ 红。**既崩不掉、也不会永远为真。**
+    check('⚠ 阈值全是 OFF（照抄酒馆，不是 BLOCK_NONE）',
+      (body.safety || []).filter(x => x && x.threshold === 'OFF').length, 5);
+    check('⚠ Vertex 比 AI Studio 多 5 类（含 JAILBREAK）',
+      body.safetyVertex, v => Array.isArray(v) && v.length === 10, '10 条');
+    check('⚠ Vertex 那份里有 HARM_CATEGORY_JAILBREAK',
+      (body.safetyVertex || []).some(x => x.category === 'HARM_CATEGORY_JAILBREAK'), true);
+    // 空响应必须说得出原因（空串是合法返回值，「被拦」和「真空」本来长得一样）
+    check('⚠ 提示词被拦 → 说出 blockReason', body.whyBlocked,
+      v => !!v && v.indexOf('SAFETY') >= 0, '含 SAFETY');
+    check('⚠ 没有 candidates → 也说得出原因', body.whyNoCand, v => !!v, '非空');
+    check('⚠ finishReason=SAFETY → 说出被中断', body.whySafety,
+      v => !!v && v.indexOf('SAFETY') >= 0, '含 SAFETY');
+    check('⚠ MAX_TOKENS → 明说是被截断', body.whyMax,
+      v => !!v && v.indexOf('MAX_TOKENS') >= 0, '含 MAX_TOKENS');
+    check('（对照）正常 STOP 不算错，返回空串', body.whyStop, '');
+    check('⚠ OpenAI 的 content_filter 也说得出来', body.whyFilter,
+      v => !!v && v.indexOf('content_filter') >= 0, '含 content_filter');
+    check('⚠ Anthropic 的 refusal 也说得出来', body.whyRefusal,
+      v => !!v && v.indexOf('refusal') >= 0, '含 refusal');
 
     section('F. Service Account 解析与换 token');
     const sa = await ev(`(async function(){
@@ -471,8 +516,106 @@ class CDP {
     check('完整模式：SA JSON 格显示', ui3.saHidden, false);
     console.log('     提示文案：' + ui3.note);
 
+    section('G2. SA JSON 掩码态 + 「验证 JSON」分步');
+
+    // 一份**形状正确**的假 Service Account（私钥是假的 ⇒ 第③步必然失败，
+    // 正好用来验证「分步」真的会停在该停的地方）
+    const FAKE_SA = await ev(`(function(){
+      return JSON.stringify({ type:'service_account',
+        client_email:'svc@demo.iam.gserviceaccount.com',
+        private_key:'-----BEGIN PRIVATE KEY----- AAAA -----END PRIVATE KEY-----',
+        token_uri:'https://oauth2.googleapis.com/token', project_id:'demo-proj' });
+    })()`);
+
+    const mask1 = await ev(`(function(){
+      document.getElementById('apig-auth-mode').value = 'sa';
+      syncApigAuthUI();
+      document.getElementById('apig-sa').value = ${JSON.stringify(FAKE_SA)};
+      apigSaDraft = ${JSON.stringify(FAKE_SA)};
+      apigSaRender();
+      const box = document.getElementById('apig-sa-masked');
+      return {
+        boxHidden: box.hidden,
+        boxDisplay: getComputedStyle(box).display,
+        taHidden: document.getElementById('apig-sa').hidden,
+        who: document.getElementById('apig-sa-who').textContent,
+        verifyBtn: !!document.getElementById('apig-verify-btn'),
+        outHidden: document.getElementById('apig-verify-out').hidden,
+        gathered: apigGather().saJson.length
+      };
+    })()`);
+    check('⚠ 存过之后进掩码态（不把私钥摊在屏幕上）', mask1.boxHidden, false);
+    check('掩码条真的是 flex 显示', mask1.boxDisplay, 'flex');
+    check('⚠ 掩码时 textarea 藏起来', mask1.taHidden, true);
+    check('⚠ 掩码条只说「存的是哪一份」（client_email · project_id）', mask1.who,
+      v => v.indexOf('svc@demo.iam.gserviceaccount.com') >= 0 && v.indexOf('demo-proj') >= 0,
+      '含邮箱与项目');
+    check('「验证 JSON」按钮在 DOM 里', mask1.verifyBtn, true);
+    check('验证结果区初始是 hidden', mask1.outHidden, true);
+    // ⚠⚠ 这条盯的是**掩码态下保存会不会抹掉密钥**：apigGather 读的是 textarea，
+    //   掩码只是 hidden、value 还在 ⇒ 拿得到。要是哪天改成「掩码时清空 textarea」，
+    //   用户打开面板看一眼再点保存，密钥就没了 —— 而且没有任何报错
+    check('⚠⚠ 掩码态下 apigGather 仍拿得到那份 JSON', mask1.gathered, v => v > 50, '>50');
+
+    const mask2 = await ev(`(function(){
+      apigSaEditMode();
+      const ta = document.getElementById('apig-sa');
+      return { taHidden: ta.hidden,
+               boxHidden: document.getElementById('apig-sa-masked').hidden,
+               stillHas: ta.value.length };
+    })()`);
+    check('「换一份」把 textarea 显出来', mask2.taHidden, false);
+    check('（对照）掩码条同时藏起来', mask2.boxHidden, true);
+    check('⚠ 「换一份」**不清空**已有内容（改主意直接保存不会丢）', mask2.stillHas, v => v > 50, '>50');
+
+    // ① 语法错 ⇒ 只报 ①，不许往下走（也不许发任何网络请求）
+    await ev(`(function(){
+      document.getElementById('apig-sa').value = '{ 这不是 JSON';
+      apigSaDraft = '{ 这不是 JSON';
+      return apigVerifyJson();
+    })()`, true);
+    const v1 = await ev(`document.getElementById('apig-verify-out').textContent`);
+    check('⚠ 语法错时报告 ① 并停下', v1, v => v.indexOf('①') >= 0 && v.indexOf('②') < 0,
+      '只有 ①');
+    check('语法错时指出「粘漏了 { 或 }」', v1, v => v.indexOf('JSON 不合法') >= 0, '含 JSON 不合法');
+
+    // ② 合法 JSON 但缺字段 ⇒ 停在 ②
+    await ev(`(function(){
+      document.getElementById('apig-sa').value = '{"foo":1}';
+      apigSaDraft = '{"foo":1}';
+      return apigVerifyJson();
+    })()`, true);
+    const v2 = await ev(`document.getElementById('apig-verify-out').textContent`);
+    check('⚠ 缺 client_email 时报告 ② 并停下', v2,
+      v => v.indexOf('②') >= 0 && v.indexOf('③') < 0, '只有 ①②');
+    check('② 的报错点名缺了哪个字段', v2, v => v.indexOf('client_email') >= 0, '含 client_email');
+
+    // ③ 形状对了但私钥是假的 ⇒ 停在 ③，且**不许**说 ⑤（说明它没乱发网络请求）
+    await ev(`(function(){
+      document.getElementById('apig-sa').value = ${JSON.stringify(FAKE_SA)};
+      apigSaDraft = ${JSON.stringify(FAKE_SA)};
+      return apigVerifyJson();
+    })()`, true);
+    const v3 = await ev(`document.getElementById('apig-verify-out').textContent`);
+    check('⚠ 假私钥时报告 ③ 并停下', v3,
+      v => v.indexOf('③') >= 0 && v.indexOf('④') < 0, '只到 ③');
+    check('⚠ ①② 在假私钥下是绿的（证明前两步真的跑过了）', v3,
+      v => v.indexOf('① JSON 合法') >= 0 && v.indexOf('② 必填字段齐') >= 0, '含 ① ②');
+    check('⚠ 没走到换 token 那一步（前四步是纯本地的）', v3, v => v.indexOf('access token') < 0,
+      '不含 access token');
+
     section('H. apigReadyCheck 的必填判据');
     const ready = await ev(`(function(){
+      // ⚠⚠ 必须用**形状正确**的假 Service Account JSON。早先这里用的是 '{}'，
+      //   那连 client_email 都没有 —— stAiSaParse 第一步就把它拒了，
+      //   于是「缺 project」「配齐」这两条**测的都是「JSON 本身不合法」**，
+      //   跟 project 一点关系没有（两条一起假绿，改了 project 逻辑也不红）
+      const saBase = { type:'service_account',
+        client_email:'svc@my-proj.iam.gserviceaccount.com',
+        private_key:'-----BEGIN PRIVATE KEY-----\\\\nAAAA\\\\n-----END PRIVATE KEY-----\\\\n',
+        token_uri:'https://oauth2.googleapis.com/token' };
+      const saWithProj = JSON.stringify(Object.assign({ project_id:'my-proj' }, saBase));
+      const saNoProjJson = JSON.stringify(saBase);
       const base = { provider:'vertex', proto:'gemini', baseUrl:'https://aiplatform.googleapis.com',
         model:'gemini-2.5-flash', apiKey:'', authMode:'key', project:'', location:'global', saJson:'' };
       return {
@@ -480,8 +623,11 @@ class CDP {
         keyOk: apigReadyCheck(Object.assign({}, base, { apiKey:'K' })),
         keyNoModel: apigReadyCheck(Object.assign({}, base, { apiKey:'K', model:'' })),
         saNoJson: apigReadyCheck(Object.assign({}, base, { authMode:'sa' })),
-        saNoProj: apigReadyCheck(Object.assign({}, base, { authMode:'sa', saJson:'{}' })),
-        saOk: apigReadyCheck(Object.assign({}, base, { authMode:'sa', saJson:'{}', project:'p' })),
+        saNoProj: apigReadyCheck(Object.assign({}, base, { authMode:'sa', saJson:saNoProjJson })),
+        saOk: apigReadyCheck(Object.assign({}, base, { authMode:'sa', saJson:saWithProj })),
+        // 新增：project 的**派生**行为（酒馆的 getProjectIdFromServiceAccount）
+        saDerived: stAiVertexProject({ authMode:'sa', saJson:saWithProj, project:'' }),
+        saTypedWins: stAiVertexProject({ authMode:'sa', saJson:saWithProj, project:'typed-p' }),
         plainNoKey: apigReadyCheck({ provider:'openai', proto:'openai', baseUrl:'https://api.openai.com/v1', apiKey:'', model:'m' }),
         plainOk: apigReadyCheck({ provider:'openai', proto:'openai', baseUrl:'https://api.openai.com/v1', apiKey:'k', model:'m' }),
         localNoKey: apigReadyCheck({ provider:'ollama', proto:'openai', baseUrl:'http://localhost:11434/v1', apiKey:'', model:'m' })
@@ -493,9 +639,51 @@ class CDP {
     check('完整模式缺 JSON → 报错', ready.saNoJson, v => !!v && v.indexOf('Service Account') >= 0, '含 Service Account');
     check('完整模式缺 project → 报错', ready.saNoProj, v => !!v && v.indexOf('project') >= 0, '含 project');
     check('完整模式配齐 → 通过', ready.saOk, '');
+    // ⚠ 这两条是**本轮新行为**的观察者：project 不再要求手填，改成从 SA JSON 的
+    //   project_id 派生（酒馆的 getProjectIdFromServiceAccount）。删掉派生那一步就红
+    check('⚠ 完整模式：project 从 SA JSON 自动派生', ready.saDerived, 'my-proj');
+    check('⚠ 完整模式：手填的 project 优先于 JSON 里的', ready.saTypedWins, 'typed-p');
     check('普通服务商缺 Key → 报错', ready.plainNoKey, v => !!v, '非空');
     check('普通服务商配齐 → 通过', ready.plainOk, '');
     check('本地地址可以不填 Key', ready.localNoKey, '');
+
+    // ⚠⚠ H2 是**补一个覆盖缺口**：`apigReadyCheck`（全局面板）被测了，而
+    //   `stAiReady`（编写器 / 【ai对话】那条路）**一条断言都没有**。
+    //   而这一轮最硬的 bug 恰好在它里面：完整模式下 `apiKey` **本来就是空的**
+    //   （鉴权走 Service Account 换的 token），通用那条「没填 Key」检查会把它拦下
+    //   ⇒ 完整模式**永远跑不起来**，而且**没有任何断言会红**。
+    section('H2. stAiReady 的 Vertex 分支（完整模式 apiKey 本来就是空的）');
+    const ready2 = await ev(`(function(){
+      const sa = JSON.stringify({ type:'service_account',
+        client_email:'svc@demo.iam.gserviceaccount.com',
+        private_key:'-----BEGIN PRIVATE KEY----- AAAA -----END PRIVATE KEY-----',
+        token_uri:'https://oauth2.googleapis.com/token', project_id:'demo-proj' });
+      const base = { mode:'own', provider:'vertex', proto:'gemini',
+        baseUrl:'https://aiplatform.googleapis.com', model:'gemini-2.5-flash',
+        apiKey:'', authMode:'key', project:'', location:'global', saJson:'' };
+      return {
+        saOk: stAiReady(Object.assign({}, base, { authMode:'sa', saJson:sa })),
+        saNoJson: stAiReady(Object.assign({}, base, { authMode:'sa' })),
+        keyNoKey: stAiReady(Object.assign({}, base)),
+        keyOk: stAiReady(Object.assign({}, base, { apiKey:'K' })),
+        noModel: stAiReady(Object.assign({}, base, { apiKey:'K', model:'' })),
+        // 项目派生在 stAiReady 里也要生效（跟 apigReadyCheck 同一套判据）
+        saNoProjAtAll: stAiReady(Object.assign({}, base, { authMode:'sa',
+          saJson: JSON.stringify({ type:'service_account',
+            client_email:'svc@demo.iam.gserviceaccount.com',
+            private_key:'-----BEGIN PRIVATE KEY----- AAAA -----END PRIVATE KEY-----',
+            token_uri:'https://oauth2.googleapis.com/token' }) }))
+      };
+    })()`);
+    check('⚠⚠ 完整模式（apiKey 空 + SA JSON 齐）→ 通过（别被「没填 Key」拦下）',
+      ready2.saOk.ok, true);
+    check('⚠ 完整模式缺 SA JSON → 明说是 Service Account',
+      ready2.saNoJson.why, v => v.indexOf('Service Account') >= 0, '含 Service Account');
+    check('（对照）快速模式缺 Key → 照样报错', ready2.keyNoKey.ok, false);
+    check('（对照）快速模式配齐 → 通过', ready2.keyOk.ok, true);
+    check('（对照）缺模型名 → 报错', ready2.noModel.ok, false);
+    check('⚠ 完整模式：JSON 里没 project_id 也没手填 → 明说缺项目',
+      ready2.saNoProjAtAll.why, v => !!v && v.indexOf('project') >= 0, '含 project');
 
     section('I. 主页【ai对话】走共用协议层');
     const eff = await ev(`(function(){

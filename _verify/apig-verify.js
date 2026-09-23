@@ -145,6 +145,16 @@ const MOCK_SRC = `
         { id: 'models/gemini-2.5-pro' }, { name: 'llama3' }]);
       return jsonResponse({ data: [] });
     }
+    // 对话请求（非 /models）。⚠ 这一支是给「空响应要说原因」那几条用的 ——
+    //   空串是个**合法**返回值，所以「被拦了」和「真的空回复」在调用方看来一模一样，
+    //   只有把服务端给的原因翻出来才分得开（RULES 六之二十七）
+    if (S.chat) {
+      if (S.chat === 'geminiBlocked') return jsonResponse({ promptFeedback: { blockReason: 'SAFETY' } });
+      if (S.chat === 'geminiSafety') return jsonResponse({ candidates: [{ finishReason: 'SAFETY' }] });
+      if (S.chat === 'openaiFilter') return jsonResponse({
+        choices: [{ finish_reason: 'content_filter', message: { content: '' } }] });
+      if (S.chat === 'reallyEmpty') return jsonResponse({ candidates: [{ finishReason: 'STOP' }] });
+    }
     return jsonResponse({ ok: true });
   };
 })();
@@ -299,7 +309,9 @@ const MOCK_SRC = `
         //   报的是「missing ) after argument list」，看着跟注释毫无关系）
         'apig-model-list','apig-auth-mode','apig-project','apig-location','apig-sa',
         'apig-location-list','apig-vertex-box','apig-vertex-note',
-        'apig-key-field','apig-project-field','apig-location-field','apig-sa-field'];
+        'apig-key-field','apig-project-field','apig-location-field','apig-sa-field',
+        // 第十九轮加的：SA JSON 掩码条 + 「验证 JSON」按钮 + 分步结果区
+        'apig-sa-masked','apig-sa-who','apig-verify-btn','apig-verify-out'];
       return ids.filter(id => !document.getElementById(id));
     })()`);
     check('弹窗字段齐全（缺的会列在这里）', fields.join(','), '', '');
@@ -519,6 +531,60 @@ const MOCK_SRC = `
     check('（对照）切回跟随之后 provider 镜像的是全局那份（不是 vertex）',
       await ev(`document.getElementById('ai-provider').value`), 'custom');
 
+    // ================= D3. 空响应要说得出原因 =================
+    section('D3. 空响应要说得出原因（测的是**接线**，不只是函数返回值）');
+
+    // ⚠⚠ 光断言 `stAiWhyEmpty()` 返回什么是不够的 —— 那只能证明**函数本身**对，
+    //   没人保证调用方真的去问了它。这里走**真请求路径**：桩返回一个空响应，
+    //   看 nonStreamChat / stAiChat 会不会把原因抛出来。
+    //   把 `stAiChat` / `nonStreamChat` 里那段 `if (!full) { … why … }` 删掉，
+    //   这一整节就全红 —— 那才是这条断言存在的意义
+    // ⚠⚠ 协议要和桩返回的**响应形状**配套：喂 OpenAI 形状的响应、却把协议设成 gemini，
+    //   那 stAiWhyEmpty 走的是 gemini 分支（读 promptFeedback / candidates）——
+    //   报出来的原因当然不对。这不是产品的 bug，是**测试自己搭错了对象**
+    const emptyWhy = async (script, provider, baseUrl) => {
+      await setScript({ chat: script, fail: '', models: 'openai' });
+      return ev(`(async function(){
+        const keep = JSON.stringify(aiConfig);
+        try {
+          aiConfig.provider = ${JSON.stringify(provider)};
+          aiConfig.baseUrl = ${JSON.stringify(baseUrl)};
+          aiConfig.apiKey = 'KK';
+          aiConfig.model = 'm';
+          aiConfig.stream = false;
+          try {
+            await nonStreamChat([{ role: 'user', content: 'hi' }]);
+            return '(没抛错)';
+          } catch (e) { return (e && e.message) || String(e); }
+        } finally { Object.assign(aiConfig, JSON.parse(keep)); }
+      })()`, true);
+    };
+    const GEM = 'https://generativelanguage.googleapis.com';
+    check('⚠ gemini 被安全策略拦 → 报出 blockReason（不是静默空串）',
+      await emptyWhy('geminiBlocked', 'gemini-native', GEM), v => v.indexOf('SAFETY') >= 0, '含 SAFETY');
+    check('⚠ gemini finishReason=SAFETY → 报出来',
+      await emptyWhy('geminiSafety', 'gemini-native', GEM), v => v.indexOf('SAFETY') >= 0, '含 SAFETY');
+    check('⚠ OpenAI content_filter → 报出来',
+      await emptyWhy('openaiFilter', 'openai', 'https://api.openai.com/v1'),
+      v => v.indexOf('content_filter') >= 0, '含 content_filter');
+    // ⚠ 对照组：**真的**空回复（finishReason = STOP）不该被当成错误 ——
+    //   没有这条的话，「见空就抛」也能把上面三条骗绿
+    check('（对照）正常 STOP 但内容为空 → 不抛错，照常返回',
+      await emptyWhy('reallyEmpty', 'gemini-native', GEM), '(没抛错)');
+
+    // 编写器那条路（stAiChat）是**另一份实现** —— 同一个坑两份实现最容易只改一份
+    await setScript({ chat: 'geminiBlocked', fail: '', models: 'openai' });
+    const chatWhy = await ev(`(async function(){
+      const cfg = { mode:'own', provider:'gemini-native', proto:'gemini', apiKey:'KK',
+        baseUrl:'https://generativelanguage.googleapis.com', model:'m', temperature:0.7,
+        maxTokens:256, stream:false };
+      try { await stAiChat([{ role:'user', content:'hi' }], { cfg: cfg, stream:false }); return '(没抛错)'; }
+      catch (e) { return (e && e.message) || String(e); }
+    })()`, true);
+    check('⚠ stAiChat 那条路也要问原因（两份实现，别只改一份）',
+      chatWhy, v => v.indexOf('SAFETY') >= 0, '含 SAFETY');
+    await setScript({ chat: '', fail: '', models: 'openai' });
+
     // ================= E. 编写器跟随的是全局 =================
     section('E. 【角色卡编写器】跟随的是全局，不是【ai对话】');
 
@@ -663,15 +729,39 @@ const MOCK_SRC = `
 
     await ev(`openApiGlobalModal()`);
     await sleep(300);
+    // ⚠ 让新加的两块**真的可见**再量 —— 藏在 display:none 里的元素照样算得出
+    //   computed background，但那就变成「量了个看不见的东西」
+    await ev(`(function(){
+      document.getElementById('apig-provider').value = 'vertex';
+      syncApigProviderUI();
+      document.getElementById('apig-auth-mode').value = 'sa';
+      syncApigAuthUI();
+      const sa = JSON.stringify({ type:'service_account',
+        client_email:'svc@demo.iam.gserviceaccount.com',
+        private_key:'-----BEGIN PRIVATE KEY----- AAAA -----END PRIVATE KEY-----',
+        token_uri:'https://oauth2.googleapis.com/token', project_id:'demo-proj' });
+      document.getElementById('apig-sa').value = sa;
+      apigSaDraft = sa;
+      apigSaRender();
+      const out = document.getElementById('apig-verify-out');
+      out.hidden = false; out.textContent = '① 占位';
+      return true; })()`);
+    await sleep(200);
     const skin = () => ev(`(function(){
       const btn = document.querySelector('#apiGlobalModal .apig-btn');
       const card = document.querySelector('#apiGlobalModal .game-card');
       const note = document.querySelector('#apiGlobalModal .apig-note');
+      const masked = document.getElementById('apig-sa-masked');
+      const vout = document.getElementById('apig-verify-out');
       return {
         btnBg: getComputedStyle(btn).backgroundColor,
         btnRadius: getComputedStyle(btn).borderTopLeftRadius,
         cardBg: getComputedStyle(card).backgroundColor,
-        noteBg: getComputedStyle(note).backgroundColor
+        noteBg: getComputedStyle(note).backgroundColor,
+        maskedBg: getComputedStyle(masked).backgroundColor,
+        maskedRadius: getComputedStyle(masked).borderTopLeftRadius,
+        voutBg: getComputedStyle(vout).backgroundColor,
+        voutRadius: getComputedStyle(vout).borderTopLeftRadius
       };
     })()`);
 
@@ -680,6 +770,8 @@ const MOCK_SRC = `
     const s0 = await skin();
     check('（对照）非复古：弹窗按钮不是 Win98 灰', s0.btnBg, v => v !== 'rgb(192, 192, 192)', '≠ #c0c0c0');
     check('（对照）非复古：弹窗按钮有圆角', s0.btnRadius, v => v !== '0px', '≠ 0px');
+    check('（对照）非复古：掩码条不是纯白', s0.maskedBg, v => v !== 'rgb(255, 255, 255)', '≠ #fff');
+    check('（对照）非复古：掩码条有圆角', s0.maskedRadius, v => v !== '0px', '≠ 0px');
 
     await ev(`document.body.classList.add('retro-mode')`);
     await sleep(250);
@@ -688,12 +780,18 @@ const MOCK_SRC = `
     check('复古：弹窗按钮圆角归零', s1.btnRadius, '0px');
     check('复古：弹窗卡片也变 Win98 灰', s1.cardBg, 'rgb(192, 192, 192)');
     check('复古：说明块底色变白', s1.noteBg, 'rgb(255, 255, 255)');
+    check('⚠ 复古：SA 掩码条也变白（别留一块浅绿毛玻璃）', s1.maskedBg, 'rgb(255, 255, 255)');
+    check('⚠ 复古：SA 掩码条圆角归零', s1.maskedRadius, '0px');
+    check('⚠ 复古：验证结果区也变白', s1.voutBg, 'rgb(255, 255, 255)');
+    check('⚠ 复古：验证结果区圆角归零', s1.voutRadius, '0px');
 
     await ev(`document.body.classList.remove('retro-mode')`);
     await sleep(250);
     const s2 = await skin();
     check('退出复古：按钮复原', s2.btnBg, v => v !== 'rgb(192, 192, 192)', '≠ #c0c0c0');
     check('退出复古：圆角也回来了', s2.btnRadius, v => v !== '0px', '≠ 0px');
+    check('⚠ 退出复古：掩码条也复原（底色不再纯白）', s2.maskedBg, v => v !== 'rgb(255, 255, 255)', '≠ #fff');
+    check('⚠ 退出复古：验证结果区也复原', s2.voutBg, v => v !== 'rgb(255, 255, 255)', '≠ #fff');
 
     await ev(`closeApiGlobalModal()`);
     await sleep(250);

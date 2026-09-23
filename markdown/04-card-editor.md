@@ -1472,6 +1472,8 @@ JSON 里都不会出现 API Key 的影子。验证套件里有一条专门盯这
 | system | 留在 `messages` 里 | 提到顶层 `system` 字段 | 抽进 `systemInstruction` |
 | 流式增量 | `choices[0].delta.content` | `content_block_delta` → `delta.text` | 每行一个完整的 `GenerateContentResponse`，取 `candidates[0].content.parts[].text` |
 | 非流式正文 | `choices[0].message.content` | `content[]` 里 `type:'text'` 的块 | 同流式（**形状完全一样**，所以共用一个取文函数） |
+| 安全策略 | — | — | `safetySettings`（第十九轮补）：AI Studio 5 条 + Vertex 另 5 条（含 `JAILBREAK`），阈值一律 **`OFF`**。⚠ 不发的话 Gemini 按**默认策略**拦，而表现**不是报错** —— `candidates` 根本不存在 ⇒ 前端拿到空串 ⇒ 看着像「模型没理我」 |
+| 空响应的原因 | `finish_reason` | `stop_reason` | `promptFeedback.blockReason` / `finishReason`（`stAiWhyEmpty` 按协议分派，三条路径都接了） |
 
 Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRoles` 一次处理掉：
 **必须以 `user` 开头**、**不能有连续的相同角色**（合并成一条）。
@@ -1505,6 +1507,13 @@ gemini 走 `stAiGeminiModelsUrl()`（AI Studio 是 `/v1beta/models`，Vertex 快
 
 ⚠ **拉模型时不能要求先有模型**（`stAiReady(cfg, {needModel:false})`）——
 那一步本来就是为了挑模型，要求先有就成了死循环。
+
+⚠⚠ **`stAiReady` 里有一个 Vertex 分支**（第十九轮补的）—— 完整模式的鉴权走 Service Account
+换的 token，**`apiKey` 本来就是空的**，所以通用那条「还没填 API Key」会把它拦下
+⇒ **完整模式一次都发不出去**。而这条路径当时**一条断言都没有**（被测的是全局面板那份
+`apigReadyCheck`，不是编写器 /【ai对话】真正走的这份）⇒ 这个 bug 在 105 条全绿的套件里**完全隐身**。
+⚠ 另外完整模式的 **project 不再要求手填**：手填优先，没填就从 SA JSON 的 `project_id` 派生；
+两处都没有时**明说「缺项目」并拒发**（不是发出去拿个 404）。
 
 ### 从回复里抠 JSON（`stAiJsonOf`）
 
