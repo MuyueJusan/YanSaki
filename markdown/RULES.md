@@ -1117,6 +1117,95 @@ body.getBoundingClientRect().height       // ~0 vs ~300
 
 ---
 
+### 六之二十 · 推送绿了、远端 blob 一致，**也不代表上线了**（第十三轮）
+
+第十二轮改完推送（`4002051`，远端 11/11 blob 一致）之后，**线上还是旧版**。这是本项目第一次
+真正卡在「部署」而不是「代码」上，值得单开一条。
+
+⚠⚠ **`git push` 退出码 0 + 远端 blob 一致，只证明「仓库对了」，不证明「站点对了」。**
+要判「上线了没」，唯一的判据是**拿线上那个文件的字节算 sha1，跟本地比**：
+
+```js
+const r = await fetch('https://<域名>/index.html?cb=' + Date.now());
+const buf = Buffer.from(await r.arrayBuffer());
+sha1(buf) === sha1(fs.readFileSync('index.html'))   // 这才叫「上线了」
+```
+
+⚠ **HEAD 请求的 `content-length` 是压缩后的**，别拿它比字节数 —— 要 GET。
+
+#### 判据：`cancelled` 要先**数 job**
+
+```
+GET /actions/runs/<id>/jobs  →  { total_count: 0, jobs: [] }
+```
+
+- **`failure`** = job 跑过、某步挂了 ⇒ 去读 step。
+- **`cancelled` 且 `total_count: 0`** = **job 从没被调度**，run 在**排队阶段**就被掐了。
+
+再加 `updated_at - created_at ≈ 1 秒`，基本可以直接指向**并发组**，不用再猜构建。
+
+⚠ 更硬的一条：`GET /repos/<o>/<r>/deployments` —— **排队阶段被取消的 run 根本不会创建
+deployment**，所以 `/deployments` 里最新那条会**停在更早的那个 sha 上**。这比看 run 列表权威。
+
+#### 根因形态：多条 workflow 共用一个 `concurrency` group
+
+本项目实测：`hugo.yml` / `jekyll-gh-pages.yml` / `static.yml` **三条**全部
+`on: push: branches: ["main"]`，**全部** `concurrency: { group: "pages", cancel-in-progress: false }`。
+
+GitHub 语义：**新进入同一组的 run 会取消「已在排队（pending）」的那个** ——
+`cancel-in-progress: false` 只保证**不打断正在跑的**。三条同时被一次 push 触发 ⇒ **互相取消**，
+谁恰好在 pending 谁死。
+
+⚠ **每条单独看都是「最安全的写法」**（`cancel-in-progress: false` 看起来最保守），
+合起来却在互相残杀 ⇒ **看并发配置要连着 `on:` 一起看**，单看一条看不出来。
+⚠ 旁证：同一 commit 的 `GET /commits/<sha>/check-runs` 里会多出**别条 workflow 的**
+`build : completed/failure`（本项目那两条是 GitHub 自动塞的模板，这里根本没有 Hugo/Jekyll 站点，
+所以每次必败）。
+
+#### 修法：先用**非破坏性**的解锁，再谈删
+
+`workflow_dispatch` **只触发被点的那一条**，不会带上 push 触发的兄弟 ⇒ 它独占并发组：
+
+```js
+POST /repos/<o>/<r>/actions/workflows/static.yml/dispatches  { "ref": "main" }   // → 204
+```
+
+本项目实测 21 秒跑完、7 个 step 全绿、线上立刻变成新版。
+**真正的修法**是删掉那两条不用的 workflow（否则以后每次 push 都有概率被静默吞掉，
+而且它们会在**每个 commit** 上持续刷假的 `build : failure`）—— 但那是改用户的仓库，**要先问**。
+
+#### ⚠ 取令牌：别用 `sed`，也别把变量放错位置
+
+1. ⚠ **`sed` 的分隔符跟字符类撞了**：`s@…\([^@]*\)@…@` —— `@` 既是分隔符又在 `[^@]` 里，
+   报 `unknown option to 's'`；换 `#` 那版又报别的。**不跟它耗**。
+2. ⚠⚠ **`node -e '…' TOK="$TOK"` 把变量传成了「脚本参数」，不是环境变量** ⇒ 脚本里
+   `process.env.TOK` 是 `undefined` ⇒ 请求 401。正确写法是**前置**：`TOK="$TOK" node -e '…'`。
+
+**推荐做法：在 Node 里读凭据、在 Node 里发请求** —— 没有 shell 引号问题、没有 `sed` 方言问题、
+也**不可能把令牌打进终端**：
+
+```js
+const line = fs.readFileSync(credPath, 'utf8').split(/\r?\n/).find(l => l.trim());
+const TOKEN = line.match(/^https:\/\/[^:]+:([^@]+)@/)[1];   // 永远不打印 TOKEN
+```
+
+#### ⚠⚠ 先怀疑「自己造的假线索」
+
+`GET /pages` **不带令牌返回 404 —— 公开仓库的健康 Pages 也是 404**。我一度拿它当
+「Pages 配置丢了」的证据，白绕一圈。带令牌同一个仓库读出来完全正常
+（`build_type=workflow` / `cname=yansaki.top` / `https_enforced=true`）。
+**同一个查询，认证状态不同会给出方向相反的结论** —— 判「配置坏了」之前先确认「我是不是没带认证」。
+
+#### 收尾：临时脚本无条件删
+
+诊断用的三个脚本（`_verify/_pages-diag.js` / `_pages-diag2.js` / `_pages-dispatch.js`）
+用完**立刻删** —— `_verify/` 里下划线开头是「临时脚本」的约定（`run-all.js` 会跳过它们），
+但**跳过 ≠ 可以留着**。
+
+展开版见当日日志「二十八」，可复用版见技能 `git-push-existing-github-repo` §9。
+
+---
+
 ## 七、内联一整份外部网页（小游戏「复古线框战机」，第十轮）
 
 需求：把 `G:\retro_vector_space_shooter (1).html`（105 508 字节 / 2 353 行的**完整独立网页**）

@@ -6,6 +6,80 @@
 
 ---
 
+## 2026-09-23（第六段）· 部署：改动推上去了，**线上却没变** —— 三条 workflow 抢一个 `pages` 并发组
+
+**类型**：**基础设施**（不是产品改动；`saki.html` / `index.html` 一个字节没动）。
+
+> 起因：第五段推送成功（`4002051`，远端 11/11 blob 一致），但线上 `index.html` **还是旧版**。
+
+### ① 现象与判据
+
+```
+static.yml  completed/success    61d09f5  07:52:18Z → 07:53:16Z
+static.yml  completed/cancelled  68e9d84  07:57:58Z → 07:57:59Z   ← 1 秒
+static.yml  completed/cancelled  4002051  08:20:54Z → 08:20:55Z   ← 1 秒
+线上 index.html: 200  1 487 774 字节  sha1 ecb46ca8de99…（旧）
+本地 index.html:      1 493 542 字节  sha1 d0bf0d34afef…
+```
+
+⚠ **`cancelled` 要先数 job**：`GET /actions/runs/<id>/jobs` 返回 **`total_count: 0`** ⇒ job **从没被调度**，
+是 run 在**排队阶段**就被掐了，不是构建失败。
+⚠ 更硬的判据：`GET /deployments` —— 排队阶段被取消的 run **根本不会创建 deployment**，所以最新那条仍停在 `61d09f5`。
+
+### ② 根因：三条 workflow 共用一个 `concurrency: group: "pages"`
+
+```
+Deploy Hugo site to Pages                                  .github/workflows/hugo.yml
+Deploy Jekyll with GitHub Pages dependencies preinstalled  .github/workflows/jekyll-gh-pages.yml
+Deploy static content to Pages                             .github/workflows/static.yml
+```
+
+三条**全部** `on: push: branches: ["main"]`、**全部** `cancel-in-progress: false`。
+GitHub 的语义是：**新进入同一组的 run 会取消「已在排队」的那个**（`cancel-in-progress: false` 只保证不打断**正在跑**的）
+⇒ 一次 push 同时触发三条 ⇒ **互相取消**，谁恰好在 pending 谁死。
+那两条是 GitHub **自动塞的模板**（这里没有 Hugo/Jekyll 站点，`hugo.yml` 战绩 **0 成 9 败**），
+还会在每个 commit 上刷出两条假的 `build : failure` 检查。
+
+### ③ 修法：先用非破坏性的办法解锁
+
+`workflow_dispatch` **只触发被点的那一条** ⇒ 它独占并发组：
+
+```
+POST /actions/workflows/static.yml/dispatches { "ref": "main" }   → 204
+run 35837056545: queued → in_progress → completed/success（21 秒，7 个 step 全绿）
+线上 index.html: 200  1 493 542 字节  sha1 d0bf0d34afef…  ✅ 与本地逐字节一致
+```
+
+**真正的修法**是删掉 `hugo.yml` 与 `jekyll-gh-pages.yml`（否则以后每次 push 都有概率被静默吞掉）——
+属于改用户的仓库，**已单独征求同意**。
+
+### ④ 两个自己造的假线索
+
+⚠ **`GET /pages` 不带令牌返回 404 —— 公开仓库的健康 Pages 也是 404**。我一度拿它当「Pages 配置丢了」的证据，
+白绕一圈；带令牌读出来完全正常（`build_type=workflow` / `cname=yansaki.top` / `https_enforced=true`）。
+⚠ **取令牌别用 `sed`**：分隔符 `@` 跟字符类 `[^@]` 撞了（`unknown option to 's'`）；
+而且 `node -e '…' TOK="$TOK"` 是把变量传成**脚本参数**、不是环境变量 ⇒ 脚本里 `process.env.TOK` 是 `undefined` ⇒ 401。
+**正确做法是在 Node 里读凭据、在 Node 里发请求** —— 无 shell 引号问题，也不可能把令牌打进终端。
+
+### ⑤ 验证
+
+| 项 | 结果 |
+|---|---|
+| 带认证 `GET /pages` | **200**（`build_type=workflow` / `cname=yansaki.top` / `https_enforced=true`） |
+| `GET /deployments` | 最新 deployment 停在 `61d09f5` ⇒ 两次取消**没创建过 deployment** |
+| `GET .../jobs`（两条 cancelled） | **`total_count: 0`** |
+| `POST .../dispatches` | **204** |
+| 新 run `35837056545` | `completed/success`，7 step 全绿 |
+| **线上 `index.html`** | **200 · 1 493 542 字节 · `sha1 d0bf0d34afef…` ✅ 与本地一致** |
+| 临时诊断脚本 | 3 个（`_pages-diag.js` / `_pages-diag2.js` / `_pages-dispatch.js`）**已删** |
+
+### ⑥ 沉淀
+
+- 技能 `git-push-existing-github-repo`：新增 **§9**「推送绿了但站点没变 —— 查共用一个 `concurrency` 组的 workflow」（原 §9 顺移为 §10），Checklist 加两条。
+- `RULES.md` 新增 **六之二十**；`MEMORY.md` ① 加一条指针；当日日志新增「**二十八**」。
+
+---
+
 ## 2026-09-23（第五段）· 人设生成器：「模板」默认折叠 + 状态提示挪到模板下面
 
 **类型**：**产品改动**（`saki.html` 的面板结构 + CSS）+ 套件 + 文档。

@@ -257,7 +257,96 @@ file at its root — the file alone does not populate the API view. Set it expli
 ⚠ HEAD responses are **compressed** — `content-length` on a HEAD will not equal the file size.
 Use GET when you need to compare bytes.
 
-## 9. Windows: "the file vanished" — check the Recycle Bin
+## 9. The push was green but the site never changed — check for workflows fighting over one `concurrency` group
+
+The nastiest deploy failure is the one that looks like success everywhere you'd normally look:
+`git push` exits 0, a run *appears* in Actions, and the live site is still the old bytes.
+
+Observed (2026-09-23, `MuyueJusan/YanSaki`): two consecutive pushes produced
+
+```
+static.yml  completed/cancelled   sha=68e9d84  created=07:57:58Z  updated=07:57:59Z
+static.yml  completed/cancelled   sha=4002051  created=08:20:54Z  updated=08:20:55Z
+```
+
+### The tell: a cancelled run with **zero jobs**
+
+```js
+GET /repos/<o>/<r>/actions/runs/<id>/jobs     // -> { total_count: 0, jobs: [] }
+```
+
+An empty job list means the job was **never scheduled** — the run was cancelled while still
+*pending*, not killed mid-flight. Combined with `updated_at - created_at ≈ 1s`, that rules out
+"the build failed" and points straight at **concurrency**.
+
+Also check `GET /repos/<o>/<r>/deployments` — it is the ground truth for "did a deployment actually
+happen". A run cancelled while pending **never creates a deployment at all**, so the newest
+deployment entry will still be an older, successful sha.
+
+### The cause: N workflows, one `pages` group
+
+```js
+GET /repos/<o>/<r>/actions/workflows            // list every workflow + state
+GET /repos/<o>/<r>/contents/<path>?ref=main     // read each one's `on:` / `concurrency:`
+```
+
+If several workflows all trigger on the same event (e.g. every one has
+`on: push: branches: ["main"]`) **and** all declare `concurrency: { group: "pages" }`, they queue
+into a single group. With `cancel-in-progress: false` a newly queued run **cancels any run already
+pending** in that group — so a burst of simultaneous triggers makes them cancel *each other*, and
+whichever one is pending at the wrong moment dies. GitHub's auto-added starter workflows are the
+usual culprits:
+
+```
+active  Deploy Hugo site to Pages                                  .github/workflows/hugo.yml
+active  Deploy Jekyll with GitHub Pages dependencies preinstalled  .github/workflows/jekyll-gh-pages.yml
+active  Deploy static content to Pages                             .github/workflows/static.yml   <- the one you want
+```
+
+The Hugo / Jekyll ones are irrelevant for a plain static site and their `build` jobs **fail on every
+push** — visible as extra `build : completed/failure` check-runs on the same commit, which is a good
+secondary tell:
+
+```js
+GET /repos/<o>/<r>/commits/<sha>/check-runs
+```
+
+### Fix
+
+**Unblock immediately, non-destructively** — dispatch only the correct workflow. `workflow_dispatch`
+does not fire the push-triggered siblings, so it gets the group to itself:
+
+```js
+POST /repos/<o>/<r>/actions/workflows/static.yml/dispatches  { "ref": "main" }   // -> 204
+```
+
+Then poll the run to `completed/success` and compare the live bytes (see §6).
+
+**Real fix** — delete the workflows you don't use, after asking the user. Leaving them in place
+means any future push can be silently swallowed, and they keep painting failed check-runs onto
+every commit.
+
+### Two traps on the way there
+
+⚠ **`GET /pages` returns 404 without a token even when Pages is perfectly healthy.** On a public
+repo the unauthenticated view is just absent, so a 404 there is **not** evidence of "Pages is
+broken" — it means "you didn't authenticate". With a token the same repo read
+`status=null, build_type=workflow, cname=yansaki.top, html_url=https://yansaki.top/,
+source={"branch":"main","path":"/"}, https_enforced=true`. Don't chase a 404 you caused yourself.
+
+⚠ **Do not extract the token with `sed` into a shell variable.** Two independent footguns hit in
+one sitting: a delimiter that also appears in the pattern (`s@…\([^@]*\)@…@` — `@` is both), and
+passing the variable in the wrong position (`node -e '…' TOK="$TOK"` makes `TOK` a *script
+argument*, not an environment variable ⇒ the script sees `undefined` and the API returns 401).
+Read the credential file **inside Node** and call the API from Node — no shell quoting, no
+`sed` dialect surprises, and no chance of echoing the secret:
+
+```js
+const line = fs.readFileSync(credPath, 'utf8').split(/\r?\n/).find(l => l.trim());
+const TOKEN = line.match(/^https:\/\/[^:]+:([^@]+)@/)[1];   // never log TOKEN
+```
+
+## 10. Windows: "the file vanished" — check the Recycle Bin
 
 Deletions in some sandboxed / agent environments are redirected to the Recycle Bin instead of being
 unlinked. `G:\$RECYCLE.BIN\<SID>\` holds two files per deleted item:
@@ -283,3 +372,5 @@ nothing external is deleting things — the deletions are yours.
 - [ ] Regenerated artifacts gitignored **and** un-staged
 - [ ] Remote verified via `ls-remote` + tree blob shas
 - [ ] No secrets in `git grep`; credential file untracked
+- [ ] **Deploy actually landed** — the site's live bytes/sha1 match the local file, not just "the push succeeded"
+- [ ] Only **one** workflow deploys to the `pages` environment (no Hugo/Jekyll starter workflows fighting it for the concurrency group)
