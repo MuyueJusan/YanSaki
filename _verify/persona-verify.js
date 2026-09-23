@@ -24,8 +24,12 @@
 //   G. 未配 AI：不发请求、只给提示、忙态归位（配好之后作对照）
 //   H. 生成成功：围栏清洗 / 结果进状态 / 面板出现结果框 / 「对上了几项」（漏项 → warn，全中 → ok）
 //   I. 写入与追加：空描述直接写 / 非空描述要 confirm（含**取消**对照）/ 追加不弹窗
-//   I2. 追加到世界书（真按钮 → 条目真的进卡、真的渲染出来；含「原有条目没被动」对照
-//       + 空结果不动世界书 + 卡里没名字时关键词为空且**明说**）
+//   I2. 追加到世界书（备注 / 关键词**都取生成结果里「姓名:」后面的字符** —— 含取值函数本身的
+//       半角 / 全角 / 行首装饰 / 加粗 / CRLF / 取不到；
+//       ⚠⚠ 套件里**故意**让「姓名:」跟卡名**不同**（艾莉丝 vs 夜乃），
+//       否则「取的是 `姓名:`」和「取的是卡名」读出来是同一个字符串、断言分不出从哪儿取的；
+//       真按钮 → 条目真的进卡、真的渲染出来；含「原有条目没被动」对照 + 空结果不动世界书
+//       + 没有「姓名:」时回落卡名且**明说** + 两边都没有时关键词为空且提示是 warn）
 //       / 要不要拿卡名当人物姓名（真勾选框 / 重绘后还原 / **真实请求**里也不带卡名）
 //   J. 复制 + 忙态扛重绘 + 失败路径（网络不通 / 401 / 空回复）
 //   K. 收尾零报错
@@ -834,8 +838,32 @@ window.fetch = async function (url, init) {
     section('I2. 生成结果追加到世界书 / 要不要拿卡名当人物姓名');
 
     // —— ① 把生成结果追加成一条世界书条目 ——
+    // ⚠⚠ 这里**故意**让生成结果里的「姓名:」跟卡名**不一样**（艾莉丝 vs 夜乃）。
+    //   两者相同时，「取的是 `姓名:`」和「取的是卡名」两条路**读出来是同一个字符串**，
+    //   断言就分不出它到底从哪儿取的 —— 那是一个天然成立的对照组。
+    const BOOK_REPLY = '姓名: 艾莉丝\n年龄: 19\n性别: 女';
     await ev(`stSet('card.name', '夜乃')`);
-    await ev(`stPersonaOutSet(${JSON.stringify(OK_REPLY)})`);
+    await ev(`stPersonaOutSet(${JSON.stringify(BOOK_REPLY)})`);
+
+    // 取值函数本身：半角 / 全角 / 行首装饰 / CRLF / 取不到
+    check('能从「姓名:」后面取到名字',
+      await ev(`stPersonaNameFromOut('年龄: 19\\n姓名: 艾莉丝\\n性别: 女')`), '艾莉丝');
+    check('全角「姓名：」也认',
+      await ev(`stPersonaNameFromOut('姓名：艾莉丝')`), '艾莉丝');
+    check('行首有空格 / 破折号 / 星号也认',
+      await ev(`stPersonaNameFromOut('- 姓名: 艾莉丝')`), '艾莉丝');
+    // ⚠ JS 的 `.` **不匹配 `\r`**，多行模式下 `$` 也不认 `\r`
+    //   ⇒ 不先把 CRLF 归一成 LF 的话，这一条会**整行匹配不上**，名字悄悄回落成卡名
+    check('CRLF 文本也认（不归一化就会悄悄取不到）',
+      await ev(`stPersonaNameFromOut('姓名: 艾莉丝\\r\\n年龄: 19')`), '艾莉丝');
+    check('模型给整行加粗也剥得掉',
+      await ev(`stPersonaNameFromOut('**姓名：艾莉丝**')`), '艾莉丝');
+    check('没有「姓名:」这一行 ⇒ 空串',
+      await ev(`String(stPersonaNameFromOut('年龄: 19\\n性别: 女'))`), '');
+    check('「姓名:」后面是空的 ⇒ 也算取不到',
+      await ev(`String(stPersonaNameFromOut('姓名:   \\n年龄: 19'))`), '');
+    check('结果是空串 ⇒ 也给空串', await ev(`String(stPersonaNameFromOut(''))`), '');
+
     // 先塞一条**原有条目**：待会儿要拿它当对照组 —— 新增不能动到老的
     await ev(`(function(){
       stEditor.card.bookEntries = [];
@@ -865,13 +893,16 @@ window.fetch = async function (url, init) {
     //   直接 `bookEntries[1].content` 会抛 TypeError，整跑当场炸掉、连汇总行都没有 ——
     //   那样反向测试拿不到「红了几条」，注入就白跑了
     const NE = `(stEditor.card.bookEntries[${b0}] || {})`;
-    check('新条目的正文就是生成结果', await ev(`String(${NE}.content || '')`), OK_REPLY);
+    check('新条目的正文就是生成结果', await ev(`String(${NE}.content || '')`), BOOK_REPLY);
     check('新条目是启用的', await ev(`${NE}.enabled`), true);
-    check('新条目的备注带上了卡名',
-      await ev(`String(${NE}.comment || '')`), v => /夜乃/.test(v), '含「夜乃」');
-    check('新条目的关键词就是卡名',
-      await ev(`JSON.stringify(${NE}.keys || [])`), JSON.stringify(['夜乃']));
+    // ⚠ 期望值「艾莉丝」**不是**卡名（卡名是「夜乃」）—— 这一条就是来证「取的是 `姓名:`」的
+    check('新条目的备注取的是「姓名:」后面的字符',
+      await ev(`String(${NE}.comment || '')`), '艾莉丝');
+    check('新条目的关键词也是「姓名:」后面的字符',
+      await ev(`JSON.stringify(${NE}.keys || [])`), JSON.stringify(['艾莉丝']));
     check('提示说已追加到世界书', await msgText(), v => /已追加到世界书/.test(v), '含「已追加到世界书」');
+    check('提示里报的名字是「艾莉丝」（不是卡名）',
+      await msgText(), v => /艾莉丝/.test(v), '含「艾莉丝」');
     check('提示是 ok', await msgKind(), '');
     // ⚠ 对照组：只证「多了一条」不够 —— 还得证「原来那条一点没动」
     check('（对照）原有条目还在原位',
@@ -899,17 +930,32 @@ window.fetch = async function (url, init) {
     check('没有结果时点「追加到世界书」⇒ 提示「还没有生成结果」',
       await msgText(), v => /还没有生成结果/.test(v), '含「还没有生成结果」');
 
-    // 卡里没写名字：关键词只能是空的，而且要**明说**让用户去补（不静默）
-    await ev(`stSet('card.name', '')`);
-    await ev(`stPersonaOutSet('一段人设')`);
+    // 生成结果里没有「姓名:」⇒ **回落卡名**，而且提示要说清用的是卡名（不静默）
+    await ev(`stSet('card.name', '夜乃')`);
+    await ev(`stPersonaOutSet('一段没有姓名的结果')`);
     await ev(`stPersonaApply('book')`);
     await sleep(150);
     const b2 = await ev(`stEditor.card.bookEntries.length`);
-    check('卡里没名字 ⇒ 照样多了一条', b2, b1 + 1);
-    check('卡里没名字 ⇒ 新条目关键词是空的',
-      await ev(`JSON.stringify((stEditor.card.bookEntries[${b2 - 1}] || {}).keys || [])`), '[]');
-    check('卡里没名字 ⇒ 提示提醒去填关键词（不静默）',
+    check('生成结果里没有「姓名:」⇒ 照样多了一条', b2, b1 + 1);
+    check('生成结果里没有「姓名:」⇒ 回落卡名',
+      await ev(`JSON.stringify((stEditor.card.bookEntries[${b2 - 1}] || {}).keys || [])`),
+      JSON.stringify(['夜乃']));
+    check('回落时提示说清了「用的是卡名」', await msgText(), v => /卡名/.test(v), '含「卡名」');
+
+    // 两边都没有 ⇒ 关键词留空，而且要**明说**让用户去补（不静默）
+    await ev(`stSet('card.name', '')`);
+    await ev(`stPersonaOutSet('一段没有姓名的结果')`);
+    await ev(`stPersonaApply('book')`);
+    await sleep(150);
+    const b3 = await ev(`stEditor.card.bookEntries.length`);
+    check('两边都没有 ⇒ 照样多了一条', b3, b2 + 1);
+    check('两边都没有 ⇒ 关键词是空的',
+      await ev(`JSON.stringify((stEditor.card.bookEntries[${b3 - 1}] || {}).keys || [])`), '[]');
+    check('两边都没有 ⇒ 备注回落成「人设」（留空的话列表里根本找不到它）',
+      await ev(`String((stEditor.card.bookEntries[${b3 - 1}] || {}).comment || '')`), '人设');
+    check('两边都没有 ⇒ 提示提醒去填关键词（不静默）',
       await msgText(), v => /关键词/.test(v), '含「关键词」');
+    check('两边都没有 ⇒ 提示是 warn', await msgKind(), 'warn');
     await ev(`stSet('card.name', '夜乃')`);
 
     // —— ② 要不要拿角色卡名字当人物姓名 ——

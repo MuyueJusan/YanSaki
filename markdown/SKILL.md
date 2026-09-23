@@ -4944,6 +4944,83 @@ point of the probe — *by the message alone, the feature looks like it worked.*
 asserted is always true. When you write a message, ask: **could I say this sentence if I had just
 broken the feature?**
 
+### A control group must be *different*, not merely *present*
+
+The requirement changed to "the world-book entry's name and key both come from the characters after
+`姓名:` in the generated text". The existing fixture was:
+
+```js
+const OK_REPLY = '姓名: 夜乃\n…';   // and the card's own name was also set to 夜乃
+```
+
+So `comment === '夜乃'` and `keys === ['夜乃']` are **satisfied by both implementations** — "read it
+from `姓名:`" and "read it from the card name" produce the *same string*. Delete the extraction
+function entirely and let it fall back to the card name: **the assertions stay green.** A vacuous
+assertion wearing the costume of a control group.
+
+**Fix**: add a *second* fixture whose expected value is deliberately **not** the card name.
+
+```js
+const BOOK_REPLY = '姓名: 艾莉丝\n…';   // card name still 夜乃 ⇒ 艾莉丝 is unambiguous
+```
+
+⚠ Before writing any "it reads from A" assertion, ask: **could A and B happen to be equal?**
+"Has a control group" ≠ "the control group discriminates". A vacuous assertion and no assertion at
+all are indistinguishable in the report.
+
+⚠ Related to "true by construction", but a distinct shape: there the *predicate* is vacuous; here the
+*control group* is.
+
+⚠ Knock-on: renaming assertions in the target suite invalidates the reverse test's hand-copied
+`red`/`green` lists (here `red` 8 → 11, `green` 11 → 22). An existence gate that verifies every named
+assertion still exists in the baseline — *before* the run — is what caught it.
+
+### A fallback disguises a failure as a success
+
+The name resolution chain had three levels:
+
+```js
+const inName = nameFromOut(out);              // characters after 姓名:
+const nm = inName || str(card.name);          // fall back to the card name
+entry.comment = nm || '人设';                 // then to a literal
+if (nm) entry.keys = [nm];                    // neither ⇒ no key at all
+```
+
+The middle level **looks exactly like success**: the entry is created, the body is byte-perfect, it
+renders, and the message is green — *only the name is silently not what you asked for*.
+
+**Rule**: every "if I can't get it, use something else" branch must **say so where the user can see
+it** — `'… —— 生成结果里没有「姓名:」，用的是卡名'`. A silent fallback hands the user a result that
+looks right and defers the error to the moment they actually rely on it.
+
+⚠ Interacts with the message-immunity rule above: if the fallback branch only ever reports success,
+"fell back" and "got it right" are indistinguishable in the copy — and the fallback branch is exactly
+the one that needs to be visible.
+
+### CRLF can arrive as *runtime data*, not from the file
+
+The familiar form of this bug is "the file is CRLF, so `/\/\/.*$/` never matches". This is the same
+bug with a different origin: **the `\r` was in a string produced at runtime, not read from the file.**
+
+```js
+const m = String(text).match(/^[ \t\-*]*姓名[ \t]*[:：][ \t]*(.*)$/m);
+```
+
+`text` came back from a model over the network and was assembled via `textContent`, so its line ends
+were `\r\n`. In multiline mode `$` matches the position *before* `\n`, so the `\r` stays **inside** the
+`(.*)` capture — the value ends up with a trailing `\r`. Symptom: `=== '艾莉丝'` goes red while the
+printed value looks **visually identical** (`\r` is invisible).
+
+**Fix**: normalise on entry, before anything else.
+
+```js
+const t = String(text == null ? '' : text).replace(/\r\n?/g, '\n');
+```
+
+⚠ **Rule**: for any regex that anchors with `$` or splits on lines, first ask **who produced this
+string** — the file itself, an old `localStorage` blob, a `fetch` response, model output. All of them
+can carry `\r`. Never assume the data shares the call site's line endings.
+
 ### An audit tool printing ✅ is a necessary condition, not a sufficient one
 
 The anchor-audit script checks "the line number in the table is the start of a comment banner", plus a
