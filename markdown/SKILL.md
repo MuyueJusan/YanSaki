@@ -5250,6 +5250,51 @@ names drift when you rename them, and a name that no longer exists makes the "ex
 gate fail for the wrong reason. Both checks are cheap, and both are the kind of thing that is invisible
 until it has already produced a confidently wrong result.
 
+### A helper with zero call sites — asserting its return value proves nothing about the wiring
+
+The product gained a helper that turns an *empty* model response into an explanation string
+(`promptFeedback.blockReason`, `finishReason`), with a careful comment about why empty responses must be
+explained rather than returned as `''`. The suite asserted that helper's return value across five response
+shapes — all green. **The helper was never called.** Empty responses were still returned silently; the
+entire point of the change was absent from the product, and the suite was propping up the corpse.
+
+Same family, one layer up: the readiness gate for the new auth mode *was a comment* claiming it required a
+project id. The comment existed; the branch did not.
+
+⇒ For any helper whose value is that it **runs**, assert the **effect at the boundary the user sees** — the
+error text that reaches the UI, the request that actually goes out — not the helper's return value. Then
+grep the call site: a function defined once and referenced **only inside the suite** is dead code, and no
+amount of asserting its output will notice.
+
+### Adding a second mode to a feature: re-audit every gate written when there was only one
+
+A protocol gained a second auth mode (service-account JSON instead of an API key). Every predicate written
+when only the API-key mode existed was now wrong for the new mode:
+
+- the readiness check required `apiKey` ⇒ the new mode could **never** start, and the message told the user
+  to fill in a field the new mode does not use;
+- the "is this configured?" test demanded a project id the new mode can derive from the JSON itself;
+- the URL builder read a location field the new mode had no way to populate.
+
+Each was individually defensible, and **none of them was wrong when written**. The failure mode is not a
+broken line — it is **a gate whose question no longer matches the feature**, which reads to the user as
+their own mistake.
+
+⇒ When you add a mode or branch to an existing feature, grep every predicate that mentions **any** field of
+the old mode (`apiKey`, `authMode`, `project`, …) and ask of each: *which modes does this question apply
+to?* A gate that silently answers "not configured" for a whole mode is indistinguishable from user error.
+
+### A probe that removes more than it names turns its own control groups red
+
+The probe was meant to break "derive the project id from the service-account JSON". Its `from` string was
+the **whole** derivation block — including the branch that honours a user-typed project id. The control
+group ("a typed project id wins over the JSON") went red as well, so the "exactly these went red" gate
+failed. The probe was right about *what* it broke and wrong about *how much*.
+
+⇒ When a behaviour has two paths (typed value wins, else derive), inject into **one** — usually the
+fallback — and leave the sibling path as the control. A probe whose red set is larger than its own name
+cannot distinguish "I broke the target" from "I broke everything nearby".
+
 ## Never run the same harness twice at once
 
 Two runs of the same headless harness were launched concurrently — the first was still going when
