@@ -1228,7 +1228,41 @@ const TOKEN = line.match(/^https:\/\/[^:]+:([^@]+)@/)[1];   // 永远不打印 T
 用完**立刻删** —— `_verify/` 里下划线开头是「临时脚本」的约定（`run-all.js` 会跳过它们），
 但**跳过 ≠ 可以留着**。
 
-展开版见当日日志「二十八」，可复用版见技能 `git-push-existing-github-repo` §9。
+#### ⚠ `git push` 被代理挡死时：用 **Git Data API 兜底推送**（第十三轮实测）
+
+本机 git **必须**走本地代理（直连 `github.com:443` 不通），而代理会周期性对 `github.com`
+返回 `CONNECT tunnel failed, response 502`（实测连续 11 次 / 跨 4 分钟全败）。
+**同时 `api.github.com` 直连是通的** —— 因为 **Node 的 `fetch` 不走 `http_proxy`**。
+**同一个网络、两条路、一条死一条活。**
+
+```bash
+env -u https_proxy -u HTTPS_PROXY -u http_proxy -u HTTP_PROXY git push origin main
+#   "Could not connect to github.com:443"  ⇒ 代理是**必须**的，绕不开 ⇒ 走 API
+```
+
+**核心手法：复刻一模一样的 commit 元数据**（tree / parent / author / committer / message 全从
+本地 `git cat-file commit` 原样取出）⇒ **远端算出来的 sha 等于本地 sha** ⇒ **零分叉**
+（不会出现「本地领先一个哈希不同的提交」那种需要 rebase 的烂摊子）。
+
+```
+blob   POST /git/blobs    {content: base64, encoding:"base64"}   → 比 `git rev-parse <sha>:<path>`
+tree   POST /git/trees    {base_tree, tree:[{path,mode,type,sha}]} → 比 `git rev-parse <sha>^{tree}`
+commit POST /git/commits  {message,tree,parents,author,committer}  → 比本地 sha
+ref    PATCH /git/refs/heads/<b>  {sha, force:false}               ← **只有上面全中才走这一步**
+```
+
+⚠⚠ **每一步都拿本地 sha 当闸门，任何一步对不上就立刻退出** —— 此时远端 ref **一个字节都没动**
+（`create blob/tree/commit` 都**不会**移动 ref），只会留几个 dangling 对象。
+**这就是它敢试的原因**；`force: false` 再让 GitHub 自己拒掉非快进。
+⚠ **message 要逐字节一致、含结尾换行** ⇒ 读原始 commit 对象按**第一个**空行切（别用 `-p` + `trim`）。
+⚠ **日期**：Git 存 `<epoch> <+HHMM>`，API 要 ISO 8601 ⇒ 从 epoch + 存下来的 offset 反推，
+否则 offset 不往返、sha 就不等（`1790158678 +0800` → `2026-09-23T18:17:58+08:00`）。
+⚠ 改动路径用 `git diff-tree -r --no-renames --name-status -z <parent> <sha>`（`--no-renames` 把
+`R100 old new` 拆成 `A`/`D` 一对）；删除项在 tree 里传 `sha: null`。
+⚠ **会写远端的脚本，默认动作必须是只读** —— 工具 `_verify/api-push.js` 默认 dry-run，`--go` 才真推。
+⚠ 写它时自己踩了个**会卡死**的 bug：留了一行 `git hash-object --stdin`（**等 stdin**，跑起来无限挂起）。
+
+展开版见当日日志「二十八」，可复用版见技能 `git-push-existing-github-repo` §6。
 
 ---
 

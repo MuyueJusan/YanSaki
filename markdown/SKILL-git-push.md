@@ -208,6 +208,74 @@ for (const [remotePath, localPath] of pairs) {
 Bonus: the tree entry's `mode` proves the exec bit survived (`100755` for a `chmod +x` script) —
 worth asserting, since Windows checkouts and `core.filemode` drop it silently.
 
+### When the git transport is blocked, *push* over the REST API — and make the shas match
+
+Reading over the API is easy. **Writing** over it is possible too, and the trick that makes it safe
+is: **replicate the commit metadata exactly, so the remote computes the *same* sha as your local
+commit** ⇒ zero divergence, no rebase, `git status` stays clean.
+
+Measured 2026-09-23: the local proxy answered `CONNECT tunnel failed, response 502` for `github.com`
+**11 times over 4 minutes**, while `api.github.com` over a direct connection answered in 778 ms.
+Check that split before doing anything clever:
+
+```bash
+env -u https_proxy -u HTTPS_PROXY -u http_proxy -u HTTP_PROXY git push origin main
+#   "Could not connect to github.com:443"  ⇒ the proxy is REQUIRED; you can't just bypass it
+#   success                                ⇒ just do that and stop reading this section
+```
+
+Then, per commit, in order:
+
+```js
+// 1. blob   — content must be the RAW bytes (base64); compare the returned sha to
+//             `git rev-parse <sha>:<path>`
+POST /repos/<o>/<r>/git/blobs    { content: <base64>, encoding: "base64" }
+
+// 2. tree   — base_tree = the previous tree; entries from `git diff-tree`
+POST /repos/<o>/<r>/git/trees    { base_tree, tree: [{ path, mode, type: "blob", sha }] }
+//             ⚠ deletions: pass `sha: null` to drop the path from base_tree
+//             compare the returned sha to `git rev-parse <sha>^{tree}`
+
+// 3. commit — metadata copied verbatim from `git cat-file commit <sha>`
+POST /repos/<o>/<r>/git/commits  { message, tree, parents, author, committer }
+//             compare the returned sha to the local sha
+
+// 4. ref    — ONLY after every sha above matched
+PATCH /repos/<o>/<r>/git/refs/heads/<branch>  { sha, force: false }
+```
+
+⚠ **Gate every step on the local sha and bail out on the first mismatch.** Nothing before step 4
+moves a ref, so an abort leaves the remote untouched (just a few dangling objects) — that is what
+makes this safe to attempt. `force: false` then lets GitHub itself reject a non-fast-forward.
+
+⚠ **The message must be byte-exact, including its trailing newline.** Don't retype it — read the raw
+commit object and split on the *first* blank line:
+
+```js
+const raw = execFileSync("git", ["cat-file", "commit", sha]).toString();  // NOT `-p` + trim
+const msg = raw.slice(raw.indexOf("\n\n") + 2);                           // keeps the final \n
+```
+
+⚠ **Dates.** Git stores `author <name> <email> <epoch> <+HHMM>`; the API wants ISO 8601. Build the
+ISO **from the epoch plus the stored offset**, or the offset won't round-trip and the sha won't match:
+
+```js
+const off = (tz[0] === "-" ? -1 : 1) * (Number(tz.slice(1, 3)) * 60 + Number(tz.slice(3, 5)));
+const iso = new Date((epoch + off * 60) * 1000)
+  .toISOString().replace(/\.\d{3}Z$/, tz.slice(0, 3) + ":" + tz.slice(3));
+```
+
+⚠ Get the changed paths with `git diff-tree -r --no-renames --name-status -z <parent> <sha>` —
+`--no-renames` turns `R100 old new` into `A`/`D` pairs, which keeps the parser trivial.
+
+⚠ **Make it default to dry-run.** A script that writes to a remote should not write by default
+(same principle as a cleanup script defaulting to "count only").
+
+A working implementation lives at `_verify/api-push.js` in the `G:\saki` project — it handles a
+whole chain of pending commits, gates on every sha, and refuses to move the ref unless the final
+commit sha equals the local one. Verified end-to-end: blob, tree and commit shas all matched,
+the ref moved, and the push still triggered the Pages deploy normally.
+
 ## 7. Secret hygiene before pushing
 
 ```bash

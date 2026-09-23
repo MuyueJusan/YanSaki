@@ -54,6 +54,8 @@ const NOT_A_SUITE = [
     'deploy-check.js',    // **只读**：线上 index.html 跟本地是不是逐字节一致（+ `--runs` 查 Actions /
                           //   deployment / workflow 条数）。⚠ 不是套件：它依赖网络，不该进整跑。
                           //   起因见 RULES.md 六之二十：`git push` 绿 + 远端 blob 一致 **≠ 上线了**。
+    'api-push.js',        // git-over-HTTPS 被代理挡死时的**兜底推送**（Git Data API 复刻 commit 元数据
+                          //   ⇒ 远端与本地同 sha、零分叉）。⚠ 同样依赖网络，不进整跑；**默认 dry-run**。
     'sb-diag.js', 'sb-diag3.js', 'sb-diag5.js', 'sb-diag-class.js',  // 一次性诊断
     'sb-shot-color.js', 'sb-zoom.js', 'sb-zoom5.js'                  // 一次性截图 / 探针
 ];
