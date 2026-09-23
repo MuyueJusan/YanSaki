@@ -1884,6 +1884,29 @@ somewhere you hope is safe. Either wait for the event, or wait for a *predicate*
 (`waitUntil(() => collapsed(el))`). A sleep is only acceptable when you're waiting for something that
 has no observable completion signal at all.
 
+⚠ **"Comfortable margin" is not a safety argument either.** The same suite later slept `450 ms` for a
+`0.3 s` transition — 50 % headroom — and still went red *intermittently*: only under one particular
+reverse-test injection, which made the main thread do unrelated layout work. In headless Chrome a CSS
+transition is driven by rAF, so anything occupying the main thread pushes frames out and the margin
+evaporates. The sleep was never "long enough"; it was just usually enough.
+
+**The tell**: the red assertion had nothing to do with what the probe patched. A red that appears in a
+section your injection never touched is a **timing artefact, not a finding**. Wait on *everything you
+are about to read*, not just the property you happened to think of:
+
+```js
+// ⚠ covers both values the following assertions read, not just `transform`
+await waitFor(`(function(){
+  const ico = getComputedStyle(document.querySelector('#fold .ico')).transform;
+  const h   = document.getElementById('fold-body').getBoundingClientRect().height;
+  return ico === 'none' && h > 200;
+})()`, 3000);
+```
+
+⚠ And **do not delete the flaky assertion** — here it was the only thing that turned red when the
+toggle was made a no-op, so dropping it would have silently removed a whole class of regression
+coverage. **Make it wait; don't make it go away.**
+
 ### Changed a *shared* rule? Verify every instance, not just yours
 
 A touch-target fix written for one control (`@media (hover:none) { .ai-switch { padding: 12px 6px } }`)
@@ -4373,6 +4396,23 @@ running, so it refuses rather than silently passing). But it still has to be fix
 - **Re-run the whole reverse suite**, not just the fixed probe. A removal changes the product's byte
   layout, so anchors elsewhere can break too.
 - Leave a comment at the fixed anchor saying why it moved. Otherwise the next person re-points it back.
+
+⚠ **It is not only *removals*.** Any edit landing inside the span an anchor covers will break it —
+including merely **adding a parameter to a call**. A probe anchored on a 4-line block containing
+`stExportMsg('…', 'warn');` stopped matching the moment that function gained a third argument
+(`stExportMsg('…', 'warn', 'persona');`), because the anchor is the *whole block*, verbatim.
+
+⇒ **After touching any call site — new argument, changed string, moved line — re-run every reverse
+test.** And don't grep for probe *names*: the anchor is a **code fragment**, so the only question that
+matters is whether the fragment still matches, **exactly once**.
+
+⚠ Think the failure shapes through, because only two of the three announce themselves:
+
+| shape | what happens | self-evident? |
+|---|---|---|
+| matches **0** times | `replace` changes nothing ⇒ the "after injection" run is really the **baseline** ⇒ baseline is green ⇒ "everything expected to go red did go red" fires immediately | ✅ yes |
+| matches **> 1** times | one injection edits several places; the reds are *other* assertions | ✅ yes (the "exactly these" gate) |
+| matches **exactly 1**, but a *truncated* fragment | the injection applies and the expected assertions do go red — but it is no longer testing what it was written to test | ❌ **no** |
 
 ### Deleting an element from a *positional array* is a cross-cutting change, not a local one
 

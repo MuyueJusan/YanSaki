@@ -22122,7 +22122,7 @@
             try { localStorage.removeItem(ST_PERSONA_TPL_KEY); } catch (e) {}
             stRerender();
             stExportMsg('✅ 模板已恢复默认（' + stPersonaLabels(ST_PERSONA_TPL_DEFAULT).length +
-                ' 项）。', 'ok');
+                ' 项）。', 'ok', 'persona');
         }
 
         // 折叠态写进 DOM 的**唯一**一处 —— 跟 stSyncTabsCollapsed 同一个理由：
@@ -22204,25 +22204,25 @@
             if (!stEditor.card) return;
             const req = String(stEditor.personaReq || '').trim();
             if (!req) {
-                stExportMsg('⚠ 先写一句你想要什么（例如「冷淡的吸血鬼女仆，喜欢红茶」）。', 'warn');
+                stExportMsg('⚠ 先写一句你想要什么（例如「冷淡的吸血鬼女仆，喜欢红茶」）。', 'warn', 'persona');
                 const el = document.getElementById('st-persona-req');
                 if (el) { try { el.focus(); } catch (e) {} }
                 return;
             }
             const tpl = String(stPersonaTpl() || '').trim();
             if (!tpl) {
-                stExportMsg('⚠ 模板是空的 —— 点「恢复默认模板」，或者自己写一份（每行以冒号结尾）。', 'warn');
+                stExportMsg('⚠ 模板是空的 —— 点「恢复默认模板」，或者自己写一份（每行以冒号结尾）。', 'warn', 'persona');
                 return;
             }
             const cfg = stAiCfg();
             const ready = stAiReady(cfg);
             if (!ready.ok) {
-                stExportMsg('⚠ ' + ready.why, 'warn');
+                stExportMsg('⚠ ' + ready.why, 'warn', 'persona');
                 return;
             }
             stEditor.personaBusy = true;
             stRerender();
-            stExportMsg('⏳ 正在让 AI 生成人设…', '');
+            stExportMsg('⏳ 正在让 AI 生成人设…', '', 'persona');
             let text = '';
             try {
                 text = await stAiChat([
@@ -22237,14 +22237,14 @@
             } catch (e) {
                 stEditor.personaBusy = false;
                 stRerender();
-                stExportMsg('❌ AI 生成失败：' + stAiErrText(e), 'bad');
+                stExportMsg('❌ AI 生成失败：' + stAiErrText(e), 'bad', 'persona');
                 return;
             }
             stEditor.personaBusy = false;
             const out = stPersonaText(text).slice(0, ST_PERSONA_OUT_MAX);
             if (!out) {
                 stRerender();
-                stExportMsg('❌ 模型返回了空内容。换个说法再试一次。', 'bad');
+                stExportMsg('❌ 模型返回了空内容。换个说法再试一次。', 'bad', 'persona');
                 return;
             }
             stEditor.personaOut = out;
@@ -22257,12 +22257,12 @@
             stExportMsg('✅ 生成了 ' + out.length + ' 字符' +
                 (labels.length ? '；模板 ' + labels.length + ' 项里对上了 ' + hit + ' 项' : '') +
                 (miss ? '（' + miss + ' 项没出现 —— 模型可能改写了标题，先看一眼再写入）' : '') +
-                '。', miss ? 'warn' : 'ok');
+                '。', miss ? 'warn' : 'ok', 'persona');
         }
 
         function stPersonaApply(mode) {
             const out = String(stEditor.personaOut || '').trim();
-            if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn'); return; }
+            if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn', 'persona'); return; }
             if (!stEditor.card) return;
             const cur = stStr(stEditor.card.description);
             if (mode === 'append') {
@@ -22270,24 +22270,24 @@
                 if (!cur.trim()) { stPersonaApply('replace'); return; }
                 stSet('card.description', cur.replace(/\s+$/, '') + '\n\n' + out);
                 stExportMsg('✅ 已追加到角色描述（现在 ' +
-                    stStr(stEditor.card.description).length + ' 字符）。', 'ok');
+                    stStr(stEditor.card.description).length + ' 字符）。', 'ok', 'persona');
                 return;
             }
             if (cur.trim() && !window.confirm('角色描述里已经有 ' + cur.length +
                 ' 个字符，「写入」会**整个替换**掉它。要继续吗？')) {
-                stExportMsg('已取消 —— 角色描述没动。', 'warn');
+                stExportMsg('已取消 —— 角色描述没动。', 'warn', 'persona');
                 return;
             }
             stSet('card.description', out);
-            stExportMsg('✅ 已写入角色描述（' + out.length + ' 字符）。', 'ok');
+            stExportMsg('✅ 已写入角色描述（' + out.length + ' 字符）。', 'ok', 'persona');
         }
 
         function stPersonaCopy() {
             const out = String(stEditor.personaOut || '');
-            if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn'); return; }
+            if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn', 'persona'); return; }
             const done = ok => stExportMsg(ok
                 ? '✅ 已复制（' + out.length + ' 字符）。'
-                : '复制失败，请手动选中预览框里的文字。', ok ? 'ok' : 'warn');
+                : '复制失败，请手动选中预览框里的文字。', ok ? 'ok' : 'warn', 'persona');
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(out).then(() => done(true), () => done(false));
                 return;
@@ -22363,6 +22363,10 @@
                     '当前生效：' + escapeHtml(stAiModeLabel(cfg)) +
                     (ready.ok ? '' : '\n⚠ ' + escapeHtml(ready.why)) +
                 '</div>' +
+                // 生成器的**工作状态**（「⏳ 正在让 AI 生成人设…」/「✅ 生成了 N 字符」…）
+                // —— **就贴在按钮上方**。原来它只出现在浮层最上面那条常驻状态条里，
+                //   眼睛在按钮上时看不见，点了没反应看着像坏了。内容由 `stPaintMsg()` 刷。
+                '<div class="st-ai-status" id="st-persona-msg" style="display:none"></div>' +
                 '<div class="st-actions">' +
                     '<button class="st-big" type="button" id="st-persona-run"' +
                         (busy ? ' disabled' : '') + ' onclick="stPersonaRun()">' +
@@ -26354,18 +26358,45 @@
 
         // 提示只落一处：顶栏下方那条常驻状态条。它不属于任何一页，
         // 所以任何选项卡下、内容区滚到哪儿都看得见；导出页不再重复一遍同样的字
-        function stExportMsg(text, kind) {
-            stEditor.msg = { text: text || '', kind: (kind === 'ok' ? '' : (kind || '')) };
+        // scope：'' = 常驻条；'persona' = 人设生成器页内那一格（贴着「生成」按钮）。
+        //
+        // ⚠ 为什么需要它：常驻条（`#st-status`）在**整个浮层最上面**，眼睛盯着
+        //   「✨ 生成人设」按钮的时候根本看不到 —— 点了没反应，看着像坏了。
+        //   AI 助手页早就是这个思路（它有自己的 `#st-ai-cfg-status` + `stAiSetStatus`），
+        //   这里只是让生成器跟上。
+        function stExportMsg(text, kind, scope) {
+            stEditor.msg = {
+                text: text || '',
+                kind: (kind === 'ok' ? '' : (kind || '')),
+                scope: scope || ''
+            };
             stPaintMsg();
         }
 
+        // 一条消息**只出现在一个地方**：
+        //   · 人设页开着 ⇒ 进 `#st-persona-msg`（贴着按钮），常驻条留空；
+        //   · 人设页没开（切到别的选项卡了）⇒ 退回常驻条，消息不丢。
+        // ⚠ 这条「不同时出现」是要断言的 —— 两边都写的话，用户会看到同一句话两遍。
         function stPaintMsg() {
-            const m = stEditor.msg || { text: '', kind: '' };
+            const m = stEditor.msg || { text: '', kind: '', scope: '' };
+            const inPane = m.scope === 'persona';
+
+            const pm = document.getElementById('st-persona-msg');
+            if (pm) {
+                const show = inPane && !!m.text;
+                pm.className = 'st-ai-status' +
+                    (m.kind === 'bad' ? ' st-bad' : (m.kind === 'warn' ? ' st-warn' : ' st-ok'));
+                pm.textContent = show ? m.text : '';
+                pm.style.display = show ? '' : 'none';
+            }
+
             const bar = document.getElementById('st-status');
             if (!bar) return;
+            // ⚠ 页内格**在的时候**才把常驻条让出去；不在就退回常驻条
+            const show = !!m.text && !(inPane && pm);
             bar.className = 'st-status' + (m.kind === 'bad' ? ' st-bad' : (m.kind === 'warn' ? ' st-warn' : ''));
-            bar.textContent = m.text || '';
-            bar.style.display = m.text ? '' : 'none';
+            bar.textContent = show ? m.text : '';
+            bar.style.display = show ? '' : 'none';
         }
 
         function stExportNote() {

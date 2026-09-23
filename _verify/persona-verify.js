@@ -376,8 +376,10 @@ window.fetch = async function (url, init) {
         return e ? e.textContent : ''; })()`), v => /还没有生成结果/.test(v), '含「还没有生成结果」');
     await shot('persona-01-pane.png');
 
-    // ============ C2. 「模板」折叠 + 状态提示的位置（第十二轮）============
-    section('C2. 模板默认折叠、点标题能展开、状态提示在模板下面');
+    // ============ C2. 「模板」折叠 + 配置行的位置（第十二轮）============
+    // ⚠ 这一段盯的是 `#st-persona-ai-status`（配置行「当前生效：…」）。
+    //   「工作状态」那个格子（`#st-persona-msg`）是**另一个元素**，在 C3 段。
+    section('C2. 模板默认折叠、点标题能展开、配置行在模板下面');
     // ⚠⚠ 判「收起了」**不能看 rect** —— 折叠靠 `grid-template-rows: 0fr` + `overflow: hidden`，
     //     **裁切不影响 `getBoundingClientRect()`**：里面那个 textarea 的 rect 照样是满高。
     //     所以这里① 量**外层网格容器自己**（它确实塌成 0）、② 做一次**命中测试**。
@@ -424,7 +426,17 @@ window.fetch = async function (url, init) {
 
     // 点**真按钮**展开
     await ev(`document.getElementById('st-persona-tpl-toggle').click()`);
-    await sleep(450);
+    // ⚠⚠ 别用固定 sleep 等 CSS 过渡。`.st-fold-ico` 是 `transition: transform 0.3s`，
+    //   而这里原本 `sleep(450)` —— 看着有 150ms 余量，**实测会偶尔不够**：
+    //   反向测试 R8 那一跑就多红了「展开后箭头转回正」这一条，而 R8 打的是 `scope`，
+    //   跟折叠**毫无关系** ⇒ 是假红。headless 下过渡由 rAF 驱动，主线程一忙
+    //   （比如常驻条刚显示、触发了重排）就会拖后。
+    //   而这条断言**不能删**：R6（点了也不开）下它必须红。所以改成「等到它真的转回正」。
+    await waitFor(`(function(){
+      const ico = getComputedStyle(document.querySelector('#st-persona-tpl-fold .st-fold-ico')).transform;
+      const h = document.getElementById('st-persona-tpl-body').getBoundingClientRect().height;
+      return ico === 'none' && h > 200;
+    })()`, 3000);
     const p1 = await ev(foldProbe);
     check('展开后拿到了 st-fold-open 类', p1.open, true);
     check('展开后 aria-expanded 是 true', p1.aria, 'true');
@@ -435,7 +447,8 @@ window.fetch = async function (url, init) {
 
     // 再点一次收回 —— 对照组：证明上一条不是「一展开就回不去」
     await ev(`document.getElementById('st-persona-tpl-toggle').click()`);
-    await sleep(450);
+    // ⚠ 同理，别用固定 sleep —— 收起要等 `grid-template-rows` 真的塌成 0
+    await waitFor(`document.getElementById('st-persona-tpl-body').getBoundingClientRect().height <= 2`, 3000);
     const p2 = await ev(foldProbe);
     check('再点一次又收起了', p2.open, false);
     check('收起后折叠体又回到 0 高', p2.bodyH, v => v <= 2, '≤ 2');
@@ -466,6 +479,59 @@ window.fetch = async function (url, init) {
     check('（对照）两个节点都在顺序表里找到了（否则 indexOf 的 -1 会让上一条天然成立）',
       order.fold >= 0 && order.status >= 0, true);
     check('状态提示排在按钮行前面', order.status < order.act, true);
+
+    // ============ C3. 工作状态贴着「生成人设」按钮（第十三轮）============
+    section('C3. 生成器的工作状态在按钮上方（不再只活在常驻条里）');
+    // ⚠ 需求：「把生成器的工作状态（『⏳ 正在让 AI 生成人设…』之类）挪到『生成人设』按钮上方」。
+    //   原来这类消息只出现在浮层**最上面**那条常驻条 `#st-status` 里 —— 眼睛盯着按钮时看不见，
+    //   点了没反应，看着像坏了。
+    // ⚠⚠ 别跟 `#st-persona-ai-status` 搞混：那是**配置行**（「当前生效：跟随全局…」），
+    //   建面板时算出来的静态行，上一轮挪到模板下面，**本段不管它**。
+    const posMsg = await ev(`(function(){
+      const all = [...document.querySelectorAll('#st-panes *')];
+      return {
+        msg: all.indexOf(document.getElementById('st-persona-msg')),
+        run: all.indexOf(document.getElementById('st-persona-run'))
+      };
+    })()`);
+    // ⚠ 对照组必须在前：`indexOf` 找不到时返回 **-1**，而「-1 < 任何正数」恒真
+    //   ⇒ 主断言会**天然成立**。所以先盯「两个节点都在表里」。
+    check('（对照）工作状态格与生成按钮都在顺序表里找到了',
+      posMsg.msg >= 0 && posMsg.run >= 0, true);
+    check('工作状态格排在「生成人设」按钮**前面**（DOM 顺序 = 上方）',
+      posMsg.msg, v => v >= 0 && v < posMsg.run, '≥0 且 < 按钮位置');
+    check('还没生成时工作状态格没字',
+      await ev(`document.getElementById('st-persona-msg').textContent`), '');
+    check('还没生成时工作状态格不显示',
+      await ev(`getComputedStyle(document.getElementById('st-persona-msg')).display`), 'none');
+
+    // 分流：**一条消息只出现在一个地方** —— 人设页开着时进页内格，常驻条留空
+    await ev(`stExportMsg('测试：页内格', '', 'persona')`);
+    await sleep(120);
+    check('带 scope=persona ⇒ 页内格显示出来',
+      await ev(`document.getElementById('st-persona-msg').textContent`), '测试：页内格');
+    check('（对照）同一时刻常驻条 `#st-status` 是空的 —— 同一句话不能出现两遍',
+      await ev(`document.getElementById('st-status').textContent`), '');
+    check('页内格空 kind 时用 ok 样式（绿）',
+      await ev(`document.getElementById('st-persona-msg').className`),
+      v => /st-ok/.test(v), '含 st-ok');
+
+    // 切到别的选项卡 ⇒ 消息**退回常驻条**，不能丢
+    await ev(`stSwitchTab('desc')`);
+    await sleep(200);
+    check('切走之后常驻条接住了这条消息（消息不丢）',
+      await ev(`document.getElementById('st-status').textContent`), '测试：页内格');
+    await ev(`stSwitchTab('persona')`);
+    await sleep(200);
+    check('切回来之后页内格又接住了',
+      await ev(`document.getElementById('st-persona-msg').textContent`), '测试：页内格');
+    check('（对照）切回来之后常驻条又空了',
+      await ev(`document.getElementById('st-status').textContent`), '');
+    // 清干净，别污染后面几段
+    await ev(`stExportMsg('', '')`);
+    await sleep(120);
+    check('（收尾）清空之后页内格也空了',
+      await ev(`document.getElementById('st-persona-msg').textContent`), '');
 
     // ============ D. 模板逻辑 ============
     section('D. 模板逻辑');
@@ -786,8 +852,11 @@ window.fetch = async function (url, init) {
       await ev(`document.getElementById('st-persona-run').textContent.trim()`), '⏳ 生成中…');
     check('重绘之后还是禁用',
       await ev(`document.getElementById('st-persona-run').disabled`), true);
-    check('重绘之后状态行还写着正在生成',
-      await ev(`document.getElementById('st-status').textContent`), v => /正在让 AI 生成人设/.test(v), '含「正在让 AI 生成人设」');
+    // ⚠ 这一条原来读的是**常驻条** `#st-status` —— 用户要求把生成器的工作状态挪到
+    //   「✨ 生成人设」按钮**上方**，所以**断言的方向跟着改**（读页内格 `#st-persona-msg`）。
+    //   「断言的方向本身就是需求」：改需求就先改断言、看它红，再改产品。
+    check('重绘之后页内状态格还写着正在生成',
+      await ev(`document.getElementById('st-persona-msg').textContent`), v => /正在让 AI 生成人设/.test(v), '含「正在让 AI 生成人设」');
     // 再点一次不许重复发请求
     await ev(`stPersonaRun()`);
     check('忙的时候再点一次 ⇒ 不重复发请求', await callN(), 1);

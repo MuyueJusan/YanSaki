@@ -1616,12 +1616,22 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
    「生成的东西必须先能反悔」，跟 §十三 的「AI 生成预制块」同一条规矩。
 3. **写入前如果角色描述非空，弹 `confirm`。** 覆盖别人手写的内容是这一族里最不可逆的动作，
    不能静默做；追加那条路不用问（它不破坏已有内容）。
-4. **「模板」那一块默认折叠起来**（第十二轮加的），AI 状态提示挪到它**下面**。模板有 42 行、
-   文本框 `rows="14"`，摊开时面板太长；收起来之后一屏就能看完「要什么 → 生成 → 结果」。
+4. **「模板」那一块默认折叠起来**（第十二轮加的），**配置行**（`#st-persona-ai-status`，写着
+   「当前生效：跟随全局…」）挪到它**下面**。模板有 42 行、文本框 `rows="14"`，摊开时面板太长；
+   收起来之后一屏就能看完「要什么 → 生成 → 结果」。
    ⚠ 折叠态记在 `stEditor.personaTplOpen` 里、**不落盘** —— 落盘的话「默认折叠」只在第一次成立：
    用户展开过一次之后，以后每次打开编辑器都是摊开的。跟 `personaReq` / `personaOut` 一样当
    **会话级**面板状态。⚠ 切换时**只改 class，不调 `stRerender()`** —— 重绘会把整个 pane 重建，
    新元素一出生就带着最终样式，`grid-template-rows` 的过渡**没有起点**，动画会直接跳掉。
+5. **生成器的「工作状态」贴在「✨ 生成人设」按钮正上方**（第十三轮加的，`#st-persona-msg`）。
+   这些消息（「⏳ 正在让 AI 生成人设…」/「✅ 生成了 N 字符」/「❌ AI 生成失败…」）原本只往
+   浮层**最上面**那条常驻条 `#st-status` 里写 —— 眼睛盯着按钮时它在视野外，**点了没反应，
+   看着像坏了**。做法是给 `stExportMsg(text, kind, scope)` 加第三个参数：`scope: 'persona'`
+   ⇒ 这条消息归人设页、进页内格，常驻条同时让位（**一条消息只出现在一个地方** —— 两边都写
+   的话用户会看到同一句话两遍）。人设页没开着时自动退回常驻条，**消息不丢**。机制见 §十八。
+   ⚠⚠ **别跟上面第 4 条那个「配置行」搞混**：`#st-persona-ai-status` 是「当前生效：跟随全局…」，
+   建面板时算出来的静态行；`#st-persona-msg` 才是**工作状态**。**两个元素、两种语义**，
+   面板上它们也确实挨在一起（配置行在模板折叠块下面、工作状态格在按钮上面，中间只隔几行）。
 
 ### 默认模板
 
@@ -1682,8 +1692,9 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 ### DOM id
 
 `st-persona-req` / `st-persona-tpl` / `st-persona-run` / `st-persona-tpl-reset` /
-`st-persona-ai-status` / `st-persona-out`（**有结果才渲染**）/ `st-persona-write` /
-`st-persona-append` / `st-persona-copy`（同上）。
+`st-persona-ai-status`（**配置行**：「当前生效：…」）/ `st-persona-msg`（**工作状态**，
+在生成按钮正上方，由 `stPaintMsg()` 刷，默认 `display:none`）/ `st-persona-out`
+（**有结果才渲染**）/ `st-persona-write` / `st-persona-append` / `st-persona-copy`（同上）。
 
 折叠那一组：`st-persona-tpl-fold`（外层，挂 `.st-fold` / `.st-fold-open`）/
 `st-persona-tpl-toggle`（折叠头，带 `aria-expanded`）/ `st-persona-tpl-body`（被折叠的网格）。
@@ -2328,9 +2339,32 @@ toggle 回来 —— 会打转。`stCodeMenuToggle` 是幂等的，所以真转�
 
 ## 十八、状态提示（`stPaintMsg`）
 
-`stEditor.msg = { text, kind }` 是**唯一真相**，`stExportMsg(text, kind)` 写它，`stPaintMsg()` 画到 `#st-status`。
+`stEditor.msg = { text, kind, scope }` 是**唯一真相**，`stExportMsg(text, kind, scope)` 写它，
+`stPaintMsg()` 负责画。**两个去处**：
+
+| `scope` | 画到哪 | 谁在用 |
+|---|---|---|
+| `''`（默认） | 常驻条 `#st-status`（浮层最上面，跨所有选项卡） | 全站默认 —— 绝大多数调用点 |
+| `'persona'` | 人设页页内格 `#st-persona-msg`（贴在「✨ 生成人设」按钮正上方） | 只有人设生成器那十几处 |
+
+⚠⚠ **一条消息只出现在一个地方。** `stPaintMsg()` 里的判据是
+`show = !!m.text && !(inPane && pm)` —— `pm` 是「页内格此刻在不在 DOM 里」（`getElementById`）。
+人设页开着 ⇒ 页内格接住、常驻条留空；切到别的选项卡 ⇒ 页内格不在 DOM 了 ⇒
+**自动退回常驻条，消息不丢**。两边都写的话用户会看到同一句话两遍。
+
+⚠ 页内格的 `kind` → class 映射：`bad` ⇒ `.st-bad`（红）、`warn` ⇒ `.st-warn`（琥珀）、
+其余 ⇒ `.st-ok`（绿）。⚠ `st-ai-status` 的**默认**样式是蓝灰，绿是 `.st-ok` 给出来的 ——
+少写那个 class 不会报错，只会「提示不绿了」。
 
 **为什么要有常驻状态条**：提示原本只往导出页的 `#st-export-msg` 写，而那个节点只在「导出」页渲染时才存在；顶栏的「📥 导入」在任何选项卡下都能点，于是导入成功 / 失败**一点反馈都没有**。
+
+**为什么还要页内格**（第十三轮加的）：常驻条在浮层**最上面**，而人设生成器的按钮在面板**下半部分**
+—— 盯着按钮看的时候那条提示在视野外，点了没反应、看着像坏了。AI 助手页早就是这个思路
+（它有自己的 `#st-ai-cfg-status` + `stAiSetStatus`），人设生成器只是跟上。
+
+⚠ 反向测试：`_reverse13.js` 的 **R7** 拆常驻条的让位判定（消息在两处同时出现 ⇒ 恰好那两条
+「常驻条是空的」变红）、**R8** 拆 `scope` 的存储（消息全退回常驻条 ⇒ 页内格那几条变红）。
+上下游各一针 —— 因为「挪」和「再抄一份」在画面上很像，只打一头看不出来。
 
 导出页**不再重复一份**（同一句话出现两遍是噪音）。
 
