@@ -169,6 +169,45 @@ blobs.find(b => b.path === 'index.html').sha === blobs.find(b => b.path === 'sak
 ⚠ The `/repos/...` `size` field is updated **asynchronously**; right after a large push it can still
 show the old value. Trust the tree, not `size`.
 
+### The push itself: what counts as success
+
+The authoritative evidence is this line on stdout:
+
+```
+   d74aadf..61d09f5  main -> main
+```
+
+⚠ **Do not judge by exit code when you piped the command.** `git push | tail -4` reports *tail's*
+status — a failed push looks like a success, and a successful one can look like a failure.
+Same trap in `if git push ... | tail ...; then ...; fi`: the branch taken has nothing to do with
+git. Run the push on its own, or read `${PIPESTATUS[0]}`.
+
+⚠ **`git ls-remote` failing does NOT mean the push failed.** Flaky proxies give
+`Empty reply from server` / `CONNECT tunnel failed, response 502`. Retry; a push that already
+printed `old..new  main -> main` succeeded server-side.
+
+### When the git transport is blocked, verify over the REST API
+
+`api.github.com` often works when git-over-HTTPS does not, and it needs **no token for a public
+repo**. Compare remote blob shas against `git hash-object` on the local files:
+
+```js
+const remote = await (await fetch(
+  "https://api.github.com/repos/<o>/<r>/git/trees/<sha>?recursive=1",
+  { headers: { "User-Agent": "verify", Accept: "application/vnd.github+json" } }
+)).json();
+
+for (const [remotePath, localPath] of pairs) {
+  const e = remote.tree.find(x => x.path === remotePath);
+  const local = execSync(`git hash-object "${localPath}"`).toString().trim();
+  assert(e.sha === local, remotePath);   // byte-for-byte, not "looks right"
+}
+```
+
+`GET /repos/<o>/<r>/commits/main` confirms the remote HEAD equals local `git rev-parse HEAD`.
+Bonus: the tree entry's `mode` proves the exec bit survived (`100755` for a `chmod +x` script) —
+worth asserting, since Windows checkouts and `core.filemode` drop it silently.
+
 ## 7. Secret hygiene before pushing
 
 ```bash
