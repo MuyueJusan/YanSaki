@@ -12,7 +12,9 @@
 - ⚠ **`saki.html` 是 CRLF** ⇒ JS 里 `.` **不匹配 `\r`**，`$` 锚行尾的正则**整条静默失败**；⚠⚠ **`\r` 也会从运行时数据进来**（模型输出 / `fetch` / 旧 `localStorage`）⇒ 用 `$` 或按行切的正则**进函数先归一 `\r\n?`→`\n`**（六之二十八）。⚠ Git Bash `grep -c $'\r'` 对 CRLF 报 0（**不可靠**）⇒ Node 读 `latin1` 后 `match(/\r\n/g)`。⚠ `markdown/` 是**纯 LF**。
 - ⚠ **`check.js` 改完先跑**：`SYNTAX` / `MISSING` / `DUPLICATE literal ids` / `UNDECLARED` / `ESCAPE-GATE`。⚠ **它读页面不读生成物**（**过时的输入比没有检查更坏**）；**新加构建函数必须来改 `ESCAPE_ALLOW` 白名单**。
 - ⚠ **整跑一律用 `run-all.js`**（手写 `for` + `grep`/`tail` 会让格式不匹配的那几套**静默变空行**）。⚠⚠ **它抓不到「某套只跑了一部分」** ⇒ **harness 一律串行**（**同一套也别并发** —— 撞 profile / 端口时红绿都不可信）、timeout **≥ 900 s**，跑完**拿逐套数字跟 `README` §7 表对一遍**。
-- ⚠ **Chrome 层超时 / 报「`NOT FOUND` 锚点变了」时，先量网络、先去产品里 `grep` 那个锚点，别先怀疑产品**（主页 `@import` 拉 Google Fonts ⇒ 超时**假红**）；判回归**拿改动前的副本跑同一个 harness**。⚠ **探针收尾 `kill()` 在前、删 profile 在后**，句柄挂**模块作用域**。
+- ⚠ **Chrome 层超时 / 报「`NOT FOUND` 锚点变了」时，先量网络、先去产品里 `grep` 那个锚点，别先怀疑产品**（主页 `@import` 拉 Google Fonts ⇒ 超时**假红**）；判回归**拿改动前的副本跑同一个 harness**。（探针收尾的 `kill()` / profile 顺序 / 句柄作用域在技能里，不重复）
+- ⚠⚠ **「猜」和「决议」是两步 ⇒ 断言要打在真正决定行为的那一步**（只测「猜」会让真 bug 全绿；「量得没错但量错了对象 = 没量」），且**「只有它能答」这个说法自己也要核**（六之三十三）。⚠⚠ **「这一步没做」的路径必须自己喊出来**，静默降级成另一种协议比直接报错难查得多（六之三十五）。⚠ **文档里写死的数字要么改推导式、要么配一条断言盯着** —— 「找不到就跳过」是把失败伪装成成功（六之三十六）。
+- ⚠⚠ **别在反向测试跑着的时候改产品** —— 它从内存基线写回磁盘，你的改动会被**静默盖掉**；kill 后留下 `.bak`（干净基线）+ **一份被注入过的产品**（`grep "注入："` 核），套件下次会拒绝跑（那是对的）（六之三十四）。⚠ **模板字符串里出现反引号**（哪怕在注释里）会把字符串提前结束，报错却指向**函数开头** ⇒ 改完套件先跑 `_verify/_lint-suites.js`（六之三十七）。
 
 ## ① 工程约定
 
@@ -20,7 +22,7 @@
 - ⚠ **别按功能名猜目标，先 `grep` 出所有候选** —— 同一个中文名常落在两处 DOM 上（两个「展开键」：`stToggleTabs` / `toggleStArea`），**改一个不修另一个**。⚠ **量得没错但量错了对象 = 没量。**
 - **文档 `G:\saki\markdown\`**：`README.md` + `01…06` + `CHANGELOG.md`（**最新在上**）。改功能要同步分册 + CHANGELOG + README 计数。
 - ⚠ **行号与「共 N 个」都会静默漂** ⇒ 计数一律**从源码枚举**；⚠ **往 `<head>` 插 CSS 会让后面锚点整体后移** ⇒ **别靠加法算，重新 `grep`**（核对交 `_verify/_audit-anchors.js`）。⚠ **同一个数常有多种载体**（README / 分册 / **产品注释** / 历史日志），**产品注释里的数字对所有静态检查隐身**。⚠ **节号会撞号** ⇒ `_verify/_audit-sections.js`（范围**同一父节内**）。
-- **两处 `_verify`**：`G:\saki\_verify\`（**17 套**，零依赖）+ `C:\Users\YanSaki\WorkBuddy AI\2026-09-17-00-10-39\_verify\`（8 层，要 `NODE_PATH=…/node/workspace/node_modules`）。⚠ **条数会每轮涨** ⇒ **现量 / 见 `README` §7 表**，别抄；同名不同地，各用各的 `run-all.js`。
+- **两处 `_verify`**：`G:\saki\_verify\`（**18 套**，零依赖）+ `C:\Users\YanSaki\WorkBuddy AI\2026-09-17-00-10-39\_verify\`（8 层，要 `NODE_PATH=…/node/workspace/node_modules`）。⚠ **条数会每轮涨** ⇒ **现量 / 见 `README` §7 表**，别抄；同名不同地，各用各的 `run-all.js`。
 - ⚠ **生成物不进仓库**（**产物用完就删**）—— **留两份就一定有一份是错的**。⚠ 临时 profile 残留用 `_verify/_purge-tmp.js` 数（**默认只数，`--go` 才删**）。⚠ **过滤「存什么 / 传什么」一律白名单**，但**白名单自己也会漏** ⇒ **旁边必须配「未收录项」报告**。⚠ 注释中文、讲「为什么」，坑写成 `⚠` 留在代码里。
 - ⚠ **`markdown/` 里有 5 份镜像**（`MEMORY.md` / `RULES.md` / `YYYY-MM-DD.md` / `SKILL.md` / `SKILL-git-push.md`）；**源在 `.workbuddy-ai/memory/` 与 `~/.workbuddy-ai/skills/`**。**先写完日志再同步**，`cp` 后 `cmp` 逐字节核对；**新设备用 `setup-dev.sh` 装回**。
 - ⚠⚠ **`git push` 绿 + 远端 blob 一致 ≠ 上线了** —— 唯一判据是**线上字节的 sha1**；⚠ **刚推完立刻查线上会 CDN 假红**；⚠ `cancelled` 且 **0 个 job** = 多条 workflow 抢同一个 `concurrency` 组互掐（六之二十）。

@@ -5142,6 +5142,15 @@ anchors *inside* the block from moving. The claim was simply wrong, and it had b
 comment states a property ("zero-displacement"), **verify it once** — a false comment is invisible to
 every static check.
 
+⚠⚠ **The net shift is not the sum of your insertions.** A round inserted CSS in **two** places
+(13 + 14 lines by counting the added blocks) and the whole table moved by **exactly +20** — because the
+same edit also *deleted* lines. Anyone computing "old + 13" for rows above the second insertion, or
+"old + 27" for rows below it, would have written 7 wrong numbers that still *looked* plausible.
+⇒ Treat "how many lines did I add" as unusable input. Derive the shift by taking **one** anchor whose
+truth you can grep, then verify the *whole* table with a tool that re-checks each row (does the shifted
+line actually start a banner comment?) and **prints the banner text** so a human can eyeball semantics,
+not just line-ness. A tool that only prints numbers will happily confirm a self-consistent wrong shift.
+
 ### 3. Enumerate *cascading* reds — and never assume a control group stays green
 
 In reverse testing (inject one fault, assert exactly which checks go red), a probe expected **11** reds
@@ -5211,6 +5220,36 @@ the probe go red as intended.
 hole** — and (b) is the more common of the two once a suite is mature. A reverse test is therefore
 also an **unwatched-path finder**, not merely a proof that assertions can fail.
 
+### The reason you believe an assertion is strong is itself an unverified claim
+
+Three assertions were written for a lookup function's fallback path, each named *"… (only the table can
+answer)"* — the reasoning being that with an empty base URL the URL-guessing fallback has nothing to
+match on, so only the lookup table's own field could produce the value. The reverse probe **deleted the
+table lookup** and only *one* of the three went red. The other two still passed.
+
+The reasoning was wrong: the guessing fallback also reads the **provider name**, not just the URL, so it
+answered correctly on its own. The comment explaining *why* the assertion was strong was itself a claim
+nobody had tested — and it would have been repeated into the docs.
+
+⇒ An assertion's **justification** is part of the assertion. Before writing "only X can answer this",
+run the probe that deletes X and confirm the red set is what you predicted. If fewer assertions go red
+than you expected, **your justification was wrong** — rewrite the *names* to say what they actually pin
+("with an empty URL, the provider name alone still decides" is a fine assertion), and keep a real probe
+for the table field elsewhere.
+
+### An injection point can vanish through legitimate refactoring — re-verify uniqueness every round
+
+A probe's `from` string was a line the product no longer contained: an earlier round had replaced that
+hand-rolled implementation with a call to a shared helper, so the old anchor was simply gone. Nothing
+warned about it — a stale reverse test is silent, and the red-set check would have been reading a page
+that was never modified.
+
+⇒ Before a reverse run, assert every `from` string occurs **exactly once** (`split(from).length - 1 === 1`
+for all probes in one pass) and fail loudly otherwise. Also re-read the *expected red list*: assertion
+names drift when you rename them, and a name that no longer exists makes the "exactly these went red"
+gate fail for the wrong reason. Both checks are cheap, and both are the kind of thing that is invisible
+until it has already produced a confidently wrong result.
+
 ## Never run the same harness twice at once
 
 Two runs of the same headless harness were launched concurrently — the first was still going when
@@ -5221,4 +5260,41 @@ and a collision is not a reliable failure — it can also produce a *pass for th
 ⇒ Serialise **every** run, including repeats of the same suite. "The two harnesses must not overlap"
 is only half the rule; the same suite must not overlap itself either. Check for an already-running
 run before backgrounding another one.
+
+## A backtick inside a template-string comment ends the string early
+
+Suites drive the page by evaluating code in it, so they are full of backtick template literals:
+``ev(`(function(){ … })()`)``. A **single backtick inside a comment** — writing "the `custom` entry" in
+prose, or `` `proto` `` while explaining a field — closes the literal right there.
+
+The reported error is `SyntaxError: missing ) after argument list`, and **the line it points at is the
+*opening* of the template string**, i.e. somewhere in the middle of the block, with nothing obviously
+wrong on it. It reads like a broken `ev(...)` call, not like a stray backtick in a comment three lines
+below. This was hit **three times in one round** (twice in one file) before it was gated.
+
+⇒ Two habits:
+- Inside a suite, **never put a backtick in a comment**. Use 「」, quotes, or nothing.
+- After touching any suite, run a one-line linter that `node --check`s every file and names the
+  offenders. A `for f in _verify/*.js; do node --check "$f"; done` loop costs a second and turns a
+  twenty-minute hunt into a one-line report. (Where the syntax check runs on a *generated* artefact,
+  check the artefact — not the source that generates it.)
+
+## An injection that breaks the page's parse looks like "every assertion failed"
+
+A probe replaced a `catch` block but its `from` string stopped **one brace short** of the whole block,
+so the replacement left an orphan `}` behind. The page no longer parsed. The suite then produced no
+summary line at all — the harness had nothing to parse, so every "expected red" comparison was vacuous.
+
+Two lessons, one per side:
+
+- **Probe author:** a replacement must consume the *entire* syntactic unit it is standing in for. After
+  building the modified text, assert the injection actually applied, and prefer short, self-contained
+  anchors over multi-line blocks.
+- **Harness author:** add a gate that answers *"does the injected page still parse?"* before comparing
+  red sets. Extract every inline `<script>` block and `node --check` each one; report a broken parse as
+  a **probe error**, distinct from a failed expectation. Otherwise "no summary line" and "the summary
+  says 0 red" are easy to conflate, and the run looks like a suite problem rather than a probe problem.
+
+The same gate is worth running on the **unmodified** page at the start of a reverse run: it proves the
+gate itself can pass, so a red later means the injection broke something — not that the gate is broken.
 
