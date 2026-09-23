@@ -1608,7 +1608,7 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 写一句设定 / 要求，AI 按一份**模板**逐项填好，生成一整份人设。跟「AI 助手」那三个面板
 （世界书扩写 / 单条改写 / 开场白）是同一族：**生成的东西先给你过目、点一下才进卡**。
 
-### 三个设计决定
+### 设计决定
 
 1. **模板可改，存浏览器本地**（`localStorage` 键 `stPersonaTpl`），**不写进卡** ——
    跟 AI 配置同一条理由：它是用户自己的偏好，不是角色卡的一部分。
@@ -1632,6 +1632,25 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
    ⚠⚠ **别跟上面第 4 条那个「配置行」搞混**：`#st-persona-ai-status` 是「当前生效：跟随全局…」，
    建面板时算出来的静态行；`#st-persona-msg` 才是**工作状态**。**两个元素、两种语义**，
    面板上它们也确实挨在一起（配置行在模板折叠块下面、工作状态格在按钮上面，中间只隔几行）。
+6. **生成结果可以存成一条世界书条目**（第十四轮加的）。结果区多一个「📖 追加到世界书」，
+   点一下就用 `stBlankEntry()` 造一条新条目（`content` = 生成结果、`comment` = 「<卡名> 的人设」、
+   `keys` = `[卡名]`），`push` 进 `card.bookEntries` 后 `stSaveDraft()` + `stRerender()`。
+   跟「追加到角色描述」同一条理由：**不覆盖任何东西，所以不弹 `confirm`**。
+   ⚠ **关键词 / 备注都拿卡名打头** —— 一条既没有关键词、也不是常驻的条目**永远不会触发**，
+   而「按钮点了、条目也建了、聊起来却像没生效」是最难查的一种坏。卡里没写名字就只能留空，
+   那就**明说**：提示变成 `warn`，写着「没填关键词，去世界书页补一个它才会触发」。
+   ⚠ 别拿提示当判据 —— 那句「已追加到世界书（第 N 条）」报的是 `a.length`，
+   `push` 真被拆掉时它**照样说成功**（`_reverse13.js` 的 R9 就是来钉这件事的）。
+7. **「要不要拿角色卡名字当人物姓名」是个开关**（第十四轮加的）：`#st-persona-name-use`，
+   放在「设定 / 要求」输入框**下面**（它跟要求一起构成**输入**，而不是跟生成按钮一起构成动作），
+   默认**开**（卡名通常就是人物名）。关掉时 `stPersonaUserPrompt()` 里那一段
+   「这张卡现在的名字」**整个不给**，让 AI 按用户写的设定自己起名。
+   ⚠ **不是**「换个说法告诉它别用卡名」—— 不提就够了，提了反而把卡名**泄**给模型，
+   而那正是用户想避免的。
+   ⚠ 判据写成 `stEditor.personaNameUse !== false`，不是 `=== true`：没这个键的旧状态也按「开」算，
+   否则升级上来的用户会突然发现卡名不再喂给 AI —— 一个**静默的行为变化**，
+   而面板上那个勾选框照样显示「勾着」。跟 `personaTplOpen` 一样是**会话级**的、不落盘。
+   ⚠ 卡里还没写名字时**不禁用**它（禁用看着像坏了），把事实写进标签：「（这张卡还没写名字）」。
 
 ### 默认模板
 
@@ -1661,6 +1680,7 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 | `personaBusy` | 忙态 |
 | `personaTpl` | 自定义模板。**`null` = 还没从 `localStorage` 读过**（懒加载） |
 | `personaTplOpen` | 「模板」折叠块展开没有。**默认 `false`（收起）**，**不落盘**（见上面第 4 条） |
+| `personaNameUse` | 要不要把角色卡名字当人物姓名。**默认 `true`**，**不落盘**（见上面第 7 条） |
 
 ⚠ **模板清空 = 回到默认**（面板上就是这么写的），所以有两条容易写错的规矩：
 
@@ -1681,20 +1701,23 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 | `stPersonaTplIsDefault()` | 问 `localStorage`：现在用的是不是默认模板 |
 | `stSyncPersonaTplOpen()` / `stPersonaTplToggle()` | 折叠态写进 DOM 的**唯一**一处（跟 `stSyncTabsCollapsed` 同一条理由：容器 class 与箭头分两处写，漏一处就「状态不对」）+ 点一下切换 |
 | `stPersonaReqSet(v)` / `stPersonaOutSet(v)` | 写状态（带截断） |
+| `stPersonaNameUse()` / `stPersonaNameUseSet(v)` | 读 / 写「要不要拿卡名当人物姓名」。**读**那一端是 `!== false`（旧状态也按「开」算），**写**那一端是 `v !== false` |
 | `stPersonaLabels(tpl)` | 从模板里数「有哪些字段」。只认**以冒号结尾**的行：`/^[\s\-]*([^:：\n]{1,12})[:：]\s*$/`，`- 风格：` 认成「风格」，重复的只算一次。两个用途：面板上显示「N 项」+ 生成完数「模型漏了几项」 |
-| `stPersonaSysPrompt()` / `stPersonaUserPrompt(req, tpl)` | 拼提示词。user 里带上**用户的要求原文 + 这张卡现在的名字 + 模板全文** |
+| `stPersonaSysPrompt()` / `stPersonaUserPrompt(req, tpl)` | 拼提示词。user 里带上**用户的要求原文 + 模板全文**，以及**开关打开时**「这张卡现在的名字」 |
 | `stPersonaText(raw)` | **只做围栏清洗**（`\`\`\`` 包着就去掉）。⚠ 再多的「智能」清洗（比如删掉开头那句「好的，这是人设：」）会顺手吃掉真正的第一行，而那种错**看不出来** —— 输出照样有内容、照样能写进卡 |
 | `stPersonaRun()` | 主流程：校验 → 忙态 → `stAiChat` → 清洗 → 进状态 → 报「对上了几项」 |
-| `stPersonaApply(mode)` | `'replace'` / `'append'`。追加时描述本来是空的就当写入（不留空行开头）；替换非空描述前弹 `confirm` |
+| `stPersonaApply(mode)` | `'replace'` 写入角色描述 / `'append'` 追加到角色描述 / `'book'` 追加成一条世界书条目（见上面第 6 条）。追加时描述本来是空的就当写入（不留空行开头）；替换非空描述前弹 `confirm` |
 | `stPersonaCopy()` | `navigator.clipboard`，失败退回 `textarea` + `execCommand` |
 | `stPanePersona()` | 面板本身 |
 
 ### DOM id
 
-`st-persona-req` / `st-persona-tpl` / `st-persona-run` / `st-persona-tpl-reset` /
+`st-persona-req` / `st-persona-name-use`（「把角色卡名字当人物姓名」勾选框，在要求输入框**下面**）/
+`st-persona-tpl` / `st-persona-run` / `st-persona-tpl-reset` /
 `st-persona-ai-status`（**配置行**：「当前生效：…」）/ `st-persona-msg`（**工作状态**，
 在生成按钮正上方，由 `stPaintMsg()` 刷，默认 `display:none`）/ `st-persona-out`
-（**有结果才渲染**）/ `st-persona-write` / `st-persona-append` / `st-persona-copy`（同上）。
+（**有结果才渲染**）/ `st-persona-write` / `st-persona-append` / `st-persona-to-book`
+（「📖 追加到世界书」，同上）/ `st-persona-copy`（同上）。
 
 折叠那一组：`st-persona-tpl-fold`（外层，挂 `.st-fold` / `.st-fold-open`）/
 `st-persona-tpl-toggle`（折叠头，带 `aria-expanded`）/ `st-persona-tpl-body`（被折叠的网格）。

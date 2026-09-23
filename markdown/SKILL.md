@@ -4883,6 +4883,38 @@ in the baseline.
   gate**; without it, "all expected assertions went red" passes vacuously when the name matches nothing.
 - Fix: collapse to one boolean and **one fixed name**, and `console.log` which branch was taken.
 
+### An assertion that *throws* on failure converts "one red" into "no summary line at all"
+
+New assertions were added for a feature that did not exist yet, and one of them read a field off an
+array element:
+
+```js
+check('the new entry's body is the generated text',
+  await ev(`stEditor.card.bookEntries[${n}].content`), REPLY);
+```
+
+Before the feature existed, the click that precedes it threw. Worse, once the reverse probe removed the
+`push`, the element was `undefined` — reading `.content` throws `TypeError`, the evaluate helper
+rethrows, and **the suite dies mid-run**.
+
+⚠ The damage is not "one more failure":
+
+| | normal failure | thrown |
+|---|---|---|
+| summary line | present (`N passed / M failed`) | **absent** |
+| `failsOf()` | the M names | **empty** |
+| reverse-test verdict | "everything expected went red" is checkable | **nothing is checkable** — the probe was wasted |
+
+And the symptom looks like "the probe is mis-designed", so you go debug the probe instead of the assertion.
+
+- **Predict how each new assertion will fail under the injection before you run the probe.** Read
+  array/object members defensively: `String((a[i] || {}).content || '')`,
+  `JSON.stringify((a[i] || {}).keys || [])`.
+- ⚠ But `|| []` **masks** "the element is missing" (a missing element reads as `[]`, which is exactly the
+  expected value for "no keys"). So **do not rely on that assertion to catch a missing entry** — keep a
+  separate, explicit length assertion (`length === before + 1`) to watch it.
+  **"Doesn't throw" and "actually catches it" are two requirements; one assertion does one job.**
+
 ### "True by construction" — the third form of a vacuous assertion
 
 Two earlier forms are documented above (an assertion whose premise a new feature invalidated; one that
@@ -4890,6 +4922,27 @@ reads a generated artifact). This round produced a third: `score === 0` as proof
 the game. The previous round had only been running for 1.5 s, so the score was 0 anyway. Pick a quantity
 that *cannot* be at its reset value by accident — here, elapsed time (`< 0.5 s`), with an
 opposite-direction control (`> 0.3 s`).
+
+### A success message that reports a quantity the operation cannot change is immune to the operation
+
+"Append the result to the world book" announced itself with:
+
+```js
+msg('✅ appended to the world book (entry ' + list.length + ').');
+```
+
+`list` *is* the array being pushed to, so `list.length` is the post-push length — and when the reverse
+probe removed the `push`, the length never changed and **the message said "appended (entry 1)" anyway**.
+Of the 8 assertions that went red, the two about the message stayed **green**, deliberately: they are the
+point of the probe — *by the message alone, the feature looks like it worked.*
+
+**Rule**: a message that reports a number **the operation computes about itself** (`list.length`,
+`out.length`, `labels.length`) is immune to "did the operation happen at all". Assert on the **state**
+(length, fields, DOM), not on the copy.
+
+⚠ Same disease as "the assertion is always true", seen from the other side: here the thing being
+asserted is always true. When you write a message, ask: **could I say this sentence if I had just
+broken the feature?**
 
 ### An audit tool printing ✅ is a necessary condition, not a sufficient one
 

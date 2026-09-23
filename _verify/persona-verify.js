@@ -10,8 +10,10 @@
 //      忙态也一样 —— 「生成中…」必须扛得过一次重绘
 //   ⑤ 提示词里**真的**带上了用户的原文 + 模板全文 + 这张卡的现状
 //   ⑥ 失败路径（没配 / 网络不通 / 401 / 空回复）都有能看懂的话，且忙态一定归位
+//   ⑦ 生成结果能**追加成一条世界书条目**（追加 ≠ 覆盖：原有条目必须一点没动），
+//      而且「要不要拿卡名当人物姓名」是个**看得见、扛得住重绘**的勾选框
 //
-// 十一 段：
+// 十二 段：
 //   A. 装载与零报错
 //   B. 选项卡：在不在、位置对不对、**真按钮**能不能切过去
 //   C. 面板元素齐全（含反向对照：还没生成时结果框 / 三个按钮**不该在**）
@@ -22,6 +24,9 @@
 //   G. 未配 AI：不发请求、只给提示、忙态归位（配好之后作对照）
 //   H. 生成成功：围栏清洗 / 结果进状态 / 面板出现结果框 / 「对上了几项」（漏项 → warn，全中 → ok）
 //   I. 写入与追加：空描述直接写 / 非空描述要 confirm（含**取消**对照）/ 追加不弹窗
+//   I2. 追加到世界书（真按钮 → 条目真的进卡、真的渲染出来；含「原有条目没被动」对照
+//       + 空结果不动世界书 + 卡里没名字时关键词为空且**明说**）
+//       / 要不要拿卡名当人物姓名（真勾选框 / 重绘后还原 / **真实请求**里也不带卡名）
 //   J. 复制 + 忙态扛重绘 + 失败路径（网络不通 / 401 / 空回复）
 //   K. 收尾零报错
 //
@@ -824,6 +829,145 @@ window.fetch = async function (url, init) {
     await ev(`stSet('card.description', '   ')`);
     await ev(`stPersonaApply('append')`);
     check('描述是纯空白时追加 ⇒ 不留空行开头', await desc(), '新内容');
+
+    // ============ I2. 追加到世界书 + 姓名开关 ============
+    section('I2. 生成结果追加到世界书 / 要不要拿卡名当人物姓名');
+
+    // —— ① 把生成结果追加成一条世界书条目 ——
+    await ev(`stSet('card.name', '夜乃')`);
+    await ev(`stPersonaOutSet(${JSON.stringify(OK_REPLY)})`);
+    // 先塞一条**原有条目**：待会儿要拿它当对照组 —— 新增不能动到老的
+    await ev(`(function(){
+      stEditor.card.bookEntries = [];
+      const e = stBlankEntry();
+      e.comment = '原有条目'; e.content = '原有正文'; e.keys = ['原有'];
+      stEditor.card.bookEntries.push(e);
+      stSaveDraft();
+      return true; })()`);
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('结果区有「追加到世界书」按钮',
+      await ev(`!!document.getElementById('st-persona-to-book')`), true);
+    check('按钮文案里有「追加到世界书」',
+      await ev(`(document.getElementById('st-persona-to-book') || {}).textContent`),
+      v => /追加到世界书/.test(v || ''), '含「追加到世界书」');
+    // 反向对照：加了新按钮**不该**挤掉老的那三个
+    check('（对照）原来那三个按钮都还在',
+      await ev(`['st-persona-write','st-persona-append','st-persona-copy']
+        .every(id => !!document.getElementById(id))`), true);
+
+    const b0 = await ev(`stEditor.card.bookEntries.length`);
+    // 走**真按钮** —— 要验的是「接对了没有」，不是「函数存在」
+    await ev(`document.getElementById('st-persona-to-book').click()`);
+    await sleep(200);
+    check('点一下 ⇒ 世界书多了一条', await ev(`stEditor.card.bookEntries.length`), b0 + 1);
+    // ⚠ 下面几条一律走「取不到就当空对象」的写法：条目真没建出来时，
+    //   直接 `bookEntries[1].content` 会抛 TypeError，整跑当场炸掉、连汇总行都没有 ——
+    //   那样反向测试拿不到「红了几条」，注入就白跑了
+    const NE = `(stEditor.card.bookEntries[${b0}] || {})`;
+    check('新条目的正文就是生成结果', await ev(`String(${NE}.content || '')`), OK_REPLY);
+    check('新条目是启用的', await ev(`${NE}.enabled`), true);
+    check('新条目的备注带上了卡名',
+      await ev(`String(${NE}.comment || '')`), v => /夜乃/.test(v), '含「夜乃」');
+    check('新条目的关键词就是卡名',
+      await ev(`JSON.stringify(${NE}.keys || [])`), JSON.stringify(['夜乃']));
+    check('提示说已追加到世界书', await msgText(), v => /已追加到世界书/.test(v), '含「已追加到世界书」');
+    check('提示是 ok', await msgKind(), '');
+    // ⚠ 对照组：只证「多了一条」不够 —— 还得证「原来那条一点没动」
+    check('（对照）原有条目还在原位',
+      await ev(`stEditor.card.bookEntries[0].comment`), '原有条目');
+    check('（对照）原有条目的正文没被动',
+      await ev(`stEditor.card.bookEntries[0].content`), '原有正文');
+    check('（对照）原有条目的关键词没被动',
+      await ev(`JSON.stringify(stEditor.card.bookEntries[0].keys)`), JSON.stringify(['原有']));
+
+    // 真去世界书页看一眼：它得**渲染出来**，不能只活在状态里
+    await ev(`document.getElementById('st-tab-book').click()`);
+    await sleep(250);
+    check('世界书页真的多渲染了一条',
+      await ev(`document.querySelectorAll('#st-panes .st-entry').length`), b0 + 1);
+    await ev(`document.getElementById('st-tab-persona').click()`);
+    await sleep(250);
+
+    // 反向对照：结果空着的时候**不该**动世界书
+    await ev(`stPersonaOutSet('')`);
+    const b1 = await ev(`stEditor.card.bookEntries.length`);
+    await ev(`stPersonaApply('book')`);
+    await sleep(150);
+    check('没有结果时点「追加到世界书」⇒ 条目数不变',
+      await ev(`stEditor.card.bookEntries.length`), b1);
+    check('没有结果时点「追加到世界书」⇒ 提示「还没有生成结果」',
+      await msgText(), v => /还没有生成结果/.test(v), '含「还没有生成结果」');
+
+    // 卡里没写名字：关键词只能是空的，而且要**明说**让用户去补（不静默）
+    await ev(`stSet('card.name', '')`);
+    await ev(`stPersonaOutSet('一段人设')`);
+    await ev(`stPersonaApply('book')`);
+    await sleep(150);
+    const b2 = await ev(`stEditor.card.bookEntries.length`);
+    check('卡里没名字 ⇒ 照样多了一条', b2, b1 + 1);
+    check('卡里没名字 ⇒ 新条目关键词是空的',
+      await ev(`JSON.stringify((stEditor.card.bookEntries[${b2 - 1}] || {}).keys || [])`), '[]');
+    check('卡里没名字 ⇒ 提示提醒去填关键词（不静默）',
+      await msgText(), v => /关键词/.test(v), '含「关键词」');
+    await ev(`stSet('card.name', '夜乃')`);
+
+    // —— ② 要不要拿角色卡名字当人物姓名 ——
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('面板上有「用卡名当人物姓名」的勾选框',
+      await ev(`!!document.getElementById('st-persona-name-use')`), true);
+    check('默认是勾上的',
+      await ev(`document.getElementById('st-persona-name-use').checked`), true);
+    check('默认勾上 ⇒ 提示词里带卡名',
+      await ev(`stPersonaUserPrompt('要一个女仆', '姓名:')`),
+      v => /夜乃/.test(v || ''), '含「夜乃」');
+    check('默认勾上 ⇒ 提示词里有「这张卡现在的名字」',
+      await ev(`stPersonaUserPrompt('x', '姓名:')`),
+      v => /这张卡现在的名字/.test(v || ''), true);
+
+    // 走**真勾选框**
+    await ev(`document.getElementById('st-persona-name-use').click()`);
+    await sleep(150);
+    check('取消勾选 ⇒ 状态跟着关掉', await ev(`stEditor.personaNameUse`), false);
+    check('取消勾选 ⇒ 提示词里不再有卡名',
+      await ev(`stPersonaUserPrompt('x', '姓名:')`),
+      v => !/夜乃/.test(v || ''), '不含「夜乃」');
+    check('取消勾选 ⇒ 也不再说「这张卡现在的名字」',
+      await ev(`stPersonaUserPrompt('x', '姓名:')`),
+      v => !/这张卡现在的名字/.test(v || ''), true);
+    // 对照组：关掉的是**名字**，不是整段提示词
+    check('（对照）关掉之后用户的要求和模板照样在',
+      await ev(`stPersonaUserPrompt('要一个女仆', '姓名:')`),
+      v => /要一个女仆/.test(v || '') && /姓名:/.test(v || ''), true);
+
+    // 重绘之后勾选状态要还原 —— 跟 personaTplOpen 同一条规矩：从状态渲染
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('重绘之后勾选框仍然是关的',
+      await ev(`document.getElementById('st-persona-name-use').checked`), false);
+
+    // **真实生成路径**：真的发给模型的那条 user 消息里也不该有卡名。
+    // 直接调 stPersonaUserPrompt 只证明「那个函数写得对」，证明不了「请求真的走了它」
+    await clearCalls();
+    await script({ reply: '姓名: 某人' });
+    await typeIn('st-persona-req', REQ);
+    await gen();
+    const call2 = await lastCall();
+    const usr2 = String((((call2 || {}).body || {}).messages || [])[1]
+      ? call2.body.messages[1].content : '');
+    check('关掉之后真实请求里也没有卡名', usr2, v => v.indexOf('夜乃') < 0, '不含「夜乃」');
+    check('（对照）真实请求里仍然有用户的要求原文',
+      usr2, v => v.indexOf(REQ) >= 0, '含要求原文');
+
+    await ev(`stPersonaNameUseSet(true)`);
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('勾回去 ⇒ 勾选框又是勾上的',
+      await ev(`document.getElementById('st-persona-name-use').checked`), true);
+    check('勾回去 ⇒ 提示词里又有卡名了（对照组）',
+      await ev(`stPersonaUserPrompt('x', '姓名:')`),
+      v => /这张卡现在的名字/.test(v || ''), true);
 
     // ============ J. 复制 + 忙态 + 失败路径 ============
     section('J. 复制 / 忙态 / 失败路径');

@@ -15399,6 +15399,10 @@
             // 都是摊开的，面板又变回原来那个长条。跟 personaReq / personaOut 一样，
             // 当**会话级**面板状态处理。
             personaTplOpen: false,
+            // 「拿角色卡的名字当人物姓名」。默认**开** —— 卡名通常就是人物名。
+            // ⚠ 跟 personaTplOpen 同一类：它是「这一次怎么生成」的面板参数，
+            //   跟 personaReq / personaOut 一起当会话级状态，不落盘。
+            personaNameUse: true,
             // 画布上的拖动是「自由摆放（像素级）」还是「结构排序（换顺序）」。
             // **默认自由摆放** —— 「像编辑 ppt 一样」的默认动作就是把东西拖到想放的
             // 地方，而不是让编辑器猜「你想插到第几行」
@@ -22102,6 +22106,18 @@
             stEditor.personaReq = String(v == null ? '' : v).slice(0, ST_PERSONA_REQ_MAX);
         }
 
+        // 「要不要把这张卡的名字当人物姓名」。默认开。
+        // ⚠ 判据写成 `!== false` 而不是 `=== true` —— 没这个键的旧状态也按「开」算。
+        //   写成 `=== true` 的话，升级上来的用户会突然发现卡名不再喂给 AI 了：
+        //   一个**静默的行为变化**，而面板上那个勾选框照样显示「勾着」。
+        function stPersonaNameUse() {
+            return stEditor.personaNameUse !== false;
+        }
+
+        function stPersonaNameUseSet(v) {
+            stEditor.personaNameUse = v !== false;
+        }
+
         function stPersonaOutSet(v) {
             stEditor.personaOut = String(v == null ? '' : v).slice(0, ST_PERSONA_OUT_MAX);
         }
@@ -22177,7 +22193,11 @@
         function stPersonaUserPrompt(req, tpl) {
             const c = stEditor.card || {};
             const ctx = [];
-            if (stStr(c.name)) ctx.push('这张卡现在的名字：' + stStr(c.name));
+            // 卡名是**可选**喂的（面板上那个「把角色卡名字当人物姓名」）——
+            // 关掉时这一段整个不给，让 AI 按用户写的设定自己起名。
+            // 注意这里**不是**「换个说法告诉它别用卡名」：不提就够了，
+            // 提了反而会把卡名泄给模型（那正是用户想避免的）
+            if (stPersonaNameUse() && stStr(c.name)) ctx.push('这张卡现在的名字：' + stStr(c.name));
             const parts = ['用户的要求：' + req, ''];
             if (ctx.length) {
                 parts.push('## 这张卡的现状（跟它保持一致，别冲突）');
@@ -22260,10 +22280,33 @@
                 '。', miss ? 'warn' : 'ok', 'persona');
         }
 
+        // mode：'replace' 写入角色描述 / 'append' 追加到角色描述 / 'book' 追加成一条世界书条目
         function stPersonaApply(mode) {
             const out = String(stEditor.personaOut || '').trim();
             if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn', 'persona'); return; }
             if (!stEditor.card) return;
+            // —— 追加到世界书 ——
+            // 跟「追加到角色描述」同一条理由：**不覆盖任何东西**，所以不用弹 confirm。
+            // ⚠ 关键词 / 备注都拿卡名打头：一条没有关键词、也不是常驻的条目**永远不会触发**，
+            //   而「按钮点了、条目也建了、聊起来却像没生效」是最难查的一种坏。
+            //   卡里没写名字就只能留空 —— 那就**明说**，别让用户以为填好了。
+            if (mode === 'book') {
+                if (!Array.isArray(stEditor.card.bookEntries)) stEditor.card.bookEntries = [];
+                const a = stEditor.card.bookEntries;
+                const nm = stStr(stEditor.card.name);
+                const e = stBlankEntry();
+                e.content = out;
+                e.comment = nm ? nm + ' 的人设' : '人设';
+                if (nm) e.keys = [nm];
+                a.push(e);
+                stSaveDraft();
+                stRerender();
+                stExportMsg('✅ 已追加到世界书（第 ' + a.length + ' 条' +
+                    (nm ? ' · 关键词：' + nm
+                        : ' · ⚠ 没填关键词，去世界书页补一个它才会触发') + '）。',
+                    nm ? 'ok' : 'warn', 'persona');
+                return;
+            }
             const cur = stStr(stEditor.card.description);
             if (mode === 'append') {
                 // 描述本来是空的就当成写入 —— 不然会留一个空行开头
@@ -22310,6 +22353,10 @@
             const busy = stEditor.personaBusy === true;
             const tpl = stPersonaTpl();
             const out = String(stEditor.personaOut || '');
+            // 「要不要拿卡名当人物姓名」—— 勾选框的状态，以及卡名本身（标签里要显示它）。
+            // ⚠ 勾选态**从状态渲染**，不是只活在 DOM 上 —— 否则 stRerender 一重建就弹回勾上
+            const nameUse = stPersonaNameUse();
+            const nm = stStr((stEditor.card || {}).name);
             const cfg = stAiCfg();
             const ready = stAiReady(cfg);
             const custom = !stPersonaTplIsDefault();
@@ -22320,7 +22367,7 @@
             return stPaneHead('🎭 人设生成器',
                 '写一句设定或要求，AI 按下面这份<b>模板</b>逐项填好，生成一整份人设。' +
                 '模板可以换成你自己的（存在浏览器本地，<b>不写进卡</b>）；' +
-                '生成结果先给你过目、可以直接改，点<b>写入</b>才进角色描述。') +
+                '生成结果先给你过目、可以直接改，点<b>写入</b>才进角色描述（也可以存成世界书条目）。') +
                 '<div class="st-sub">你想要什么</div>' +
                 '<div class="st-field st-wide">' +
                     '<label for="st-persona-req">设定 / 要求 ' +
@@ -22329,6 +22376,21 @@
                         ' placeholder="例如：冷淡的吸血鬼女仆，喜欢红茶，讨厌阳光，说话很短"' +
                         ' oninput="stPersonaReqSet(this.value)">' +
                         escapeHtml(stEditor.personaReq || '') + '</textarea>' +
+                '</div>' +
+                // 要不要拿卡名当人物姓名。**放在要求下面**：它跟「要求」一起构成输入，
+                // 而不是跟生成按钮一起构成动作。
+                // ⚠ 卡里还没写名字时**不禁用**它 —— 禁用看着像坏了；勾着也确实没东西可喂，
+                //   所以直接把这个事实写在标签里
+                '<div class="st-checks">' +
+                    '<label class="st-check" title="勾上 = 生成时把这张卡的名字一并告诉 AI，' +
+                        '让它当人物姓名；取消 = 由 AI 按你写的设定自己起名">' +
+                        '<input type="checkbox" id="st-persona-name-use"' +
+                            (nameUse ? ' checked' : '') +
+                            ' onchange="stPersonaNameUseSet(this.checked)">' +
+                        '<span>把角色卡名字当人物姓名' +
+                            (nm ? '（' + escapeHtml(nm) + '）' : '（这张卡还没写名字）') +
+                        '</span>' +
+                    '</label>' +
                 '</div>' +
                 // 「模板」折叠块 —— **默认收起**，点标题展开。
                 // ⚠ 标题仍用 `.st-sub` 包着：它既是可见标签（默认 / 已自定义），
@@ -22391,6 +22453,8 @@
                             ' onclick="stPersonaApply(\'replace\')">📝 写入角色描述</button>' +
                         '<button class="st-big st-plain" type="button" id="st-persona-append"' +
                             ' onclick="stPersonaApply(\'append\')">➕ 追加到角色描述</button>' +
+                        '<button class="st-big st-plain" type="button" id="st-persona-to-book"' +
+                            ' onclick="stPersonaApply(\'book\')">📖 追加到世界书</button>' +
                         '<button class="st-big st-plain" type="button" id="st-persona-copy"' +
                             ' onclick="stPersonaCopy()">📋 复制</button>' +
                       '</div>'
@@ -22399,7 +22463,10 @@
                     '模板里<b>每一行都以冒号结尾</b>，AI 会在冒号后面填内容 —— ' +
                     '所以你可以自由增删行、改字段名，它会跟着变。<br>' +
                     '⚠ 生成结果<b>要你点一下才进卡</b>；角色描述里已经有内容时，' +
-                    '「写入」还会先问一句，追加不用问（它不覆盖已有内容）。' +
+                    '「写入」还会先问一句，两种「追加」都不用问（它们不覆盖已有内容）。<br>' +
+                    '「📖 追加到世界书」会把结果存成<b>一条新的世界书条目</b>，' +
+                    '关键词取角色卡的名字 —— 卡里没写名字就留空，' +
+                    '得自己去世界书页补一个它才会触发。' +
                 '</div>';
         }
 
