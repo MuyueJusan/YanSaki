@@ -2814,6 +2814,61 @@
             margin-top: 12px;
         }
 
+        /* —— 人设生成器「模板」的折叠块（默认**收起**）——
+           机制跟日历 / AI 卡 / 移动端菜单**同一套**（`grid-template-rows: 0fr → 1fr`），
+           别为这一个另起 `max-height`。
+           ⚠ 跟 `.ai-settings-collapse` / `.ai-adv-panel` 那几处**方向相反**：
+             那几处是默认展开、加 class 才收起；这里是默认收起、加 `.st-fold-open` 才展开 ——
+             需求就是「默认折叠」，所以让**不带 class** 的那一态直接等于收起态。 */
+        .st-fold-body {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .st-fold.st-fold-open .st-fold-body { grid-template-rows: 1fr; }
+
+        .st-fold-inner { overflow: hidden; }
+
+        /* 折叠头 = 整行可点的按钮：箭头 + 原来的 `.st-sub` 标题 + 右侧一句提示。
+           ⚠ 标题**保留 `.st-sub` 类**：它是「这份是默认模板还是自定义」的可见标签，
+             而且套件正是按 `.st-sub` 找它、读它的 textContent —— 换类名那些断言会红。 */
+        .st-fold-head {
+            display: flex;
+            align-items: baseline;
+            gap: 7px;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: none;
+            font-family: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .st-fold-head .st-sub { flex: 1 1 auto; }
+
+        .st-fold-ico {
+            display: inline-block;
+            font-size: 0.62rem;
+            color: #14384f;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 收起时箭头朝下（`▲` 转 180°）—— 跟顶栏「≡ 选项卡」那个展开键同一套手感 */
+        .st-fold:not(.st-fold-open) .st-fold-ico { transform: rotate(-180deg); }
+
+        .st-fold-hint {
+            font-size: 0.7rem;
+            color: #33546b;
+            opacity: 0.72;
+            white-space: nowrap;
+            letter-spacing: 0;
+        }
+
+        .st-fold-head:hover .st-fold-hint { opacity: 1; }
+
         .st-big {
             font-family: inherit;
             font-size: 0.85rem;
@@ -3663,6 +3718,9 @@
         body.retro-mode .st-pane-title,
         body.retro-mode .st-sub,
         body.retro-mode .st-hint { color: #000000; }
+        /* 折叠头那两格（箭头 / 右侧提示）不在上面那串里，retro 下要自己压成纯黑 */
+        body.retro-mode .st-fold-ico,
+        body.retro-mode .st-fold-hint { color: #000000; opacity: 1; }
         body.retro-mode .st-field > label { color: #000000; }
 
         body.retro-mode .st-pane-desc,
@@ -15336,6 +15394,11 @@
             // 自定义模板。**null = 还没从 localStorage 读过**（懒加载，见 stPersonaTpl()）——
             // 初始化成 '' 的话那个「读过没有」的判断就永远成立，自定义模板永远读不出来
             personaTpl: null,
+            // 「模板」那个折叠块展开没有。**默认收起**，而且**故意不落盘** ——
+            // 落盘的话「默认折叠」只在第一次成立：用户展开过一次之后，以后每次打开编辑器
+            // 都是摊开的，面板又变回原来那个长条。跟 personaReq / personaOut 一样，
+            // 当**会话级**面板状态处理。
+            personaTplOpen: false,
             // 画布上的拖动是「自由摆放（像素级）」还是「结构排序（换顺序）」。
             // **默认自由摆放** —— 「像编辑 ppt 一样」的默认动作就是把东西拖到想放的
             // 地方，而不是让编辑器猜「你想插到第几行」
@@ -22062,6 +22125,25 @@
                 ' 项）。', 'ok');
         }
 
+        // 折叠态写进 DOM 的**唯一**一处 —— 跟 stSyncTabsCollapsed 同一个理由：
+        // 容器上的 class 和展开键上的箭头分两处写，漏掉任何一处的症状都是「状态不对」。
+        //
+        // ⚠ 这里**不调 stRerender()**：重绘会把整个 pane 重建，新元素一出生就带着最终样式，
+        //   `grid-template-rows` 的过渡**没有起点**，动画直接跳掉（看起来像根本没做折叠）。
+        //   只改 class，让浏览器自己补间；状态照样记在 stEditor 里，下次重绘能还原。
+        function stSyncPersonaTplOpen() {
+            const on = stEditor.personaTplOpen === true;
+            const box = document.getElementById('st-persona-tpl-fold');
+            if (box) box.classList.toggle('st-fold-open', on);
+            const btn = document.getElementById('st-persona-tpl-toggle');
+            if (btn) btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        }
+
+        function stPersonaTplToggle() {
+            stEditor.personaTplOpen = !(stEditor.personaTplOpen === true);
+            stSyncPersonaTplOpen();
+        }
+
         // 从模板里数出「有哪些字段」——只认**以冒号结尾**的行（模板是空稿，值还没填）。
         // 两个用途：① 面板上显示「N 项」；② 生成完拿它数「模型漏了几项」
         function stPersonaLabels(tpl) {
@@ -22233,6 +22315,8 @@
             const custom = !stPersonaTplIsDefault();
             const labels = stPersonaLabels(tpl);
             const hit = out ? labels.filter(k => out.indexOf(k) >= 0).length : 0;
+            // 折叠态**从状态渲染**，不是只活在 DOM 上 —— 否则 stRerender 一重建就弹回展开
+            const tplOpen = stEditor.personaTplOpen === true;
             return stPaneHead('🎭 人设生成器',
                 '写一句设定或要求，AI 按下面这份<b>模板</b>逐项填好，生成一整份人设。' +
                 '模板可以换成你自己的（存在浏览器本地，<b>不写进卡</b>）；' +
@@ -22246,14 +22330,38 @@
                         ' oninput="stPersonaReqSet(this.value)">' +
                         escapeHtml(stEditor.personaReq || '') + '</textarea>' +
                 '</div>' +
-                '<div class="st-sub">模板' + (custom ? '（已自定义）' : '（默认）') + '</div>' +
-                '<div class="st-field st-wide">' +
-                    '<label for="st-persona-tpl">模板内容 ' +
-                        '<span class="st-hint-inline">' + labels.length +
-                        ' 项 · 清空 = 回到默认模板</span></label>' +
-                    '<textarea id="st-persona-tpl" rows="14"' +
-                        ' oninput="stPersonaTplSet(this.value)">' +
-                        escapeHtml(tpl) + '</textarea>' +
+                // 「模板」折叠块 —— **默认收起**，点标题展开。
+                // ⚠ 标题仍用 `.st-sub` 包着：它既是可见标签（默认 / 已自定义），
+                //   也是套件按 `.st-sub` 去找的那个节点。
+                '<div class="st-fold' + (tplOpen ? ' st-fold-open' : '') +
+                    '" id="st-persona-tpl-fold">' +
+                    '<button class="st-fold-head" type="button" id="st-persona-tpl-toggle"' +
+                        ' aria-expanded="' + (tplOpen ? 'true' : 'false') + '"' +
+                        ' aria-controls="st-persona-tpl-body"' +
+                        ' onclick="stPersonaTplToggle()">' +
+                        '<span class="st-fold-ico">▲</span>' +
+                        '<span class="st-sub">模板' + (custom ? '（已自定义）' : '（默认）') + '</span>' +
+                        '<span class="st-fold-hint">' + labels.length + ' 项 · 点这里展开改</span>' +
+                    '</button>' +
+                    '<div class="st-fold-body" id="st-persona-tpl-body">' +
+                        '<div class="st-fold-inner">' +
+                            '<div class="st-field st-wide">' +
+                                '<label for="st-persona-tpl">模板内容 ' +
+                                    '<span class="st-hint-inline">' + labels.length +
+                                    ' 项 · 清空 = 回到默认模板</span></label>' +
+                                '<textarea id="st-persona-tpl" rows="14"' +
+                                    ' oninput="stPersonaTplSet(this.value)">' +
+                                    escapeHtml(tpl) + '</textarea>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                // 状态提示：**挪到模板下面**（原来夹在模板和它自己的按钮之间，
+                // 把「模板」和「跟模板一起看的 AI 配置」隔成了两截）
+                '<div class="st-ai-status' + (ready.ok ? ' st-ok' : ' st-warn') + '"' +
+                    ' id="st-persona-ai-status">' +
+                    '当前生效：' + escapeHtml(stAiModeLabel(cfg)) +
+                    (ready.ok ? '' : '\n⚠ ' + escapeHtml(ready.why)) +
                 '</div>' +
                 '<div class="st-actions">' +
                     '<button class="st-big" type="button" id="st-persona-run"' +
@@ -22261,11 +22369,6 @@
                         (busy ? '⏳ 生成中…' : '✨ 生成人设') + '</button>' +
                     '<button class="st-big st-plain" type="button" id="st-persona-tpl-reset"' +
                         ' onclick="stPersonaTplReset()">↩ 恢复默认模板</button>' +
-                '</div>' +
-                '<div class="st-ai-status' + (ready.ok ? ' st-ok' : ' st-warn') + '"' +
-                    ' id="st-persona-ai-status">' +
-                    '当前生效：' + escapeHtml(stAiModeLabel(cfg)) +
-                    (ready.ok ? '' : '\n⚠ ' + escapeHtml(ready.why)) +
                 '</div>' +
                 '<div class="st-sub">生成结果' + (out
                     ? '（' + out.length + ' 字符' + (labels.length

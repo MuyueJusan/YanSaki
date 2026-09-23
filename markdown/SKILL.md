@@ -829,6 +829,39 @@ const tall = r.height > innerHeight;
 const visOk = tall ? (visH >= innerHeight * 0.6) : (r.top >= -1 && r.bottom <= innerHeight + 1);
 ```
 
+### A collapsed panel's children still report a full-size `getBoundingClientRect()`
+
+Collapsing with `grid-template-rows: 0fr` + `overflow: hidden` (or `max-height: 0`) **clips** the
+content — and **clipping does not change `getBoundingClientRect()`**. The textarea inside still
+reports its full 14-row box, at full width, at a plausible position:
+
+```js
+// ❌ identical whether the panel is open or collapsed
+ta.getBoundingClientRect().height          // 280 in both states
+```
+
+So measure the thing that actually collapses, and hit-test where the content would be:
+
+```js
+const body = document.querySelector('#panel-body');       // the grid container itself
+getComputedStyle(body).gridTemplateRows                   // "0px"  vs  a real px value
+body.getBoundingClientRect().height                       // ~0     vs  ~300
+
+const hr = header.getBoundingClientRect();
+const y = hr.bottom + 60, x = hr.left + 30;
+const inView = y > 0 && y < innerHeight && x > 0 && x < innerWidth;
+const hit = inView ? document.elementFromPoint(x, y) : null;
+hit.closest('#panel')       // null when collapsed — the panel when open
+```
+
+⚠ Assert `inView` **as its own check**. If the probe point is off-screen, `elementFromPoint` returns
+`null`, `.closest` on it is falsy, and "collapsed" passes **vacuously** — a green test that never
+looked at anything.
+
+⚠ Keep "the inner element's rect is *still* full size" as a **deliberate assertion** in the suite.
+It reads like a tautology, but it is what stops the next person from re-introducing rect math: when
+they "fix" the probe by measuring the textarea, that check goes red and explains why.
+
 ### Touch target sizes
 
 A control that measures fine on desktop can be too small to tap. Measure it at a mobile viewport and

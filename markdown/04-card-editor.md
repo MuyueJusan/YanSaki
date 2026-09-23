@@ -1616,6 +1616,12 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
    「生成的东西必须先能反悔」，跟 §十三 的「AI 生成预制块」同一条规矩。
 3. **写入前如果角色描述非空，弹 `confirm`。** 覆盖别人手写的内容是这一族里最不可逆的动作，
    不能静默做；追加那条路不用问（它不破坏已有内容）。
+4. **「模板」那一块默认折叠起来**（第十二轮加的），AI 状态提示挪到它**下面**。模板有 42 行、
+   文本框 `rows="14"`，摊开时面板太长；收起来之后一屏就能看完「要什么 → 生成 → 结果」。
+   ⚠ 折叠态记在 `stEditor.personaTplOpen` 里、**不落盘** —— 落盘的话「默认折叠」只在第一次成立：
+   用户展开过一次之后，以后每次打开编辑器都是摊开的。跟 `personaReq` / `personaOut` 一样当
+   **会话级**面板状态。⚠ 切换时**只改 class，不调 `stRerender()`** —— 重绘会把整个 pane 重建，
+   新元素一出生就带着最终样式，`grid-template-rows` 的过渡**没有起点**，动画会直接跳掉。
 
 ### 默认模板
 
@@ -1644,6 +1650,7 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 | `personaOut` | 生成结果（可手改，上限 20 000 字符） |
 | `personaBusy` | 忙态 |
 | `personaTpl` | 自定义模板。**`null` = 还没从 `localStorage` 读过**（懒加载） |
+| `personaTplOpen` | 「模板」折叠块展开没有。**默认 `false`（收起）**，**不落盘**（见上面第 4 条） |
 
 ⚠ **模板清空 = 回到默认**（面板上就是这么写的），所以有两条容易写错的规矩：
 
@@ -1662,6 +1669,7 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 |---|---|
 | `stPersonaTpl()` / `stPersonaTplSet(v)` / `stPersonaTplReset()` | 读 / 写 / 恢复默认（懒加载 + 空则回落 + 清空删键） |
 | `stPersonaTplIsDefault()` | 问 `localStorage`：现在用的是不是默认模板 |
+| `stSyncPersonaTplOpen()` / `stPersonaTplToggle()` | 折叠态写进 DOM 的**唯一**一处（跟 `stSyncTabsCollapsed` 同一条理由：容器 class 与箭头分两处写，漏一处就「状态不对」）+ 点一下切换 |
 | `stPersonaReqSet(v)` / `stPersonaOutSet(v)` | 写状态（带截断） |
 | `stPersonaLabels(tpl)` | 从模板里数「有哪些字段」。只认**以冒号结尾**的行：`/^[\s\-]*([^:：\n]{1,12})[:：]\s*$/`，`- 风格：` 认成「风格」，重复的只算一次。两个用途：面板上显示「N 项」+ 生成完数「模型漏了几项」 |
 | `stPersonaSysPrompt()` / `stPersonaUserPrompt(req, tpl)` | 拼提示词。user 里带上**用户的要求原文 + 这张卡现在的名字 + 模板全文** |
@@ -1676,6 +1684,11 @@ Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRole
 `st-persona-req` / `st-persona-tpl` / `st-persona-run` / `st-persona-tpl-reset` /
 `st-persona-ai-status` / `st-persona-out`（**有结果才渲染**）/ `st-persona-write` /
 `st-persona-append` / `st-persona-copy`（同上）。
+
+折叠那一组：`st-persona-tpl-fold`（外层，挂 `.st-fold` / `.st-fold-open`）/
+`st-persona-tpl-toggle`（折叠头，带 `aria-expanded`）/ `st-persona-tpl-body`（被折叠的网格）。
+⚠ 折叠头里的标题**仍然带 `.st-sub` 类** —— 它是「这份是默认还是自定义」的可见标签，
+而且 `persona-verify.js` 就是按 `.st-sub` 找它、读它的 `textContent`（换类名那些断言会红）。
 
 ### 提示词
 

@@ -376,6 +376,97 @@ window.fetch = async function (url, init) {
         return e ? e.textContent : ''; })()`), v => /还没有生成结果/.test(v), '含「还没有生成结果」');
     await shot('persona-01-pane.png');
 
+    // ============ C2. 「模板」折叠 + 状态提示的位置（第十二轮）============
+    section('C2. 模板默认折叠、点标题能展开、状态提示在模板下面');
+    // ⚠⚠ 判「收起了」**不能看 rect** —— 折叠靠 `grid-template-rows: 0fr` + `overflow: hidden`，
+    //     **裁切不影响 `getBoundingClientRect()`**：里面那个 textarea 的 rect 照样是满高。
+    //     所以这里① 量**外层网格容器自己**（它确实塌成 0）、② 做一次**命中测试**。
+    //     「textarea 的 rect 还是满高」那条留成**对照**，免得下次又有人拿 rect 当判据。
+    const foldProbe = `(function(){
+      const box = document.getElementById('st-persona-tpl-fold');
+      const body = document.getElementById('st-persona-tpl-body');
+      const head = document.getElementById('st-persona-tpl-toggle');
+      const inner = document.querySelector('#st-persona-tpl-fold .st-fold-inner');
+      const ta = document.getElementById('st-persona-tpl');
+      if (!box || !body || !head || !inner || !ta) return { err: '缺节点' };
+      head.scrollIntoView({ block: 'center' });
+      const hr = head.getBoundingClientRect();
+      const y = hr.bottom + 60, x = hr.left + 30;
+      const inView = y > 0 && y < innerHeight && x > 0 && x < innerWidth;
+      const hit = inView ? document.elementFromPoint(x, y) : null;
+      return {
+        open: box.classList.contains('st-fold-open'),
+        aria: head.getAttribute('aria-expanded'),
+        rows: getComputedStyle(body).gridTemplateRows,
+        bodyH: Math.round(body.getBoundingClientRect().height),
+        innerH: Math.round(inner.getBoundingClientRect().height),
+        taH: Math.round(ta.getBoundingClientRect().height),
+        inView: inView,
+        hitInside: !!(hit && hit.closest && hit.closest('#st-persona-tpl-fold')),
+        ico: getComputedStyle(document.querySelector('#st-persona-tpl-fold .st-fold-ico')).transform
+      };
+    })()`;
+
+    const p0 = await ev(foldProbe);
+    check('默认**没有** st-fold-open 类', p0.open, false);
+    check('默认 aria-expanded 是 false', p0.aria, 'false');
+    check('折叠体算出来是 0 行（computed grid-template-rows）', p0.rows,
+      v => /^0px/.test(v), '以 0px 开头');
+    check('折叠体量出来高约 0', p0.bodyH, v => v <= 2, '≤ 2');
+    check('内层（overflow:hidden 那个）也是 0 高', p0.innerH, v => v <= 2, '≤ 2');
+    check('默认箭头是转下去的（computed transform 不是 none）', p0.ico,
+      v => v !== 'none', '不是 none');
+    // 反向对照：这一条**故意断言「量 rect 判不出来」** —— 它就是上一轮踩的那个坑
+    check('（对照）里面 textarea 自己的 rect **照样是满高** ⇒「量 rect」判不出收起',
+      p0.taH, v => v > 100, '> 100');
+    check('（对照）命中测试那个点确实落在视口里（否则下一条会天然成立）', p0.inView, true);
+    check('收起时：折叠头下方 60px 那个点**打在折叠块外面**', p0.hitInside, false);
+
+    // 点**真按钮**展开
+    await ev(`document.getElementById('st-persona-tpl-toggle').click()`);
+    await sleep(450);
+    const p1 = await ev(foldProbe);
+    check('展开后拿到了 st-fold-open 类', p1.open, true);
+    check('展开后 aria-expanded 是 true', p1.aria, 'true');
+    check('展开后折叠体不再是 0 行', p1.rows, v => !/^0px/.test(v), '不以 0px 开头');
+    check('展开后折叠体真的有了高度', p1.bodyH, v => v > 200, '> 200');
+    check('展开后命中测试打在折叠块**里面**', p1.hitInside, true);
+    check('展开后箭头转回正（computed transform 是 none）', p1.ico, 'none');
+
+    // 再点一次收回 —— 对照组：证明上一条不是「一展开就回不去」
+    await ev(`document.getElementById('st-persona-tpl-toggle').click()`);
+    await sleep(450);
+    const p2 = await ev(foldProbe);
+    check('再点一次又收起了', p2.open, false);
+    check('收起后折叠体又回到 0 高', p2.bodyH, v => v <= 2, '≤ 2');
+
+    // 折叠态**从状态渲染**：重绘之后必须还在（不是只活在 DOM 上）
+    await ev(`stEditor.personaTplOpen = true; stRerender()`);
+    await sleep(150);
+    check('重绘之后展开态还在（状态驱动，不是只活在 DOM 上）',
+      await ev(`document.getElementById('st-persona-tpl-fold').classList.contains('st-fold-open')`), true);
+    await ev(`stEditor.personaTplOpen = false; stRerender()`);
+    await sleep(150);
+    check('（对照）重绘之后收起态也如实反映',
+      await ev(`document.getElementById('st-persona-tpl-fold').classList.contains('st-fold-open')`), false);
+
+    // 状态提示的位置：DOM 顺序上必须排在模板**后面**
+    const order = await ev(`(function(){
+      const box = document.getElementById('st-persona-tpl-fold');
+      const st = document.getElementById('st-persona-ai-status');
+      const pane = box.closest('.st-pane');
+      const act = pane.querySelector('.st-actions');
+      const all = [...document.querySelectorAll('#st-panes *')];
+      return { fold: all.indexOf(box), status: all.indexOf(st), act: all.indexOf(act) };
+    })()`);
+    check('状态提示排在模板折叠块**后面**', order.status > order.fold, true);
+    // ⚠ 对照组不能写成「status < fold」—— 那是主断言的**反命题**，逻辑上恒真，
+    //   等于没对照。真正的风险是 `indexOf` **没找到时返回 -1**：只要 fold 是 -1，
+    //   任何 status 都「大于」它 ⇒ 主断言天然成立。所以对照要盯**两个节点都在表里**。
+    check('（对照）两个节点都在顺序表里找到了（否则 indexOf 的 -1 会让上一条天然成立）',
+      order.fold >= 0 && order.status >= 0, true);
+    check('状态提示排在按钮行前面', order.status < order.act, true);
+
     // ============ D. 模板逻辑 ============
     section('D. 模板逻辑');
     check('默认模板**逐字**等于用户给的那份', await ev(`stPersonaTpl()`), TPL_EXPECT);
