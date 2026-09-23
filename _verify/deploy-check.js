@@ -140,7 +140,8 @@ async function gh(url, tok) {
             const w = await gh('/repos/' + REPO + '/actions/workflows?per_page=50', tok);
             if (w.status === 200 && w.body && w.body.workflows) {
                 for (const x of w.body.workflows) {
-                    console.log('  ' + x.state.padEnd(9) + x.path);
+                    // ⚠ 别按 9 对齐 —— `disabled_manually` 有 17 个字符，会把文件名挤成一行
+                    console.log('  ' + x.state.padEnd(18) + x.path);
                 }
                 const n = w.body.workflows.filter(x => x.state === 'active').length;
                 console.log(n > 1
