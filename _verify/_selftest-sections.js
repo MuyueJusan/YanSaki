@@ -35,8 +35,9 @@ const backup = fs.readFileSync(FILE);
 const before = sha1(backup);
 console.log('原文件 sha1: ' + before + '  （' + backup.length + ' 字节）');
 
-let fail = 0;
+let fail = 0, checks = 0;
 const verdict = (ok, name, detail) => {
+    checks++;
     console.log('  ' + (ok ? '✅' : '❌') + ' ' + name + (detail ? '  —— ' + detail : ''));
     if (!ok) fail++;
 };
@@ -73,6 +74,21 @@ console.log('\n== B. 注入两个不同父节下的 `### ①`（跨父节重复�
     if (r.code !== 0 && process.env.SELFTEST_VERBOSE) console.log(r.out);
 }
 
+// ---------- D. 注入「跳号」，软提示要响，但**退出码仍须为 0** ----------
+console.log('\n== D. 注入跳号（`1.` `3.` `5.`，**只该打软提示、不该改退出码**）==');
+{
+    // ⚠ 这一项钉的是「软提示不计入失败」这条**行为断言** —— 它在 README 里写着了，
+    //   而没被测过的断言跟没写一样。父节必须有 ≥3 个编号子节，软提示才会启动。
+    const block = '\n## 注入测试父节丙\n### 1. 甲\n### 3. 乙\n### 5. 丙\n';
+    fs.writeFileSync(FILE, Buffer.concat([backup, Buffer.from(block, 'utf8')]));
+    const r = runAudit();
+    verdict(r.code === 0, '退出码仍是 0（软提示不计入失败）', '实际 ' + r.code);
+    verdict(!/❌ 撞号/.test(r.out), '输出里没有 ❌ 撞号');
+    verdict(/⚠/.test(r.out), '输出里出现 ⚠ 软提示');
+    verdict(/缺 2、4/.test(r.out), '软提示指出了缺的号（2、4）');
+    if (process.env.SELFTEST_VERBOSE) console.log(r.out);
+}
+
 // ---------- 还原 + 核字节 ----------
 console.log('\n== 还原 ==');
 fs.writeFileSync(FILE, backup);
@@ -83,5 +99,9 @@ verdict(after === before, '逐字节还原（sha1 一致）', after === before ?
 const stray = fs.readdirSync(DIR).filter(f => /\.bak$|~$/.test(f));
 verdict(stray.length === 0, '没有残留备份文件', stray.join(', '));
 
-console.log('\n' + (fail ? '❌ ' + fail + ' 项不符合预期' : '✅ 三项全部符合预期（基线绿 / 真撞号红 / 跨父节重复不红），文件已逐字节还原'));
+// ⚠ 别在这里写死「三项 / 四项」—— 加了测试就过期（本项目的经典坑）。
+//   数出来：`checks` 是 verdict() 自己数的。
+console.log('\n' + (fail
+    ? '❌ ' + fail + '/' + checks + ' 项不符合预期'
+    : '✅ ' + checks + ' 项全部符合预期（基线绿 / 真撞号红 / 跨父节重复不红 / 跳号只打软提示），文件已逐字节还原'));
 process.exit(fail ? 1 : 0);
