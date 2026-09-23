@@ -75,18 +75,38 @@ for (const [noCol, name, ids] of rows(section('## 2. body 顶层区块'))) {
 }
 
 // ── §3 ─────────────────────────────────────────────────────────
-// ⚠⚠ 上面那套「单调对齐 + 共享字」的启发式**实测会错**（本轮就错了 2 行：
+// ⚠⚠ 上面那套「单调对齐 + 共享字」的启发式**实测会错**（第十七轮就错了 2 行：
 //   「系统提示词预设」被对到 1047、「条目本轮会不会插入」被对到 1438）。
-//   ⇒ 改用**可验证的位移**：这一轮只在样式块里插了**一处**（`.game-entry-btn` 之后），
-//     所以 `> 113` 的横幅**一律 +194**。逐行核「旧值 + 194 是不是横幅」，并打横幅原文。
+//   ⇒ 改用**可验证的位移**：逐行核「旧值 + 位移 那一行是不是横幅」，并打横幅原文。
 //     任何一行对不上就报出来 —— 那才是需要人看的地方。
-const SHIFT = Number(process.argv[2] || 194);
-const SHIFT_FROM = 113;   // 插入点（旧行号）之前的不动
-console.log('\n== §3 · CSS 分区（旧值 + ' + SHIFT + '，逐行核是不是横幅）==');
+//
+// ⚠⚠ 位移**可以有多段** —— 一轮里插了两处 CSS 就是两段。第十八轮实测：
+//   旧 138 起 +13、旧 220 起再 +27（累计 27）。写法：
+//       node _fix-anchors.js 138:13,220:27
+//   每段是 `<旧行号起>:<到这一段为止的累计增量>`，按旧行号升序，增量必须递增。
+//   ⚠ 那个「旧行号起」= 插入块在**去掉本轮插入之后**的行号。怎么算：
+//     在新文件里找到插入块的第一行 P、数出块长 C ⇒ 该块插在「旧行号 P - 之前各段累计」之前。
+//     ⚠ 别拿新行号当旧行号用（差着前面各段的累计量）。
+//   不传参数就退回第十七轮那次单段 `113:194`。
+const SEGS = (process.argv[2] || '113:194').split(',').map(s => {
+    const [from, delta] = s.split(':').map(Number);
+    return { from: from, delta: delta };
+}).sort((a, b) => a.from - b.from);
+for (let i = 0; i < SEGS.length; i++) {
+    if (!isFinite(SEGS[i].from) || !isFinite(SEGS[i].delta)) {
+        console.log('⚠ 位移写法不对，应形如 138:13,220:27'); process.exit(1);
+    }
+    if (i && SEGS[i].delta <= SEGS[i - 1].delta) {
+        console.log('⚠ 增量必须严格递增（后面那段是**累计**值）'); process.exit(1);
+    }
+}
+const shiftOf = n => { let d = 0; for (const s of SEGS) { if (n >= s.from) d = s.delta; } return d; };
+console.log('\n== §3 · CSS 分区（分段位移：' +
+    SEGS.map(s => '旧 ' + s.from + ' 起 +' + s.delta).join('，') + '）==');
 for (const [noCol, name] of rows(section('## 3. CSS 分区'))) {
     const nums = (noCol.match(/\d+/g) || []).map(Number);
     if (!nums.length) continue;
-    const got = nums.map(n => (n <= SHIFT_FROM ? n : n + SHIFT));
+    const got = nums.map(n => n + shiftOf(n));
     const bad = got.filter(n => !/^\s*\/\*/.test(lines[n - 1] || ''));
     console.log((bad.length ? '❌' : '  ') + ' | ' + got.join(' / ') + ' | ' + name + ' |   （原 ' + noCol + '）');
     got.forEach(n => console.log('        ' + n + ' ← ' + flat(bannerBlock(n))));

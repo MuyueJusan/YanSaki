@@ -32,19 +32,51 @@
 
 ## 二、供应商（`AI_PROVIDERS`）
 
-| value | 名称 | 默认 Base URL |
-|---|---|---|
-| `openai` | OpenAI | `https://api.openai.com/v1` |
-| `deepseek` | DeepSeek | `https://api.deepseek.com/v1` |
-| `moonshot` | Moonshot (Kimi) | `https://api.moonshot.cn/v1` |
-| `glm` | 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` |
-| `qwen` | 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| `siliconflow` | 硅基流动 | `https://api.siliconflow.cn/v1` |
-| `custom` | 自定义（OpenAI 兼容） | 空 |
+**一张表管全站**（第十八轮合并）：编写器那份 `ST_AI_PROVIDERS` 现在**就是它**
+（`const ST_AI_PROVIDERS = AI_PROVIDERS;`，见产品 16582 行）。以前是两份重复维护的清单，
+加一个服务商要改两个地方 —— 漏一个就是「编写器下拉里有、取不到」。
 
-全部走 **OpenAI 兼容的 `/chat/completions`** 接口。`fetchModels()` 拉 `/models` 列表填充模型下拉框。
+**37 项**，分 6 组（下拉按 `<optgroup>` 分组）：
 
-`syncAiProviderUI()`：切换供应商时自动带出默认 Base URL，`custom` 时保留用户填的值。
+| 组 | 项 |
+|---|---|
+| 海外 | `openai` · `anthropic` · `xai` · `mistral` · `groq` · `together` · `fireworks` · `perplexity` · `cerebras` · `nvidia` · `openrouter` |
+| 国产 | `deepseek` · `moonshot` · `glm` · `qwen` · `siliconflow` · `minimax` · `ark` · `hunyuan` · `qianfan` · `spark` · `stepfun` · `lingyi` |
+| **国产 · 海外渠道** | `moonshot-intl` · `glm-intl` · `qwen-intl` · `qwen-us` · `qwen-hk` · `siliconflow-intl` · `minimax-intl` |
+| Google | `gemini`（OpenAI 兼容层）· `gemini-native`（原生协议）· `vertex`（Vertex AI） |
+| 本地 | `ollama` · `lmstudio` · `vllm` |
+| 其他 | `custom`（**必须留末位**） |
+
+⚠⚠ **海外渠道跟国内不是同一个端点，Key 也通常不通用**（拿国内 Key 打国际站会 401）。
+所以它们是**独立条目**，不是「同一个服务商的两个字段」。清单见下表。
+
+### 国产模型的海外渠道
+
+| value | 端点 |
+|---|---|
+| `moonshot-intl` | `https://api.moonshot.ai/v1` |
+| `glm-intl` | `https://api.z.ai/api/paas/v4`（Z.ai） |
+| `qwen-intl` | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`（新加坡） |
+| `qwen-us` | `https://dashscope-us.aliyuncs.com/compatible-mode/v1`（美国 · 弗吉尼亚） |
+| `qwen-hk` | `https://cn-hongkong.dashscope.aliyuncs.com/compatible-mode/v1`（中国香港） |
+| `siliconflow-intl` | `https://api.siliconflow.com/v1` |
+| `minimax-intl` | `https://api.minimax.io/v1` |
+
+### 三个字段，各有各的规矩
+
+| 字段 | 规矩 |
+|---|---|
+| `value` / `label` / `baseUrl` | 直白 |
+| `proto` | `openai`（默认）/ `anthropic` / `gemini`。⚠ **除了 `custom`，每一项都必须写死** |
+| `group` | 下拉分组名。**组名顺序**在 `AI_PROVIDER_GROUPS` 里定；表里冒出新组名时会**接在已知组后面**（不会丢，只是排最后） |
+| `custom: true` | **只能有一个，且必须留末位** —— `stAiProviderOf()` 找不到 value 时**兜底回最后一项** |
+
+⚠⚠ **`custom` 的 `proto` 故意留空**（`''`），意思是「**按 Base URL 猜**」。
+这里踩过一次真 bug：原本给它写了 `proto: 'openai'`，于是用户「自定义」粘 Anthropic 的域名时，
+`stAiProtoOf()`（决议）**先查表查到就不猜了** ⇒ 整条跳过 URL ⇒ 按 OpenAI 形状发出去 ⇒ 400。
+**界面显示是对的，只有真发一次请求才看得出来。**
+
+⇒ 加服务商时记住这条：**写死 `proto` 的是「这个端点只可能说一种话」的，剩下的交给猜。**
 
 ---
 
@@ -149,17 +181,23 @@ const messages = buildRequestPlan().messages;
 
 ### 传输
 
+⚠ **第十八轮起不再自己拼请求了** —— 这一页原来有一份 OpenAI 专属的 URL / 头 / SSE 解析，
+现在**全部并到共用协议层**（跟编写器同一套）。理由就是项目自己的规矩：协议细节散成两份的
+那天，一定会出现「改了 A 忘了 B」。
+
 | 函数 | 说明 |
 |---|---|
-| `nonStreamChat(messages)` | `stream: false`，取 `choices[0].message.content` |
-| `streamChat(messages, onDelta)` | `stream: true`，读 SSE，按 `\n` 切行，只处理 `data:` 前缀 |
+| `aiEffectiveCfg()` | 把「配置来源」（跟随全局 / 独立）解析成一份 `cfg`，带上 `proto` |
+| `nonStreamChat(messages)` | 走 `stAiRequest(cfg, …, {stream:false})` ⇒ `fetch` ⇒ `stAiFullText(proto, data)` |
+| `streamChat(messages, onDelta)` | 同上但 `stream:true`，SSE 由共用的 `stAiSseText(proto, json)` 取增量 |
 
 两者都：
 
-- `POST {baseUrl}/chat/completions`
-- `Authorization: Bearer {apiKey}`
+- `stAiRequest()` 出 **URL / 头 / 体**（`plan`），`stAiPlanAuth()` 补异步那部分（Vertex 换 token）
 - **`max_tokens` 只在 `> 0` 时才带上**（有些供应商不接受 0）
 - 非 2xx 抛 `HTTP {status} {body 前 200 字}`
+- ⚠ `streamChat` 还要防「**服务端不理会 `stream`、直接返一整段 JSON**」——
+  那时 `resp.body.getReader` 根本不存在，退回按非流式解析（别在这里抛 `getReader is not a function`）
 
 ### 流式解析细节
 
@@ -379,3 +417,74 @@ const retryable = (opts.retryable !== undefined) ? opts.retryable : !isUser;
 
 ⚠ 两个开关**互不影响**：本页切「独立配置」**不会**把编写器拖走。套件里有一条断言专门盯这个
 （「独立：编写器**跟随模式**仍然读全局（它不跟对话跑）」—— ⚠ 断言名里那四个字是关键）。
+
+---
+
+## 十一、Gemini / Vertex AI 协议（第十八轮）
+
+第三种协议 `gemini`（前两种是 `openai` 与 `anthropic`）。它跟另两种**形状差得远**，
+所以没有塞进 `stAiEndpoint()`，而是单开一组函数：
+
+| 函数 | 干什么 |
+|---|---|
+| `stAiIsVertex(cfg)` | 同一个协议分叉 AI Studio 与 Vertex（看预设表上的 `vertex: true`，或 Base URL 里有没有 `aiplatform` / `vertex`） |
+| `stAiGeminiModel(model)` | 模型名归一：剥掉 `models/` / `google/` / `publishers/google/models/` 前缀（用户常连前缀一起抄，带前缀进 URL 会 404，而报错只说「模型不存在」） |
+| `stAiGeminiHost(cfg)` | `global` ⇒ `https://aiplatform.googleapis.com`；其他 location ⇒ `https://{loc}-aiplatform.googleapis.com` |
+| `stAiGeminiPath(cfg, model, action)` | 三条路的路径（见下） |
+| `stAiGeminiUrl(cfg, model, stream)` | 拼上面两个 + `?alt=sse`（流式） |
+| `stAiGeminiModelsUrl(cfg)` | 列模型的 URL |
+| `stAiGeminiBody(cfg, messages, opts)` | OpenAI 形状的 `messages` → `contents` + `systemInstruction` + `generationConfig` |
+| `stAiGeminiAuthHeaders(cfg)` | **可能是异步的**（完整模式要现换 token） |
+| `stAiGeminiText(data)` | 取文：`candidates[0].content.parts[].text` |
+
+### 三条路
+
+| 路 | 端点 | 鉴权 |
+|---|---|---|
+| AI Studio 原生 | `https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent` | `x-goog-api-key` |
+| Vertex **快速模式**（Express） | `https://aiplatform.googleapis.com/v1/publishers/google/models/{m}:generateContent` | `x-goog-api-key` |
+| Vertex **完整模式**（Service Account） | `https://{loc}-aiplatform.googleapis.com/v1/projects/{proj}/locations/{loc}/publishers/google/models/{m}:generateContent` | `Authorization: Bearer {access_token}` |
+
+⚠⚠ **快速模式的路径里没有 `projects/` 段** —— 它不是「少了参数的完整模式」，
+是两个不同的端点。写错了报的是 404，看着像「模型名不对」。
+
+⚠ 流式走 `:streamGenerateContent`，**必须带 `?alt=sse`**。不带的话服务端返的是
+「一段一段的 JSON 数组」而不是 SSE，现有的按行解析一行都读不出来 —— 表现为
+**「流式一直没输出，最后突然全出来」**。
+
+### 请求体
+
+- `system` 消息**抽出来**放进 `systemInstruction`（不是留在 `contents` 里）
+- `assistant` → `model`（角色名不一样），其余 → `user`
+- ⚠⚠ `contents` **非空**且**第一条必须是 `user`** —— 两条都不满足时服务端报的是
+  `400 INVALID_ARGUMENT`，看起来像「请求体写错了」而不是「少了条消息」
+- 采样参数在 `generationConfig` 里，上限字段叫 `maxOutputTokens`（不是 `max_tokens`）
+
+### Vertex 完整模式：Service Account → access token
+
+全程在**本机浏览器**里跑，私钥**不上传任何地方**：
+
+1. `stAiSaParse()` 解析 Service Account JSON（缺 `client_email` / `private_key` 会明确报出来，
+   并提示「确认粘的是密钥文件本身」）
+2. `crypto.subtle.importKey('pkcs8', …, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign'])`
+3. 签 RS256 JWT：header `{alg:'RS256',typ:'JWT'}`，claims `iss` / `scope`（`…/auth/cloud-platform`）/
+   `aud`（`token_uri`）/ `iat` / `exp`
+4. `POST {token_uri}`（默认 `https://oauth2.googleapis.com/token`），
+   `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer` + `assertion={jwt}`
+5. 拿到的 token **缓存在内存**（`stAiSaTokens`，**不落 localStorage**），
+   提前 60 秒续一次；缓存键是 `client_email`（换一份 SA 立刻拿新的，不会串用上一个项目的 token）
+
+⚠ 中文 / emoji 进 JWT 要先 `TextEncoder` 再 `btoa` —— 直接 `btoa(中文)` 抛 `InvalidCharacterError`。
+⚠ 私钥读不出来时的报错**必须说清是「私钥」**：只查「抛没抛」的话，把 `importKey` 的错误吞掉、
+后面 `subtle.sign(key = null)` 照样抛，用户看到的是 `parameter 2 is not of type CryptoKey` 这句天书。
+
+### 三个「协议判定」的坑
+
+1. ⚠⚠ **「猜」和「决议」是两步**。`stAiGuessProto(baseUrl, provider)` 是猜（看关键词），
+   `stAiProtoOf(provider, baseUrl)` 是**决议**（先查预设表，查到就**不再猜**）。
+   真正决定请求形状的是决议那一步 —— **断言要打在它上面**。
+2. ⚠⚠ **Gemini 的 OpenAI 兼容层也含 `generativelanguage`** ⇒ 判 gemini 原生时必须**先排掉**
+   路径里带 `/openai` 的那种，否则兼容层会被误判成原生协议（URL 拼不出来、头也不对）。
+3. ⚠ **半成品 `cfg` 要兜底**：`apigGather()` / `getAiConfigFromInputs()` 返回的对象里**没有 `proto`**
+   （协议是推导出来的）⇒ 一律过一遍 `stAiEnsureProto(cfg)`。少了这步，gemini / vertex 会被
+   当成 openai 发出去（拿 Bearer 去打 Google、URL 里也不带模型名）。

@@ -135,6 +135,20 @@
 
         .apig-grid > .ai-field { flex: 1; }
 
+        /* Google Vertex AI 那一块。`hidden` 属性负责显隐，这里只管长相 ——
+           ⚠ 必须写 `[hidden] { display: none }`：这条 CSS 里给了 display:flex，
+             而 flex 会**盖掉** hidden 属性自带的 display:none（同权重时后者输） */
+        .apig-vertex-box {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+            border-radius: 10px;
+            background: #f5f7fa;
+            border: 1px solid #dfe4ea;
+        }
+        .apig-vertex-box[hidden] { display: none; }
+
         .api-global-card .ai-switch-track { background: #c9ced6; }
 
         .apig-note {
@@ -215,6 +229,12 @@
             background: #fff;
             border-left: 3px solid #000080;
             color: #000;
+        }
+        body.retro-mode .apig-vertex-box {
+            background: #fff;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
         }
         body.retro-mode .api-global-card .ai-field input,
         body.retro-mode .api-global-card .ai-field select,
@@ -5627,9 +5647,22 @@
                                 </div>
                                 <div class="ai-field">
                                     <label>模型</label>
-                                    <select id="ai-model"><option value="">先点击「获取模型」</option></select>
+                                    <!-- ⚠ 第十八轮从死下拉改成 input + datalist：能选，也能手输。
+                                         「获取模型」拉到的列表进 datalist；手输的值照样能存
+                                         （有些服务商的 /models 不返全，或者压根没有这个接口） -->
+                                    <input id="ai-model" list="ai-model-list" type="text"
+                                           placeholder="选一个，或直接手输模型名" autocomplete="off">
+                                    <datalist id="ai-model-list"></datalist>
                                 </div>
                                 <button class="ai-btn" id="ai-fetch-btn" onclick="fetchModels()">获取模型</button>
+
+                                <!-- 独立配置 + Vertex 时出现：这个面板没有那几格，得说出来，
+                                     别让用户以为「选了 Vertex 就只能用 API Key」 -->
+                                <div class="ai-cfg-src-hint" id="ai-vertex-hint" style="display:none">
+                                    Vertex 的<b>项目 / 位置 / 认证方式</b>沿用【🔌 API 全局配置】里那份
+                                    （这个面板改不了）。要用<b>完整模式（Service Account）</b>
+                                    就去那个弹窗里配。
+                                </div>
 
                                 <!-- 高级设置（折叠） -->
                                 <button class="ai-adv-toggle" type="button" onclick="toggleAiAdvanced()">
@@ -6016,14 +6049,63 @@
                     </div>
                 </div>
 
-                <div class="ai-field">
+                <!-- Google Vertex AI 专用。只有服务商选到 Vertex 才显示（syncApigProviderUI 控制） -->
+                <div id="apig-vertex-box" class="apig-vertex-box" hidden>
+                    <div class="apig-grid">
+                        <div class="ai-field">
+                            <label for="apig-auth-mode">验证模式</label>
+                            <select id="apig-auth-mode" onchange="syncApigAuthUI()">
+                                <option value="key">快速模式（API Key）</option>
+                                <option value="sa">完整模式（Service Account）</option>
+                            </select>
+                        </div>
+                        <div class="ai-field" id="apig-location-field">
+                            <label for="apig-location">区域 location</label>
+                            <input id="apig-location" type="text" list="apig-location-list"
+                                   placeholder="global" oninput="apigLocationDraft=this.value">
+                            <datalist id="apig-location-list">
+                                <option value="global"></option>
+                                <option value="us-central1"></option>
+                                <option value="us-east1"></option>
+                                <option value="us-east4"></option>
+                                <option value="us-west1"></option>
+                                <option value="europe-west1"></option>
+                                <option value="europe-west4"></option>
+                                <option value="asia-east1"></option>
+                                <option value="asia-northeast1"></option>
+                                <option value="asia-southeast1"></option>
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <div class="ai-field" id="apig-project-field">
+                        <label for="apig-project">项目 ID project</label>
+                        <input id="apig-project" type="text" placeholder="my-gcp-project-id"
+                               oninput="apigProjectDraft=this.value">
+                    </div>
+
+                    <div class="ai-field" id="apig-sa-field">
+                        <label for="apig-sa">Service Account JSON</label>
+                        <textarea id="apig-sa" rows="4" spellcheck="false"
+                                  placeholder='把下载的密钥 JSON 整个粘进来（含 type / project_id / private_key / client_email）'
+                                  oninput="apigSaDraft=this.value"></textarea>
+                        <div class="apig-hint" id="apig-vertex-note"></div>
+                    </div>
+                </div>
+
+                <div class="ai-field" id="apig-key-field">
                     <label for="apig-api-key">API Key</label>
                     <input id="apig-api-key" type="password" placeholder="sk-..." autocomplete="off">
                 </div>
 
                 <div class="ai-field">
-                    <label for="apig-model">模型</label>
-                    <select id="apig-model"><option value="">先点击下面的「获取模型列表」</option></select>
+                    <label for="apig-model">模型 model</label>
+                    <input id="apig-model" type="text" list="apig-model-list" autocomplete="off"
+                           placeholder="可以直接输入，也可以点下面的「获取模型列表」再挑">
+                    <datalist id="apig-model-list"></datalist>
+                    <div class="apig-hint">
+                        模型名可以<b>手动输入</b> —— 列表接口拿不到（或还没拉过）时，直接照官方文档写进去就行。
+                    </div>
                 </div>
 
                 <div class="apig-actions" style="justify-content:flex-start">
@@ -7220,15 +7302,87 @@
         // ==========================================================================
         // AI 对话区域
         // ==========================================================================
+        // ==========================================================================
+        // 服务商表 —— **全站唯一一张**
+        //
+        // ⚠ 这里曾经有两张：本表（7 个，给【api全局配置】用）与编写器那份
+        //   `ST_AI_PROVIDERS`（13 个）。同一个概念维护两份的必然结局是「加了一边忘了另一边」，
+        //   所以现在 `ST_AI_PROVIDERS` 直接指向本表（见下方 const ST_AI_PROVIDERS = AI_PROVIDERS）。
+        //
+        // 字段：
+        //   value    —— 存进 localStorage 的稳定 id（**改名会让老配置丢服务商**，别动）
+        //   label    —— 下拉里显示的名字
+        //   baseUrl  —— OpenAI 兼容的根路径（末尾**不带** /，拼接统一走 stAiJoin）
+        //   proto    —— 'openai' | 'anthropic' | 'gemini'
+        //   group    —— 下拉分组（optgroup）
+        //   custom   —— true 才让用户自己填 Base URL
+        //   vertex   —— 需要 project / location / 认证模式那一组额外字段
+        //
+        // ⚠ 顺序有意义：`custom` **必须留最后** —— stAiProviderOf 找不到时回落到
+        //   `AI_PROVIDERS[length - 1]`，那一项正好是「自定义」，语义上最合理
+        // ==========================================================================
         const AI_PROVIDERS = [
-            { value: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', custom: false },
-            { value: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', custom: false },
-            { value: 'moonshot', label: 'Moonshot (Kimi)', baseUrl: 'https://api.moonshot.cn/v1', custom: false },
-            { value: 'glm', label: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', custom: false },
-            { value: 'qwen', label: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', custom: false },
-            { value: 'siliconflow', label: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', custom: false },
-            { value: 'custom', label: '自定义 (OpenAI 兼容)', baseUrl: '', custom: true }
+            // ── 海外 ───────────────────────────────────────────────────────────
+            { value: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', proto: 'openai', group: '海外' },
+            { value: 'anthropic', label: 'Anthropic Claude', baseUrl: 'https://api.anthropic.com/v1', proto: 'anthropic', group: '海外' },
+            { value: 'xai', label: 'xAI Grok', baseUrl: 'https://api.x.ai/v1', proto: 'openai', group: '海外' },
+            { value: 'mistral', label: 'Mistral', baseUrl: 'https://api.mistral.ai/v1', proto: 'openai', group: '海外' },
+            { value: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', proto: 'openai', group: '海外' },
+            { value: 'together', label: 'Together AI', baseUrl: 'https://api.together.xyz/v1', proto: 'openai', group: '海外' },
+            { value: 'fireworks', label: 'Fireworks AI', baseUrl: 'https://api.fireworks.ai/inference/v1', proto: 'openai', group: '海外' },
+            { value: 'perplexity', label: 'Perplexity', baseUrl: 'https://api.perplexity.ai', proto: 'openai', group: '海外' },
+            { value: 'cerebras', label: 'Cerebras', baseUrl: 'https://api.cerebras.ai/v1', proto: 'openai', group: '海外' },
+            { value: 'nvidia', label: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', proto: 'openai', group: '海外' },
+            { value: 'openrouter', label: 'OpenRouter（聚合）', baseUrl: 'https://openrouter.ai/api/v1', proto: 'openai', group: '海外' },
+
+            // ── 国产 ───────────────────────────────────────────────────────────
+            { value: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', proto: 'openai', group: '国产' },
+            { value: 'moonshot', label: 'Moonshot / Kimi', baseUrl: 'https://api.moonshot.cn/v1', proto: 'openai', group: '国产' },
+            { value: 'glm', label: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', proto: 'openai', group: '国产' },
+            { value: 'qwen', label: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', proto: 'openai', group: '国产' },
+            { value: 'siliconflow', label: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', proto: 'openai', group: '国产' },
+            { value: 'minimax', label: 'MiniMax', baseUrl: 'https://api.minimaxi.com/v1', proto: 'openai', group: '国产' },
+            { value: 'ark', label: '火山方舟 / 豆包', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', proto: 'openai', group: '国产' },
+            { value: 'hunyuan', label: '腾讯混元', baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1', proto: 'openai', group: '国产' },
+            { value: 'qianfan', label: '百度千帆 / 文心', baseUrl: 'https://qianfan.baidubce.com/v2', proto: 'openai', group: '国产' },
+            { value: 'spark', label: '讯飞星火', baseUrl: 'https://spark-api-open.xf-yun.com/v1', proto: 'openai', group: '国产' },
+            { value: 'stepfun', label: '阶跃星辰', baseUrl: 'https://api.stepfun.com/v1', proto: 'openai', group: '国产' },
+            { value: 'lingyi', label: '零一万物 Yi', baseUrl: 'https://api.lingyiwanwu.com/v1', proto: 'openai', group: '国产' },
+
+            // ── 国产 · 海外渠道 ────────────────────────────────────────────────
+            // ⚠ 这些跟上面同名的**不是同一个端点**，API Key 也不通用（国内站申请的
+            //   Key 拿去打海外端点会 401）。别把两者当成「同一个服务商换个名字」。
+            { value: 'moonshot-intl', label: 'Moonshot / Kimi（国际站）', baseUrl: 'https://api.moonshot.ai/v1', proto: 'openai', group: '国产 · 海外渠道' },
+            { value: 'glm-intl', label: '智谱 GLM / Z.ai（国际站）', baseUrl: 'https://api.z.ai/api/paas/v4', proto: 'openai', group: '国产 · 海外渠道' },
+            { value: 'qwen-intl', label: '通义千问（新加坡）', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', proto: 'openai', group: '国产 · 海外渠道' },
+            { value: 'qwen-us', label: '通义千问（美国 · 弗吉尼亚）', baseUrl: 'https://dashscope-us.aliyuncs.com/compatible-mode/v1', proto: 'openai', group: '国产 · 海外渠道' },
+            { value: 'qwen-hk', label: '通义千问（中国香港）', baseUrl: 'https://cn-hongkong.dashscope.aliyuncs.com/compatible-mode/v1', proto: 'openai', group: '国产 · 海外渠道' },
+            { value: 'siliconflow-intl', label: '硅基流动（国际站）', baseUrl: 'https://api.siliconflow.com/v1', proto: 'openai', group: '国产 · 海外渠道' },
+            { value: 'minimax-intl', label: 'MiniMax（国际站）', baseUrl: 'https://api.minimax.io/v1', proto: 'openai', group: '国产 · 海外渠道' },
+
+            // ── Google ─────────────────────────────────────────────────────────
+            // 三条路各有取舍，界面上会分别提示：
+            //   · 兼容层 —— 最省事，但拿不到 Gemini 独有的字段（安全设置 / extra_content）
+            //   · 原生   —— AI Studio 的 Key，走 generateContent，浏览器直连最稳
+            //   · Vertex —— 企业级；快速模式只要 Key，完整模式要 Service Account JSON
+            { value: 'gemini', label: 'Google Gemini（OpenAI 兼容层）', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', proto: 'openai', group: 'Google' },
+            { value: 'gemini-native', label: 'Google Gemini（原生协议）', baseUrl: 'https://generativelanguage.googleapis.com', proto: 'gemini', group: 'Google' },
+            { value: 'vertex', label: 'Google Vertex AI', baseUrl: 'https://aiplatform.googleapis.com', proto: 'gemini', group: 'Google', vertex: true },
+
+            // ── 本地 ───────────────────────────────────────────────────────────
+            { value: 'ollama', label: 'Ollama', baseUrl: 'http://localhost:11434/v1', proto: 'openai', group: '本地' },
+            { value: 'lmstudio', label: 'LM Studio', baseUrl: 'http://localhost:1234/v1', proto: 'openai', group: '本地' },
+            { value: 'vllm', label: 'vLLM', baseUrl: 'http://localhost:8000/v1', proto: 'openai', group: '本地' },
+
+            // ⚠ 必须留在最后（见文件头注释）
+            // ⚠ proto 故意留空：自定义 = 用户自己粘 Base URL，协议**只能按 URL 猜**。
+            //   写死 'openai' 的后果实测过：粘 Anthropic 的域名 ⇒ 界面显示对了、
+            //   请求按 OpenAI 形状发出去 ⇒ 400，而且**只有真发一次才看得出来**。
+            { value: 'custom', label: '自定义（按 Base URL 猜协议）', baseUrl: '', proto: '', group: '其他', custom: true }
         ];
+
+        // 下拉分组顺序。表里没列到的 group 会被追加到末尾（新增分组忘了加这里也不会丢项）
+        const AI_PROVIDER_GROUPS = ['海外', '国产', '国产 · 海外渠道', 'Google', '本地', '其他'];
 
         // ==========================================================================
         // 系统提示词预设
@@ -7490,9 +7644,13 @@
 
         // 全局配置管的字段。**白名单** —— 加字段就要同时改这里，
         // 免得 apiGlobalPick 静默漏抄（漏抄 = 切来源时那一格不跟着走）
+        // ⚠ 后四个是 Google Vertex AI 专用（快速模式只用 authMode；完整模式还要
+        //   project / location / saJson）。它们跟其他字段一样参与「跟随 / 独立」，
+        //   否则会出现「全局面板配好了 Vertex，【ai对话】一跟随就退回 OpenAI」
         const API_GLOBAL_FIELDS = [
             'provider', 'baseUrl', 'apiKey', 'model',
-            'temperature', 'maxTokens', 'stream', 'firstSeg'
+            'temperature', 'maxTokens', 'stream', 'firstSeg',
+            'authMode', 'project', 'location', 'saJson'
         ];
 
         const API_GLOBAL_DEFAULTS = {
@@ -7504,7 +7662,13 @@
             temperature: 0.7,
             maxTokens: 1024,
             stream: true,
-            firstSeg: ''
+            firstSeg: '',
+            // —— Google Vertex AI ——
+            // 'key' = 快速模式（Express，只填 API Key）；'sa' = 完整模式（Service Account JSON）
+            authMode: 'key',
+            project: '',
+            location: 'global',      // Vertex 的默认区域就是 global（端点不带地区前缀）
+            saJson: ''               // 完整模式用的 Service Account 密钥 JSON 原文
         };
 
         let apiGlobal = Object.assign({}, API_GLOBAL_DEFAULTS);
@@ -7538,6 +7702,12 @@
                 ? Math.max(64, Math.min(32000, Math.trunc(m))) : 1024;
             o.stream = o.stream !== false;
             o.firstSeg = String(o.firstSeg || '');
+            // Vertex 那几格。authMode 只认两个值，写坏了一律退回「快速模式」
+            // —— 退回完整模式会让用户在没填 JSON 的情况下直接发不出请求
+            o.authMode = (o.authMode === 'sa') ? 'sa' : 'key';
+            o.project = String(o.project || '');
+            o.location = String(o.location || '').trim() || 'global';
+            o.saJson = String(o.saJson || '');
             return o;
         }
 
@@ -7610,15 +7780,59 @@
         let chatHistory = [];
         let aiBusy = false;
 
+        // 把服务商预设装进一个 <select>，按 group 分组（optgroup）。
+        // ⚠ 三处下拉共用这一个 —— 手写三份 forEach 的那天，一定会出现
+        //   「新分组只加到了一处」，而且不报错、只是少几个选项
+        function aiFillProviderSelect(sel) {
+            if (!sel) return;
+            const map = {};
+            const seen = [];
+            AI_PROVIDERS.forEach(p => {
+                const name = String(p.group || '其他');
+                if (!map[name]) { map[name] = []; seen.push(name); }
+                map[name].push(p);
+            });
+            // 已知分组按 AI_PROVIDER_GROUPS 的顺序排前面；表里出现的新分组按出现序接在后面
+            const names = AI_PROVIDER_GROUPS.filter(n => map[n])
+                .concat(seen.filter(n => AI_PROVIDER_GROUPS.indexOf(n) < 0));
+            sel.innerHTML = '';
+            names.forEach(n => {
+                const og = document.createElement('optgroup');
+                og.label = n;
+                map[n].forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.value;
+                    opt.textContent = p.label;
+                    og.appendChild(opt);
+                });
+                sel.appendChild(og);
+            });
+        }
+
+        // 同上，但返回 HTML 字符串（编写器那一页是拼字符串渲染的，不是 DOM 操作）。
+        // ⚠ 和 aiFillProviderSelect 共用同一套分组逻辑顺序 —— 两处若各写一份
+        //   「哪个组排前面」的规则，迟早会不一致
+        function aiProviderOptionsHtml(selected) {
+            const map = {};
+            const seen = [];
+            AI_PROVIDERS.forEach(p => {
+                const name = String(p.group || '其他');
+                if (!map[name]) { map[name] = []; seen.push(name); }
+                map[name].push(p);
+            });
+            const names = AI_PROVIDER_GROUPS.filter(n => map[n])
+                .concat(seen.filter(n => AI_PROVIDER_GROUPS.indexOf(n) < 0));
+            return names.map(n =>
+                '<optgroup label="' + escapeHtml(n) + '">' +
+                    map[n].map(p => '<option value="' + escapeHtml(p.value) + '"' +
+                        (p.value === selected ? ' selected' : '') + '>' +
+                        escapeHtml(p.label) + '</option>').join('') +
+                '</optgroup>').join('');
+        }
+
         function initAiArea() {
             const providerSel = document.getElementById('ai-provider');
-            providerSel.innerHTML = '';
-            AI_PROVIDERS.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.value;
-                opt.textContent = p.label;
-                providerSel.appendChild(opt);
-            });
+            aiFillProviderSelect(providerSel);
             providerSel.value = aiConfig.provider;
             syncAiProviderUI();
             document.getElementById('ai-api-key').value = aiConfig.apiKey || '';
@@ -7657,16 +7871,21 @@
             syncAiCfgSourceUI();
         }
 
+        // 把模型名装进候选（datalist）并写进输入框。
+        // ⚠ 控件是 input + datalist ⇒ 「候选」和「当前值」是**两个元素**：
+        //   候选读 `ai-model-list`，当前值读 `ai-model`。写成 `sel.options` 会当场崩
+        // ⚠ 空值也要**照写**：这个函数同时被 syncAiCfgSourceUI 当镜像用 ——
+        //   切来源时全局那份模型名是空的，不写就等于把上一个来源的名字留在框里
         function setAiModelOption(modelId) {
-            if (!modelId) return;
-            const sel = document.getElementById('ai-model');
-            if (![...sel.options].some(o => o.value === modelId)) {
+            const input = document.getElementById('ai-model');
+            const list = document.getElementById('ai-model-list');
+            const v = String(modelId == null ? '' : modelId);
+            if (v && list && ![...list.options].some(o => o.value === v)) {
                 const opt = document.createElement('option');
-                opt.value = modelId;
-                opt.textContent = modelId;
-                sel.appendChild(opt);
+                opt.value = v;
+                list.appendChild(opt);
             }
-            sel.value = modelId;
+            if (input) input.value = v;
         }
 
         function syncAiProviderUI() {
@@ -7679,6 +7898,19 @@
                 urlInput.disabled = true;
                 urlInput.value = p.baseUrl || '';
             }
+            syncAiVertexHint();
+        }
+
+        // 这个面板**没有** Vertex 的项目 / 位置 / 认证方式那几格（只有全局面板有）。
+        // 独立配置选了 Vertex 就得说清楚「那几项沿用全局那份」，否则用户会以为
+        // 完整模式在这个面板里用不了（或者更糟：以为能用，填了个 Key 就走了快速模式）
+        function syncAiVertexHint() {
+            const el = document.getElementById('ai-vertex-hint');
+            if (!el) return;
+            const prov = (document.getElementById('ai-provider') || {}).value;
+            const isVertex = !!(AI_PROVIDERS.find(x => x.value === prov) || {}).vertex;
+            const follow = aiConfig.followGlobal !== false;
+            el.style.display = (isVertex && !follow) ? '' : 'none';
         }
 
         function getAiConfigFromInputs() {
@@ -7704,6 +7936,14 @@
                 //   漏掉这两个字段就等于「点一次保存，配置来源被打回默认 + 独立那份没了」
                 followGlobal: aiConfig.followGlobal,
                 own: aiConfig.own,
+                // ⚠⚠ 同理：Vertex 那四个字段在这个面板里**没有控件**（只在【API 全局配置】
+                //   里改），但独立模式保存时 `aiSyncOwnFromEffective()` 会拿这个对象去
+                //   `apiGlobalPick()` —— 漏掉它们 = 点一次保存，独立那份的 project /
+                //   location / 认证方式 / Service Account JSON 全被打回默认
+                authMode: aiConfig.authMode,
+                project: aiConfig.project,
+                location: aiConfig.location,
+                saJson: aiConfig.saJson,
                 customPrompt: aiConfig.customPrompt,
                 // 原系统提示词开关（读 DOM，和酒馆开关一样）
                 promptEnabled: document.getElementById('ai-prompt-enabled').checked,
@@ -16365,31 +16605,28 @@
         // ⚠ 配置**一律不进角色卡**。stAi 存在自己的 localStorage 键里，
         // 草稿（stCardDraft）和导出的 JSON 里都不会出现 API Key 的影子。
         //
-        // 协议只支持两种形状：OpenAI 兼容（/chat/completions）与 Anthropic
-        // （/messages）。主流服务商里除 Anthropic 自己之外全是 OpenAI 兼容，
-        // 所以预设表里只有它是 anthropic。
+        // 协议支持三种形状：
+        //   · openai   —— /chat/completions（绝大多数服务商）
+        //   · anthropic—— /messages（只有 Anthropic 自己）
+        //   · gemini   —— generateContent（Google AI Studio 原生 / Vertex AI 两条路）
+        // ⚠ 预设表（AI_PROVIDERS）里带 proto，这里的下拉直接读它
         // ==========================================================================
 
         const ST_AI_CFG_KEY = 'stAiCfg';
         const ST_AI_UI_KEY = 'stAiUiCfg';
 
-        const ST_AI_PROVIDERS = [
-            { value: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', proto: 'openai' },
-            { value: 'anthropic', label: 'Anthropic Claude', baseUrl: 'https://api.anthropic.com/v1', proto: 'anthropic' },
-            { value: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', proto: 'openai' },
-            { value: 'moonshot', label: 'Moonshot (Kimi)', baseUrl: 'https://api.moonshot.cn/v1', proto: 'openai' },
-            { value: 'glm', label: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', proto: 'openai' },
-            { value: 'qwen', label: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', proto: 'openai' },
-            { value: 'siliconflow', label: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', proto: 'openai' },
-            { value: 'gemini', label: 'Google Gemini（兼容层）', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', proto: 'openai' },
-            { value: 'xai', label: 'xAI Grok', baseUrl: 'https://api.x.ai/v1', proto: 'openai' },
-            { value: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', proto: 'openai' },
-            { value: 'mistral', label: 'Mistral', baseUrl: 'https://api.mistral.ai/v1', proto: 'openai' },
-            { value: 'ollama', label: 'Ollama（本地）', baseUrl: 'http://localhost:11434/v1', proto: 'openai' },
-            { value: 'custom', label: '自定义', baseUrl: '', proto: 'openai', custom: true }
-        ];
+        // ⚠ **不再单独维护一份** —— 指向上面那张全站唯一的 AI_PROVIDERS。
+        //   留着这个名字是因为编写器里有 5 处引用它；改成一个 const 别名而不是
+        //   把那些引用全改掉，是为了让这次改动的爆炸半径尽量小。
+        const ST_AI_PROVIDERS = AI_PROVIDERS;
 
-        const ST_AI_PROTO_LABEL = { openai: 'OpenAI 兼容', anthropic: 'Anthropic' };
+        // 协议显示名。加协议时**这里和 stAiRequest / stAiSseText / stAiFullText
+        // 三处必须一起改** —— 只加这里就是「下拉里能选、发出去就 400」
+        const ST_AI_PROTO_LABEL = {
+            openai: 'OpenAI 兼容',
+            anthropic: 'Anthropic',
+            gemini: 'Gemini / Vertex 原生'
+        };
 
         const ST_AI_DEFAULTS = {
             mode: 'follow',          // 'follow' = 借 API 全局配置那套；'own' = 自己一套
@@ -16404,7 +16641,13 @@
             stream: true,
             // 「第一段」：用户自己写、**一定排在发给模型最前面**的那一段。
             // 跟随模式下这一格不生效（现读 apiGlobal.firstSeg），只有独立配置才用它
-            firstSeg: ''
+            firstSeg: '',
+            // —— Google Vertex AI（只在独立模式 + provider=vertex 时用到）——
+            // 跟随模式下现读 apiGlobal，这几格跟 firstSeg 一样不生效
+            authMode: 'key',         // 'key' = 快速模式；'sa' = 完整模式（Service Account）
+            project: '',
+            location: 'global',
+            saJson: ''
         };
 
         // 扩写「要求」的预设。每一条都是一句写给模型的指令，可以多选叠加
@@ -16474,10 +16717,27 @@
             return b + (p.charAt(0) === '/' ? p : '/' + p);
         }
 
-        // 只给服务商看「协议」这件事：Anthropic 自己的接口，其余全是 OpenAI 兼容
+        // 只给服务商看「协议」这件事。
+        // ⚠ 顺序要紧：Gemini 的 **OpenAI 兼容层** baseUrl 是
+        //   `https://generativelanguage.googleapis.com/v1beta/openai` —— 它同时含
+        //   `generativelanguage` 和 `openai`。先判 gemini 就会把兼容层错认成原生协议，
+        //   发出去的是 OpenAI 形状的 body、打到 generateContent 上，直接 400。
+        //   所以**先排掉 /openai 结尾**，再认 Google 那两个原生域名。
         function stAiGuessProto(baseUrl, provider) {
             const s = (String(baseUrl || '') + ' ' + String(provider || '')).toLowerCase();
-            return /anthropic|claude/.test(s) ? 'anthropic' : 'openai';
+            if (/anthropic|claude/.test(s)) return 'anthropic';
+            if (/\/openai\b/.test(s)) return 'openai';
+            if (/generativelanguage|aiplatform|vertex/.test(s)) return 'gemini';
+            return 'openai';
+        }
+
+        // 取协议：**服务商预设里写了就用它**，只有没写的（比如自定义）才按 URL 猜。
+        // ⚠ 曾经这里一律猜 —— 于是新加的 gemini / vertex 会被猜成 openai，
+        //   界面显示对了、请求形状却是错的，只有真发一次才看得出来
+        function stAiProtoOf(provider, baseUrl) {
+            const p = AI_PROVIDERS.find(x => x.value === provider);
+            if (p && p.proto) return p.proto;
+            return stAiGuessProto(baseUrl, provider);
         }
 
         // 从 localStorage 读回来。坏数据一律退回默认值，绝不让它把渲染炸掉
@@ -16489,7 +16749,8 @@
                     o.mode = (o.mode === 'own') ? 'own' : 'follow';
                     o.provider = ST_AI_PROVIDERS.some(p => p.value === o.provider)
                         ? o.provider : ST_AI_DEFAULTS.provider;
-                    o.proto = (o.proto === 'openai' || o.proto === 'anthropic') ? o.proto : '';
+                    o.proto = (o.proto === 'openai' || o.proto === 'anthropic' || o.proto === 'gemini')
+                        ? o.proto : '';
                     o.baseUrl = String(o.baseUrl || '');
                     o.apiKey = String(o.apiKey || '');
                     o.model = String(o.model || '');
@@ -16498,6 +16759,10 @@
                     o.temperature = stAiNum(o.temperature, ST_AI_DEFAULTS.temperature, 0, 2);
                     o.maxTokens = Math.trunc(stAiNum(o.maxTokens, ST_AI_DEFAULTS.maxTokens, 64, 32000));
                     o.stream = o.stream !== false;
+                    o.authMode = (o.authMode === 'sa') ? 'sa' : 'key';
+                    o.project = String(o.project || '');
+                    o.location = String(o.location || '').trim() || 'global';
+                    o.saJson = String(o.saJson || '');
                     stAi = o;
                 }
             } catch (e) { stAi = Object.assign({}, ST_AI_DEFAULTS); }
@@ -16553,9 +16818,22 @@
         // 不需要「同步一下」这种按钮。
         // ⚠ 指向 apiGlobal 而不是 aiConfig：后者是「生效值」，会跟着【ai对话】的
         //   「独立配置」一起变 —— 那就等于编写器又悄悄跟回了对话
+        // Vertex 那几格：跟随模式现读 apiGlobal，独立模式读 stAi。
+        // 抽出来是因为 stAiFollowCfg / stAiCfg / 界面回填三处都要读它 ——
+        // 抄三份的结局是「改了一处，另两处还读着老字段」
+        function stAiVertexFields(src) {
+            const s = src || {};
+            return {
+                authMode: (s.authMode === 'sa') ? 'sa' : 'key',
+                project: String(s.project || ''),
+                location: String(s.location || '').trim() || 'global',
+                saJson: String(s.saJson || '')
+            };
+        }
+
         function stAiFollowCfg() {
             const base = String(apiGlobal.baseUrl || '').replace(/\/+$/, '');
-            return {
+            return Object.assign({
                 mode: 'follow',
                 provider: apiGlobal.provider || 'custom',
                 providerLabel: (AI_PROVIDERS.find(p => p.value === apiGlobal.provider) || {}).label || 'API 全局配置',
@@ -16565,16 +16843,16 @@
                 temperature: stAiNum(apiGlobal.temperature, 0.7, 0, 2),
                 maxTokens: Math.trunc(stAiNum(apiGlobal.maxTokens, 4096, 64, 32000)),
                 stream: apiGlobal.stream !== false,
-                proto: stAiGuessProto(base, apiGlobal.provider),
+                proto: stAiProtoOf(apiGlobal.provider, base),
                 firstSeg: String(apiGlobal.firstSeg || '')
-            };
+            }, stAiVertexFields(apiGlobal));
         }
 
         function stAiCfg() {
             if (stAi.mode !== 'own') return stAiFollowCfg();
             const p = stAiProviderOf(stAi.provider);
             const base = String(p.custom ? stAi.baseUrl : (p.baseUrl || '')).replace(/\/+$/, '');
-            return {
+            return Object.assign({
                 mode: 'own',
                 provider: stAi.provider,
                 providerLabel: p.label,
@@ -16584,9 +16862,12 @@
                 temperature: stAiNum(stAi.temperature, 0.8, 0, 2),
                 maxTokens: Math.trunc(stAiNum(stAi.maxTokens, 4096, 64, 32000)),
                 stream: stAi.stream !== false,
-                proto: stAi.proto || p.proto || 'openai',
+                // ⚠ 必须走 stAiProtoOf：它管「预设里写了就用它、没写才按 URL 猜」。
+                //   直接写 `stAi.proto || p.proto || 'openai'` 会让**自定义**永远拿到
+                //   openai —— 那条分支把 URL 整条跳过了（实测过，见预设表里的注释）
+                proto: stAi.proto || stAiProtoOf(stAi.provider, base),
                 firstSeg: String(stAi.firstSeg || '')
-            };
+            }, stAiVertexFields(stAi));
         }
 
         // ===== 「第一段」与「提示词结构预览」=====
@@ -16761,8 +17042,233 @@
             return out;
         }
 
+        // ==========================================================================
+        // Google 原生（gemini）协议
+        //
+        // 一个协议盖三条路，它们**请求体完全一样**，只有 URL 和鉴权不同：
+        //
+        //   · AI Studio 原生    https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent
+        //   · Vertex 快速模式   https://aiplatform.googleapis.com/v1/publishers/google/models/{m}:generateContent
+        //   · Vertex 完整模式   https://{loc}-aiplatform.googleapis.com/v1/projects/{proj}/locations/{loc}/publishers/google/models/{m}:generateContent
+        //
+        // 鉴权：
+        //   · AI Studio / Vertex 快速模式 —— API Key，走 `x-goog-api-key` 头
+        //   · Vertex 完整模式            —— Service Account 私钥签 JWT 换 access token，走 Bearer
+        //
+        // ⚠ `location = 'global'` 时**端点不带地区前缀** —— 是 `aiplatform.googleapis.com`
+        //   而不是 `global-aiplatform.googleapis.com`。写成后者是 DNS 直接解析失败，
+        //   报错信息里根本看不出是「global 这个特例」
+        // ⚠ 快速模式的路径里**没有 projects 那一段**（Express 的 Key 自己带项目），
+        //   照完整模式的形状拼会 404
+        // ==========================================================================
+
+        // 模型名归一：用户可能从文档里连前缀一起抄过来。带前缀拼进 URL 会 404，
+        // 而且报错只说「模型不存在」，看不出是前缀的问题
+        function stAiGeminiModel(model) {
+            return String(model || '').trim()
+                .replace(/^\/+/, '')
+                .replace(/^models\//, '')
+                .replace(/^google\//, '')
+                .replace(/^publishers\/google\/models\//, '');
+        }
+
+        // 这家服务商是不是 Vertex（AI Studio 与 Vertex 共用 gemini 协议，靠这个分叉）
+        function stAiIsVertex(cfg) {
+            const p = AI_PROVIDERS.find(x => x.value === (cfg && cfg.provider)) || {};
+            if (p.vertex) return true;
+            return /aiplatform|vertex/.test(String((cfg && cfg.baseUrl) || '').toLowerCase());
+        }
+
+        function stAiGeminiHost(cfg) {
+            if (!stAiIsVertex(cfg)) return 'https://generativelanguage.googleapis.com';
+            const loc = String((cfg && cfg.location) || 'global').trim() || 'global';
+            return loc === 'global'
+                ? 'https://aiplatform.googleapis.com'
+                : 'https://' + loc + '-aiplatform.googleapis.com';
+        }
+
+        function stAiGeminiPath(cfg, model, action) {
+            const m = stAiGeminiModel(model);
+            if (!stAiIsVertex(cfg)) return '/v1beta/models/' + m + ':' + action;
+            if ((cfg && cfg.authMode) === 'sa') {
+                const loc = String(cfg.location || 'global').trim() || 'global';
+                const proj = String(cfg.project || '').trim();
+                return '/v1/projects/' + proj + '/locations/' + loc +
+                    '/publishers/google/models/' + m + ':' + action;
+            }
+            return '/v1/publishers/google/models/' + m + ':' + action;
+        }
+
+        // 流式要用 `alt=sse`，否则服务端返的是**一段一段的 JSON 数组**（不是 SSE），
+        // 现有的按行解析会一行都读不出来、表现为「流式永远没输出、最后突然全出来」
+        function stAiGeminiUrl(cfg, model, stream) {
+            const action = stream ? 'streamGenerateContent' : 'generateContent';
+            const q = stream ? '?alt=sse' : '';
+            return stAiGeminiHost(cfg) + stAiGeminiPath(cfg, model, action) + q;
+        }
+
+        // 列模型的路径（AI Studio 与 Vertex 都是 GET models）
+        function stAiGeminiModelsUrl(cfg) {
+            if (!stAiIsVertex(cfg)) return 'https://generativelanguage.googleapis.com/v1beta/models';
+            if ((cfg && cfg.authMode) === 'sa') {
+                const loc = String(cfg.location || 'global').trim() || 'global';
+                const proj = String(cfg.project || '').trim();
+                return stAiGeminiHost(cfg) + '/v1/projects/' + proj + '/locations/' + loc + '/publishers/google/models';
+            }
+            return stAiGeminiHost(cfg) + '/v1/publishers/google/models';
+        }
+
+        // OpenAI 形状的 messages → Gemini 的 contents + systemInstruction
+        //   角色映射：system → 抽到 systemInstruction；assistant → model；其余 → user
+        // ⚠ Gemini 要求 contents **非空**且**第一条必须是 user** —— 两条都不满足时
+        //   服务端报的是 400 INVALID_ARGUMENT，看起来像「请求体写错了」而不是「少了条消息」
+        function stAiGeminiBody(cfg, messages, opts) {
+            const o = opts || {};
+            const sys = [];
+            const contents = [];
+            (messages || []).forEach(m => {
+                const role = m && m.role;
+                const text = String((m && m.content) != null ? m.content : '');
+                if (role === 'system') { if (text) sys.push(text); return; }
+                contents.push({
+                    role: role === 'assistant' ? 'model' : 'user',
+                    parts: [{ text: text }]
+                });
+            });
+            if (!contents.length) contents.push({ role: 'user', parts: [{ text: '（继续）' }] });
+            if (contents[0].role !== 'user') contents.unshift({ role: 'user', parts: [{ text: '（继续）' }] });
+
+            const body = { contents: contents };
+            if (sys.length) body.systemInstruction = { parts: [{ text: sys.join('\n\n') }] };
+            const gc = {};
+            gc.temperature = stAiNum(o.temperature, cfg.temperature, 0, 2);
+            const mt = Math.trunc(stAiNum(o.maxTokens, cfg.maxTokens, 64, 32000));
+            if (mt > 0) gc.maxOutputTokens = mt;
+            body.generationConfig = gc;
+            return body;
+        }
+
+        // —— Vertex 完整模式：Service Account ⇒ access token ——
+        //
+        // 私钥（PKCS#8 PEM）→ WebCrypto 导入 → 签 RS256 JWT → POST token_uri 换 token。
+        //
+        // ⚠ 全程在**本机浏览器**里：私钥不上传任何地方，只用来本地签名；
+        //   换到的 token 缓存在内存（`stAiSaTokens`），不落 localStorage。
+        //   access token 有 1 小时有效期，提前 60 秒续一次
+        // ⚠ token 缓存键用 client_email —— 换一份 Service Account 立刻就拿新的，
+        //   不会串用上一个项目的 token
+        let stAiSaTokens = {};
+
+        function stAiSaParse(saJson) {
+            let o = null;
+            try { o = JSON.parse(String(saJson || '')); } catch (e) { o = null; }
+            if (!o || typeof o !== 'object' || Array.isArray(o)) {
+                return { ok: false, why: 'Service Account JSON 不是合法 JSON（粘漏了开头的 { 或结尾的 }？）。' };
+            }
+            if (!o.client_email || !o.private_key) {
+                return { ok: false, why: 'JSON 里缺 client_email 或 private_key —— 确认粘的是**密钥文件**本身，不是项目里的别的 JSON。' };
+            }
+            return {
+                ok: true,
+                email: String(o.client_email),
+                key: String(o.private_key),
+                tokenUri: String(o.token_uri || 'https://oauth2.googleapis.com/token'),
+                projectId: String(o.project_id || '')
+            };
+        }
+
+        function stAiB64Url(input) {
+            const bytes = (input instanceof Uint8Array) ? input : new Uint8Array(input);
+            let s = '';
+            for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+            return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        // ⚠ 中文/emoji 要先 UTF-8 编码再 btoa —— 直接 btoa(中文) 抛 InvalidCharacterError
+        function stAiB64UrlText(txt) {
+            return stAiB64Url(new TextEncoder().encode(String(txt)));
+        }
+
+        // PEM（PKCS#8）→ ArrayBuffer
+        function stAiPemToBuf(pem) {
+            const body = String(pem).replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+            const bin = atob(body);
+            const buf = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+            return buf;
+        }
+
+        async function stAiSaAccessToken(saJson, force) {
+            const sa = stAiSaParse(saJson);
+            if (!sa.ok) throw new Error(sa.why);
+            const now = Math.floor(Date.now() / 1000);
+            const hit = stAiSaTokens[sa.email];
+            if (!force && hit && hit.exp - 60 > now) return hit.token;
+            if (!(typeof crypto !== 'undefined' && crypto.subtle)) {
+                throw new Error('这个环境没有 WebCrypto（或不是安全上下文），完整模式签不了 JWT。' +
+                    '换「快速模式」，或用 https 打开本页。');
+            }
+            let key;
+            try {
+                key = await crypto.subtle.importKey('pkcs8', stAiPemToBuf(sa.key),
+                    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+            } catch (e) {
+                throw new Error('私钥读不出来（private_key 不是 PKCS#8 PEM？）：' + ((e && e.message) || e));
+            }
+            const signingInput = stAiB64UrlText(JSON.stringify({ alg: 'RS256', typ: 'JWT' })) + '.' +
+                stAiB64UrlText(JSON.stringify({
+                    iss: sa.email,
+                    scope: 'https://www.googleapis.com/auth/cloud-platform',
+                    aud: sa.tokenUri,
+                    iat: now,
+                    exp: now + 3600
+                }));
+            const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key,
+                new TextEncoder().encode(signingInput));
+            const jwt = signingInput + '.' + stAiB64Url(sig);
+
+            const resp = await fetch(sa.tokenUri, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'grant_type=' + encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer') +
+                    '&assertion=' + encodeURIComponent(jwt)
+            });
+            if (!resp.ok) {
+                let t = '';
+                try { t = (await resp.text()).slice(0, 300); } catch (e) {}
+                throw new Error('换 access token 失败 HTTP ' + resp.status + (t ? ' ' + t : ''));
+            }
+            const data = await resp.json();
+            if (!data || !data.access_token) throw new Error('token 响应里没有 access_token');
+            const exp = now + Math.max(60, Number(data.expires_in) || 3600);
+            stAiSaTokens[sa.email] = { token: String(data.access_token), exp: exp };
+            return stAiSaTokens[sa.email].token;
+        }
+
+        // gemini 的鉴权头。**可能是异步的**（完整模式要现换 token），所以单开一条 ——
+        // 塞进同步的 stAiRequest 只会得到 `[object Promise]` 当 header 值
+        async function stAiGeminiAuthHeaders(cfg) {
+            if (stAiIsVertex(cfg) && (cfg.authMode === 'sa')) {
+                const token = await stAiSaAccessToken(cfg.saJson);
+                return { 'Authorization': 'Bearer ' + token };
+            }
+            // API Key 统一走 x-goog-api-key（Google 各 API 通用，官方 SDK 也用它）
+            return { 'x-goog-api-key': String(cfg.apiKey || '') };
+        }
+
+        // cfg 可能是「半成品」—— 全局面板 apigGather() 给的对象里**没有 proto**
+        // （它只装用户填的那些字段，协议是推导出来的）。少了这一步，gemini / vertex
+        // 会被当成 openai 发出去：拿 Bearer 去打 Google、URL 里也不带模型名。
+        // ⇒ 一律在这里补，别指望每个调用方都记得填
+        function stAiEnsureProto(cfg) {
+            if (cfg && !cfg.proto) cfg.proto = stAiProtoOf(cfg.provider, cfg.baseUrl);
+            return cfg;
+        }
+
         // 「发去哪、带什么头」两种协议只差这一处 —— stAiRequest 与 stCodeRequest
         // 共用它。协议细节散成两份的那天，一定会出现「改了 A 忘了 B」
+        // ⚠ 只管 openai / anthropic。gemini 的 URL 里**要拼模型名**、头还可能异步，
+        //   形状对不上，所以它走 stAiGemini* 那一组（见上）
         function stAiEndpoint(cfg, path) {
             const proto = cfg.proto === 'anthropic' ? 'anthropic' : 'openai';
             const headers = { 'Content-Type': 'application/json' };
@@ -16778,11 +17284,30 @@
         }
 
         // 请求长什么样，单独抽出来 —— 验证套件要能直接断言 URL / 头 / 体
+        // ⚠ 保持**同步**：套件里是 `stAiRequest(...)` 直接取返回值的，改成 async
+        //   会静默变成 Promise（断言全拿到 undefined）。所以 gemini 完整模式的
+        //   access token 不在这里拿 —— 这里只留一个 `needsToken` 标记，
+        //   由调用方（stAiChat / 列模型 / 测试连接）await 之后合并进 headers
         function stAiRequest(cfg, messages, opts) {
+            stAiEnsureProto(cfg);
             const o = opts || {};
             const stream = !!o.stream;
             const maxTokens = Math.trunc(stAiNum(o.maxTokens, cfg.maxTokens, 64, 32000));
             const temperature = stAiNum(o.temperature, cfg.temperature, 0, 2);
+            if (cfg.proto === 'gemini') {
+                const headers = { 'Content-Type': 'application/json' };
+                const needsToken = stAiIsVertex(cfg) && (cfg.authMode === 'sa');
+                if (!needsToken) headers['x-goog-api-key'] = String(cfg.apiKey || '');
+                return {
+                    proto: 'gemini',
+                    url: stAiGeminiUrl(cfg, cfg.model, stream),
+                    headers: headers,
+                    needsToken: needsToken,
+                    body: stAiGeminiBody(cfg, messages, {
+                        stream: stream, temperature: temperature, maxTokens: maxTokens
+                    })
+                };
+            }
             if (cfg.proto === 'anthropic') {
                 const ep = stAiEndpoint(cfg, '/messages');
                 const sp = stAiSplitSystem(messages);
@@ -16807,9 +17332,34 @@
             return { proto: ep.proto, url: ep.url, headers: ep.headers, body: body };
         }
 
-        // 从一段 SSE 的 JSON 里取增量文本。两种协议的字段名完全不同
+        // 把「完整模式才要的那个 Bearer」补进 plan.headers。
+        // ⚠ 单独一个函数是为了让 stAiChat / 列模型 / 测试连接三处**走同一条**补头逻辑，
+        //   各写一遍迟早会漏掉其中一处
+        async function stAiPlanAuth(plan, cfg) {
+            if (!plan || !plan.needsToken) return plan;
+            const extra = await stAiGeminiAuthHeaders(cfg);
+            plan.headers = Object.assign({}, plan.headers, extra);
+            return plan;
+        }
+
+        // Gemini 的取文：candidates[0].content.parts[].text。
+        // 流式与非流式**形状完全一样**（流式每行就是一个完整的 GenerateContentResponse），
+        // 所以两种取法共用一个函数 —— 分开写就会出现「流式好了非流式没改」
+        // ⚠ parts 里除了 text 还可能是 thought / functionCall 等，只挑有 text 的
+        function stAiGeminiText(data) {
+            if (!data || typeof data !== 'object') return '';
+            const cands = Array.isArray(data.candidates) ? data.candidates : [];
+            if (!cands.length) return '';
+            const parts = (cands[0] && cands[0].content && Array.isArray(cands[0].content.parts))
+                ? cands[0].content.parts : [];
+            return parts.filter(p => p && typeof p.text === 'string')
+                .map(p => String(p.text)).join('');
+        }
+
+        // 从一段 SSE 的 JSON 里取增量文本。三种协议的字段名完全不同
         function stAiSseText(proto, json) {
             if (!json || typeof json !== 'object') return '';
+            if (proto === 'gemini') return stAiGeminiText(json);
             if (proto === 'anthropic') {
                 if (json.type === 'content_block_delta' && json.delta &&
                     typeof json.delta.text === 'string') return json.delta.text;
@@ -16824,6 +17374,7 @@
         // 非流式响应里取正文
         function stAiFullText(proto, data) {
             if (!data || typeof data !== 'object') return '';
+            if (proto === 'gemini') return stAiGeminiText(data);
             if (proto === 'anthropic') {
                 const parts = Array.isArray(data.content) ? data.content : [];
                 return parts.filter(p => p && p.type === 'text')
@@ -16856,13 +17407,21 @@
         }
 
         async function stAiFetchModels(cfg) {
-            const c = cfg || stAiCfg();
-            const proto = c.proto === 'anthropic' ? 'anthropic' : 'openai';
-            const headers = proto === 'anthropic'
-                ? { 'x-api-key': c.apiKey, 'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-direct-browser-access': 'true' }
-                : { 'Authorization': 'Bearer ' + c.apiKey };
-            const resp = await fetch(stAiJoin(c.baseUrl, '/models'), { headers: headers });
+            const c = stAiEnsureProto(cfg || stAiCfg());
+            let url, headers;
+            if (c.proto === 'gemini') {
+                // Google 的列模型是 GET {host}/.../models，鉴权头跟对话请求同一套
+                url = stAiGeminiModelsUrl(c);
+                headers = Object.assign({}, await stAiGeminiAuthHeaders(c));
+            } else {
+                const proto = c.proto === 'anthropic' ? 'anthropic' : 'openai';
+                headers = proto === 'anthropic'
+                    ? { 'x-api-key': c.apiKey, 'anthropic-version': '2023-06-01',
+                        'anthropic-dangerous-direct-browser-access': 'true' }
+                    : { 'Authorization': 'Bearer ' + c.apiKey };
+                url = stAiJoin(c.baseUrl, '/models');
+            }
+            const resp = await fetch(url, { headers: headers });
             if (!resp.ok) {
                 let t = '';
                 try { t = (await resp.text()).slice(0, 200); } catch (e) {}
@@ -16884,6 +17443,13 @@
                 temperature: o.temperature,
                 maxTokens: o.maxTokens
             });
+            // ⚠ 换 token 要在**起计时器之前**：完整模式第一次要签 JWT + 一次网络往返，
+            //   算进请求超时里会让「慢」看起来像「服务商不响应」
+            try {
+                await stAiPlanAuth(plan, cfg);
+            } catch (e) {
+                throw new Error(stAiErrText(e));
+            }
 
             const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
             const ms = Math.max(1000, Number(o.timeout) || 180000);
@@ -17490,7 +18056,9 @@
             const cfg = stAiCfg();
             const p = stAiProviderOf(stAi.provider);
             const isCustom = !!p.custom;
-            const protoNow = stAi.proto || p.proto || 'openai';
+            // cfg.proto 已经是解析好的（stAiCfg → stAiProtoOf）—— 别再自己拼一遍，
+            // 那条链对「自定义」是错的（会显示 openai，而实际按 URL 猜）
+            const protoNow = cfg.proto;
             return stPaneHead('🤖 AI 助手',
                 '给编写器用的 AI：<b>世界书条目扩写</b>与<b>开场白生成</b>（那两个面板分别在世界书页和开场白页）。' +
                 '配置有两种模式 —— <b>跟随 API 全局配置</b>直接复用主页【🔌 API 全局配置】里的服务商 / Key / 模型，' +
@@ -17592,13 +18160,11 @@
                     '<div class="st-field">' +
                         '<label for="st-ai-provider">服务商</label>' +
                         '<select id="st-ai-provider" onchange="stAiSetProvider(this.value)">' +
-                            ST_AI_PROVIDERS.map(x => '<option value="' + escapeHtml(x.value) + '"' +
-                                (x.value === stAi.provider ? ' selected' : '') + '>' +
-                                escapeHtml(x.label) + '</option>').join('') +
+                            aiProviderOptionsHtml(stAi.provider) +
                         '</select>' +
                     '</div>' +
                     '<div class="st-field">' +
-                        '<label for="st-ai-proto">协议 <span class="st-hint-inline">Anthropic 走 /messages，其余走 /chat/completions</span></label>' +
+                        '<label for="st-ai-proto">协议 <span class="st-hint-inline">Anthropic 走 /messages，Gemini 走 generateContent，其余走 /chat/completions</span></label>' +
                         '<select id="st-ai-proto" onchange="stAiSetProto(this.value)">' +
                             protoItems.map(x => '<option value="' + escapeHtml(x.value) + '"' +
                                 (x.value === (stAi.proto || '') ? ' selected' : '') + '>' +
@@ -20695,6 +21261,19 @@
             const cfg = stAiCfg();
             const ready = stAiReady(cfg);
             if (!ready.ok) { stCode.err = ready.why; stCodeRepaint(); return; }
+            // ⚠ Code 页的 Agent 工具调用只实现了 OpenAI 兼容 / Anthropic 两种形状
+            //   （`stCodeToolsFor` / `stCodeMessagesFor` / `stCodeParseReply` 全按这两种写）。
+            //   Gemini / Vertex 的工具调用是**另一套形状**（`functionDeclarations`、
+            //   parts 里的 `functionCall` / `functionResponse`），这一版没做。
+            //   ⇒ **明说**，别让它按 OpenAI 形状发出去 —— 那样 Google 回的 400
+            //     跟「协议不对」看起来毫无关系，用户只会以为是 Key 或模型名的问题
+            if (cfg.proto === 'gemini') {
+                stCode.err = 'Code 页的工具调用只支持 OpenAI 兼容与 Anthropic 两种协议，' +
+                    '当前走的是 Gemini / Vertex 原生协议。请到【AI 助手】换个服务商，' +
+                    '或把那一页的「协议」手动改成「OpenAI 兼容」。';
+                stCodeRepaint();
+                return;
+            }
 
             const th = stCodeThink();
             // ⚠ skill 列表来自 IndexedDB，是异步读的。这里必须等一下 ——
@@ -27315,6 +27894,11 @@
         // 因为两者管的本来就是同一批东西 —— 只是这里那份是真相源。
         // ==========================================================================
         let apigBaseDraft = '';      // 自定义服务商的 Base URL 草稿（切服务商时不被冲掉）
+        // Vertex 那三格的草稿。跟 Base URL 同一个理由：切走再切回来不该丢 ——
+        // Service Account JSON 是一大段粘贴，丢了要重新找文件
+        let apigProjectDraft = '';
+        let apigLocationDraft = '';
+        let apigSaDraft = '';
 
         function openApiGlobalModal() {
             apigLoadToUI();
@@ -27330,34 +27914,30 @@
         // 把 apiGlobal 回填到弹窗控件
         function apigLoadToUI() {
             const sel = document.getElementById('apig-provider');
-            sel.innerHTML = '';
-            AI_PROVIDERS.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.value;
-                opt.textContent = p.label;
-                sel.appendChild(opt);
-            });
+            aiFillProviderSelect(sel);
             sel.value = apiGlobal.provider;
             apigBaseDraft = (apiGlobal.provider === 'custom') ? apiGlobal.baseUrl : '';
+            // Vertex 三格也进草稿，切走再切回来不丢
+            apigProjectDraft = apiGlobal.project || '';
+            apigLocationDraft = apiGlobal.location || 'global';
+            apigSaDraft = apiGlobal.saJson || '';
+            // ⚠ 顺序：先把三格的**值**灌进控件，再调 syncApigProviderUI ——
+            //   它会顺手按 authMode 决定那几格显不显示。反过来的话第一次打开弹窗
+            //   是按上一轮的 authMode 算的可见性，要开关一次才正常
+            document.getElementById('apig-auth-mode').value = apiGlobal.authMode || 'key';
+            document.getElementById('apig-project').value = apigProjectDraft;
+            document.getElementById('apig-location').value = apigLocationDraft;
+            document.getElementById('apig-sa').value = apigSaDraft;
             syncApigProviderUI();
             document.getElementById('apig-api-key').value = apiGlobal.apiKey || '';
-            // 模型下拉：把缓存里拉过的列表整个装回去，当前选中的那个补进选项里
-            const msel = document.getElementById('apig-model');
-            msel.innerHTML = '';
+            // 模型：**可手输**的 input + datalist。把缓存里拉过的列表灌进 datalist，
+            // 当前值直接写在输入框里 —— 用户想手打一个列表里没有的模型名也行
+            const mInput = document.getElementById('apig-model');
+            mInput.value = apiGlobal.model || '';
+            const dl = document.getElementById('apig-model-list');
             const models = (apiGlobal.models || []).slice();
             if (apiGlobal.model && models.indexOf(apiGlobal.model) < 0) models.unshift(apiGlobal.model);
-            if (!models.length) {
-                const opt = document.createElement('option');
-                opt.value = ''; opt.textContent = '先点击下面的「获取模型列表」';
-                msel.appendChild(opt);
-            } else {
-                models.forEach(m => {
-                    const opt = document.createElement('option');
-                    opt.value = m; opt.textContent = m;
-                    msel.appendChild(opt);
-                });
-            }
-            msel.value = apiGlobal.model || '';
+            dl.innerHTML = models.map(m => '<option value="' + escapeHtml(m) + '"></option>').join('');
             document.getElementById('apig-stream').checked = !!apiGlobal.stream;
             updateApigStreamLabel();
             document.getElementById('apig-temperature').value = apiGlobal.temperature;
@@ -27367,6 +27947,9 @@
             apigStatus('');
         }
 
+        // 服务商变了：Base URL 那一格 + Vertex 那一整块跟着显示/隐藏。
+        // ⚠ 隐藏用 `hidden` 而不是只加 class —— 只加 class 的话控件还在 DOM 里可聚焦，
+        //   键盘 Tab 会跳进一块「看不见但能改」的表单
         function syncApigProviderUI() {
             const v = document.getElementById('apig-provider').value;
             const p = AI_PROVIDERS.find(x => x.value === v) || AI_PROVIDERS[0];
@@ -27377,6 +27960,37 @@
             } else {
                 urlInput.disabled = true;
                 urlInput.value = p.baseUrl || '';
+            }
+            const box = document.getElementById('apig-vertex-box');
+            if (box) box.hidden = !p.vertex;
+            syncApigAuthUI();
+        }
+
+        // Vertex 的验证模式变了：项目 / 区域 / SA JSON 三格跟着显示/隐藏，并换提示文案。
+        // ⚠ 快速模式**不需要 project**（Express 的 Key 自带项目）—— 把 project 也
+        //   摆在那儿会让人以为必填，填了又没用
+        function syncApigAuthUI() {
+            const modeEl = document.getElementById('apig-auth-mode');
+            if (!modeEl) return;
+            const mode = modeEl.value === 'sa' ? 'sa' : 'key';
+            const locF = document.getElementById('apig-location-field');
+            const projF = document.getElementById('apig-project-field');
+            const saF = document.getElementById('apig-sa-field');
+            const keyF = document.getElementById('apig-key-field');
+            const note = document.getElementById('apig-vertex-note');
+            // 区域两种模式都要（完整模式进 URL，快速模式只能是 global）
+            if (locF) locF.hidden = false;
+            if (projF) projF.hidden = (mode !== 'sa');
+            if (saF) saF.hidden = (mode !== 'sa');
+            // 完整模式用 SA JSON 换 token，API Key 那一格就不该还摆着
+            if (keyF) keyF.hidden = (mode === 'sa');
+            if (note) {
+                note.innerHTML = (mode === 'sa')
+                    ? '完整模式：把 Service Account 密钥 JSON 整个粘进来。' +
+                      '应用会在<b>本机</b>用私钥签一个 JWT 去换 access token（私钥不上传、不落盘）。' +
+                      '⚠ 区域要跟项目对得上；<code>global</code> 的端点<b>不带地区前缀</b>。'
+                    : '快速模式：只填一个 API Key（Express mode）。' +
+                      '⚠ 快速模式<b>只支持 <code>global</code></b>，填别的区域会 404。';
             }
         }
 
@@ -27412,7 +28026,12 @@
                 stream: document.getElementById('apig-stream').checked,
                 temperature: parseFloat(document.getElementById('apig-temperature').value),
                 maxTokens: parseInt(document.getElementById('apig-max-tokens').value, 10),
-                firstSeg: document.getElementById('apig-first-seg').value
+                firstSeg: document.getElementById('apig-first-seg').value,
+                // Vertex 那几格：非 vertex 服务商也照读（值留着，切回 vertex 时不丢）
+                authMode: document.getElementById('apig-auth-mode').value,
+                project: document.getElementById('apig-project').value.trim(),
+                location: document.getElementById('apig-location').value.trim(),
+                saJson: document.getElementById('apig-sa').value
             });
         }
 
@@ -27430,44 +28049,47 @@
                 ok ? 'ok' : 'warn');
         }
 
+        // 全局面板的「能不能发请求」检查。跟 stAiReady 的区别：这里还要管 Vertex
+        // 两条路**各自**的必填项 —— 快速模式要 Key，完整模式要 SA JSON + project
+        function apigReadyCheck(cfg) {
+            const p = AI_PROVIDERS.find(x => x.value === cfg.provider) || {};
+            if (p.vertex) {
+                if (cfg.authMode === 'sa') {
+                    if (!cfg.saJson) return '完整模式要先把 Service Account JSON 粘进去';
+                    if (!cfg.project) return '完整模式要填项目 ID project（密钥 JSON 里的 project_id）';
+                } else if (!cfg.apiKey) {
+                    return '快速模式要填 API Key';
+                }
+                if (!cfg.model) return '请填一个模型名，例如 gemini-2.5-flash';
+                return '';
+            }
+            if (!cfg.baseUrl) return '请填写服务商或 Base URL';
+            if (!cfg.apiKey && !stAiIsLocal(cfg.baseUrl)) return '请先填写 API Key';
+            return '';
+        }
+
         async function apigFetchModels() {
             const cfg = apigGather();
-            if (!cfg.apiKey) { apigStatus('⚠️ 请先填写 API Key', 'warn'); return; }
-            if (!cfg.baseUrl) { apigStatus('⚠️ 请填写服务商或 Base URL', 'warn'); return; }
+            const bad = apigReadyCheck(cfg);
+            if (bad) { apigStatus('⚠️ ' + bad, 'warn'); return; }
             const btn = document.getElementById('apig-fetch-btn');
             btn.disabled = true;
             btn.textContent = '获取中…';
             apigStatus('⏳ 正在获取模型列表…');
             try {
-                // 协议按 Base URL 猜（跟编写器同一套规则）：Anthropic 那个域名要换头
-                const proto = stAiGuessProto(cfg.baseUrl, cfg.provider);
-                const headers = proto === 'anthropic'
-                    ? {
-                        'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01',
-                        'anthropic-dangerous-direct-browser-access': 'true'
-                    }
-                    : { 'Authorization': 'Bearer ' + cfg.apiKey };
-                const resp = await fetch(cfg.baseUrl + '/models', { headers: headers });
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                const data = await resp.json();
-                // ⚠ 复用编写器那份 stAiModelIds：它管三种返回形状 + **去重 + 排序** +
-                //   剥掉 `models/` 前缀。自己再写一遍 `data.data.map(m => m.id)` 就会漏掉
-                //   去重 —— 实测同一份响应里出现两次 `gpt-4o`，下拉里就真的有两个一样的项
-                const list = stAiModelIds(data);
-                if (!list.length) throw new Error('返回里没有模型');
+                // ⚠ 复用编写器那份 stAiFetchModels：三种协议的 URL / 头都在那里。
+                //   这里自己再拼一遍就是「改了一处忘了另一处」的老毛病 ——
+                //   上一版就是这么把 Anthropic 的头漏掉的
+                const list = await stAiFetchModels(cfg);
                 apiGlobal.models = list;
                 // 落盘一份，免得刷新后又得重拉（模型列表是缓存，不是配置本体）
                 apiGlobalPersist();
-                const msel = document.getElementById('apig-model');
-                const keep = msel.value;
-                msel.innerHTML = '';
-                list.forEach(m => {
-                    const opt = document.createElement('option');
-                    opt.value = m; opt.textContent = m;
-                    msel.appendChild(opt);
-                });
-                if (list.indexOf(keep) >= 0) msel.value = keep;
-                apigStatus('✅ 拉到 ' + list.length + ' 个模型，选一个再保存', 'ok');
+                const dl = document.getElementById('apig-model-list');
+                const keep = document.getElementById('apig-model').value.trim();
+                const all = list.slice();
+                if (keep && all.indexOf(keep) < 0) all.unshift(keep);
+                dl.innerHTML = all.map(m => '<option value="' + escapeHtml(m) + '"></option>').join('');
+                apigStatus('✅ 拉到 ' + list.length + ' 个模型（输入框里点一下就能挑），选一个再保存', 'ok');
             } catch (e) {
                 apigStatus('❌ 获取失败：' + ((e && e.message) ? e.message : String(e)), 'warn');
             } finally {
@@ -27476,24 +28098,41 @@
             }
         }
 
-        // 测试连接：拉一次 /models 只验证「能不能通」，不改配置、不落盘
+        // 测试连接：**真发一次最小对话**。
+        // 比只拉 /models 有意义得多 —— /models 通不代表对话能通（协议形状、模型名、
+        // 鉴权方式都可能是错的），而这一下把「URL + 鉴权 + 协议 + 模型名」全验了。
+        // ⚠ 会产生一次极小的调用费用（几个 token），按钮上写明了
         async function apigTestConnection() {
             const cfg = apigGather();
-            if (!cfg.apiKey) { apigStatus('⚠️ 请先填写 API Key', 'warn'); return; }
-            if (!cfg.baseUrl) { apigStatus('⚠️ 请填写服务商或 Base URL', 'warn'); return; }
+            const bad = apigReadyCheck(cfg);
+            if (bad) { apigStatus('⚠️ ' + bad, 'warn'); return; }
             const btn = document.getElementById('apig-test-btn');
             btn.disabled = true;
-            apigStatus('⏳ 正在测试…');
+            apigStatus('⏳ 正在测试（真发一条最小对话，会消耗几个 token）…');
             try {
-                const resp = await fetch(cfg.baseUrl + '/models', {
-                    headers: { 'Authorization': 'Bearer ' + cfg.apiKey }
+                const plan = stAiRequest(cfg, [{ role: 'user', content: 'ping' }], {
+                    stream: false, maxTokens: 64, temperature: 0
                 });
-                if (resp.ok) apigStatus('✅ 连接正常（HTTP ' + resp.status + '）', 'ok');
-                else apigStatus('❌ 服务端返回 HTTP ' + resp.status + '，检查 Key / Base URL', 'warn');
+                await stAiPlanAuth(plan, cfg);
+                const resp = await fetch(plan.url, {
+                    method: 'POST',
+                    headers: plan.headers,
+                    body: JSON.stringify(plan.body)
+                });
+                if (!resp.ok) {
+                    let t = '';
+                    try { t = (await resp.text()).slice(0, 200); } catch (e) {}
+                    apigStatus('❌ 服务端返回 HTTP ' + resp.status + (t ? ' ' + t : '') +
+                        '（依次检查 Key / 模型名 / 区域 / 认证模式）', 'warn');
+                    return;
+                }
+                const data = await resp.json();
+                const text = stAiFullText(plan.proto, data);
+                apigStatus('✅ 通了（' + plan.proto + '）。模型回了 ' + text.length +
+                    ' 个字符：' + JSON.stringify(text.slice(0, 40)), 'ok');
             } catch (e) {
-                // 发不出去最常见的三个原因，和编写器那边的提示保持一致
-                apigStatus('❌ 请求发不出去：' + ((e && e.message) ? e.message : String(e)) +
-                    '（Base URL 写错 / 该服务不允许浏览器直连 CORS / 网络不通）', 'warn');
+                // 发不出去最常见的三个原因，和编写器那边共用同一段文案
+                apigStatus('❌ ' + stAiErrText(e), 'warn');
             } finally {
                 btn.disabled = false;
             }
@@ -27563,6 +28202,8 @@
 
             const hint = document.getElementById('ai-cfg-src-hint');
             if (hint) hint.style.display = follow ? '' : 'none';
+            // ⚠ 排在最后：它要看的是**收口之后**的 followGlobal 与 provider
+            syncAiVertexHint();
         }
 
         // 全局配置变了 ⇒ 编写器开着就重画一次（跟随模式下它整页显示的都是全局的镜像）
@@ -27595,26 +28236,27 @@
 
         async function fetchModels() {
             const cfg = getAiConfigFromInputs();
-            if (!cfg.apiKey) { updateAiStatus('⚠️ 请先填写 API Key'); return; }
-            if (!cfg.baseUrl) { updateAiStatus('⚠️ 请填写服务商或 Base URL'); return; }
+            // 半成品兜底：这个对象里没有 proto（协议是推导出来的），
+            // 少了这步 gemini / vertex 会按 openai 发出去
+            stAiEnsureProto(cfg);
+            const needKey = !(cfg.proto === 'gemini' && cfg.authMode === 'sa');
+            if (needKey && !cfg.apiKey) { updateAiStatus('⚠️ 请先填写 API Key'); return; }
+            if (cfg.proto !== 'gemini' && !cfg.baseUrl) { updateAiStatus('⚠️ 请填写服务商或 Base URL'); return; }
             const btn = document.getElementById('ai-fetch-btn');
             btn.disabled = true;
             btn.textContent = '获取中…';
             updateAiStatus('⏳ 正在获取模型列表…');
             try {
-                const resp = await fetch(cfg.baseUrl + '/models', {
-                    headers: { 'Authorization': 'Bearer ' + cfg.apiKey }
-                });
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                const data = await resp.json();
-                const ids = (data.data || []).map(m => m.id).filter(Boolean).sort();
-                if (!ids.length) throw new Error('未返回任何模型');
-                const sel = document.getElementById('ai-model');
+                // ⚠ 走共用那一份（第十八轮并的）：它管三种返回形状 + **去重 + 排序** +
+                //   剥 `models/` 前缀 + anthropic 的换头 + gemini 的列模型路径。
+                //   这里原来自己写了一份 OpenAI 专属的 ⇒ anthropic / gemini 用不了，
+                //   而且漏了去重（同一份响应里两个 `gpt-4o` 就真的显示两个）
+                const ids = await stAiFetchModels(cfg);
+                const sel = document.getElementById('ai-model-list');
                 sel.innerHTML = '';
                 ids.forEach(id => {
                     const opt = document.createElement('option');
                     opt.value = id;
-                    opt.textContent = id;
                     sel.appendChild(opt);
                 });
                 setAiModelOption(cfg.model);
@@ -27760,61 +28402,64 @@
             try { const t = await resp.text(); return t.slice(0, 200); } catch (e) { return ''; }
         }
 
+        // 【ai对话】用的 cfg —— 读的是 aiConfig 顶层的**生效值**（跟随全局时它已经
+        // 被 aiApplyEffective() 刷过了），所以这里不必再关心「跟随还是独立」。
+        // ⚠ 全站 40 多个读点都是直接读 aiConfig.xxx；只有**协议相关**的这几处
+        //   需要把它打包成 cfg 交给 stAiRequest
+        function aiEffectiveCfg() {
+            const base = String(aiConfig.baseUrl || '').replace(/\/+$/, '');
+            return Object.assign({
+                mode: aiConfig.followGlobal === false ? 'own' : 'follow',
+                provider: aiConfig.provider,
+                providerLabel: (AI_PROVIDERS.find(p => p.value === aiConfig.provider) || {}).label || aiConfig.provider,
+                baseUrl: base,
+                apiKey: String(aiConfig.apiKey || ''),
+                model: String(aiConfig.model || ''),
+                temperature: stAiNum(aiConfig.temperature, 0.7, 0, 2),
+                maxTokens: Math.trunc(stAiNum(aiConfig.maxTokens, 1024, 64, 32000)),
+                stream: aiConfig.stream !== false,
+                proto: stAiProtoOf(aiConfig.provider, base),
+                firstSeg: ''
+            }, stAiVertexFields(aiConfig));
+        }
+
+        // ⚠ 这两个函数**曾经各自写了一份 OpenAI 专属的请求 + SSE 解析**，
+        //   于是「Anthropic / Gemini 在编写器里能用、在【ai对话】里不能用」。
+        //   现在都并到 stAiRequest / stAiPlanAuth / stAiStream —— 协议只在一处实现，
+        //   以后加协议不会再出现「只加了一半」
         async function nonStreamChat(messages) {
-            const body = {
-                model: aiConfig.model,
-                messages: messages,
-                stream: false,
-                temperature: aiConfig.temperature
-            };
-            if (aiConfig.maxTokens > 0) body.max_tokens = aiConfig.maxTokens;
-            const resp = await fetch(aiConfig.baseUrl + '/chat/completions', {
+            const cfg = aiEffectiveCfg();
+            const plan = stAiRequest(cfg, messages, { stream: false, maxTokens: cfg.maxTokens });
+            await stAiPlanAuth(plan, cfg);
+            const resp = await fetch(plan.url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + aiConfig.apiKey },
-                body: JSON.stringify(body)
+                headers: plan.headers,
+                body: JSON.stringify(plan.body)
             });
             if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (await safeErrorText(resp)));
             const data = await resp.json();
-            return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+            return stAiFullText(plan.proto, data);
         }
 
         async function streamChat(messages, onDelta) {
-            const body = {
-                model: aiConfig.model,
-                messages: messages,
-                stream: true,
-                temperature: aiConfig.temperature
-            };
-            if (aiConfig.maxTokens > 0) body.max_tokens = aiConfig.maxTokens;
-            const resp = await fetch(aiConfig.baseUrl + '/chat/completions', {
+            const cfg = aiEffectiveCfg();
+            const plan = stAiRequest(cfg, messages, { stream: true, maxTokens: cfg.maxTokens });
+            await stAiPlanAuth(plan, cfg);
+            const resp = await fetch(plan.url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + aiConfig.apiKey },
-                body: JSON.stringify(body)
+                headers: plan.headers,
+                body: JSON.stringify(plan.body)
             });
             if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (await safeErrorText(resp)));
-            const reader = resp.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-            let full = '';
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                let idx;
-                while ((idx = buffer.indexOf('\n')) >= 0) {
-                    const line = buffer.slice(0, idx).trim();
-                    buffer = buffer.slice(idx + 1);
-                    if (!line.startsWith('data:')) continue;
-                    const payload = line.slice(5).trim();
-                    if (!payload || payload === '[DONE]') continue;
-                    try {
-                        const json = JSON.parse(payload);
-                        const delta = json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content;
-                        if (delta) { full += delta; onDelta(full); }
-                    } catch (e) {}
-                }
+            // 服务端可能不理会 stream（返一整段 JSON）。那时没有 body 流可读，
+            // 退回按非流式解析，别在这里抛「Cannot read property getReader」
+            if (!resp.body || typeof resp.body.getReader !== 'function') {
+                const data = await resp.json();
+                const full = stAiFullText(plan.proto, data);
+                if (onDelta) onDelta(full);
+                return full;
             }
-            return full;
+            return await stAiStream(resp, plan.proto, onDelta);
         }
 
         async function sendAiMessage() {

@@ -17,6 +17,7 @@
 //   探针 R6：`getAiConfigFromInputs` 不带走 followGlobal / own → 一保存就丢配置来源
 //   探针 R7：`saveApiGlobal` 不刷生效值               → 「保存」只落盘、不当场生效
 //   探针 R8：`aiSyncOwnFromEffective` 去掉守卫        → 跟随模式下改提示词就把独立那份冲掉
+//   探针 R9：`getAiConfigFromInputs` 不带走 Vertex 四格 → 在【ai对话】保存一次，独立那份的项目 / 位置 / 认证方式全没了（第十八轮加的四格，画面上看不出来）
 //
 // ⚠ 注入点在**产品**（`saki.html`），不在套件。每个探针都是**一处**最小改动，
 //   跑完立刻还原，收尾核 sha1 —— 不核的话「注入过的产品」会被当成基线。
@@ -28,7 +29,7 @@
 //   而整套照样打 ✅。两边的名单都要查。
 //   ⚠ 这一套的失败项列表符是 `·`（`apig-verify.js` 的 `fails.join` 前缀）。
 //
-// 跑法：node _reverse14.js   （基线 + 8 个探针 = 9 次整跑）
+// 跑法：node _reverse14.js   （基线 + 9 个探针 = 10 次整跑）
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -177,27 +178,43 @@ const PROBES = [
     },
     {
         id: 'R4',
-        why: '`apigFetchModels` 不再走 `stAiModelIds` → 下拉里出现两条一样的模型',
+        why: '列模型不再走 `stAiModelIds` → 下拉里出现两条一样的模型',
         // ⚠ 这一针是**真抓到过东西的**：第一版实现自己写了
         //   `data.data.map(m => m.id)`，于是同一份响应里出现两次 `gpt-4o`，
         //   下拉里就真的有两个一模一样的项。复用 `stAiModelIds` 顺带把
         //   「三种返回形状」和「剥 models/ 前缀」也一起拿回来了 —— 那几条也一起验
-        from: "                const list = stAiModelIds(data);",
-        to:   "                const list = (data && Array.isArray(data.data) ? data.data : [])\r\n" +
-              "                    .map(m => m && m.id).filter(Boolean);   // 注入：不去重不排序、只认一种形状",
+        // ⚠⚠ **注入点第十八轮挪过位置**：全局面板的「获取模型」从「自己拼一份」
+        //   改成委托 `stAiFetchModels`（协议的头/URL 都收在那儿，各写一遍迟早漏一处）
+        //   ⇒ 旧的注入点（`apigFetchModels` 里的 `const list = stAiModelIds(data);`）
+        //   在产品里**已经 0 命中**。注入点找不到时这一针会被闸门拦下（报「命中 0 次」），
+        //   不会静默变成「没注入也全绿」—— 那个闸门就是为这种漂移准备的
+        from: "            const ids = stAiModelIds(data);\r\n" +
+              "            if (!ids.length) throw new Error('这个接口没返回任何模型');",
+        to:   "            const ids = (data && Array.isArray(data.data) ? data.data : [])\r\n" +
+              "                .map(m => m && m.id).filter(Boolean);   // 注入：不去重不排序、只认一种形状\r\n" +
+              "            if (!ids.length) throw new Error('这个接口没返回任何模型');",
         red: [
-            '获取模型：下拉里出现了拉到的模型',
+            // ⚠ 这条名字在第十八轮改过（下拉 ⇒ 候选（datalist），模型控件从
+            //   <select> 变成 input+datalist）—— **断言名漂了这里就会永远红**，
+            //   而「预期该红的都红了」是条永远为假的判据。改名时两边一起改
+            '获取模型：候选（datalist）里出现了拉到的模型',
             '获取模型：去重了（4o 只出现一次）',
             '获取模型：认 `{ models: [...] }` 这种形状',
             '获取模型：认裸数组形状，且剥掉 models/ 前缀'
         ],
         // 对照组：**请求那一侧和空列表闸门**没被动 —— 它们绿着正说明红的是
-        // 「拿回来的列表怎么处理」，不是「请求没发出去」
+        // 「拿回来的列表怎么处理」，不是「请求没发出去」。
+        // ⚠ 第十八轮把模型控件从 <select> 改成 input+datalist 之后又加了三组对照：
+        //   控件形状、datalist 绑定、手输 —— 它们都不经过 `stAiModelIds`，
+        //   所以这一针**不该**碰到它们（碰到了说明注入面比预期大）
         green: [
             '获取模型：请求发去了 /models',
             '获取模型：带上了 Bearer 头',
             '获取模型：空列表要报错（不静默当成功）',
-            '测试连接：401 会报出状态码'
+            '测试连接：401 会报出状态码',
+            '⚠ 模型框是 INPUT（能手输），不是下拉',
+            '⚠ 模型框挂上了 datalist（候选来自它）',
+            '⚠ 手输一个候选里没有的模型名也能存下来'
         ]
     },
     {
@@ -263,7 +280,18 @@ const PROBES = [
             '（准备）它跟全局确实不同',
             '（对照）对话那套是第三组，跟全局不同',
             '独立：对话用自己那段',
-            '独立：own 里记下了自己那段'
+            '独立：own 里记下了自己那段',
+            // ⚠ 第十八轮 D2 那一段的连带红：它整个建在「保存之后 own 还在」上，
+            //   own 被抹成 undefined ⇒ 这 8 条跟着红。一条不落地写进来，
+            //   否则「没有预期之外的红」会拦下（这条规矩已经拦过好几次了）
+            '⚠ 手输一个候选里没有的模型名也能存下来（独立那份）',
+            '⚠ 而且立刻生效（读生效值）',
+            '⚠ 独立 + Vertex ⇒ 出现「那几项沿用全局」的提示',
+            '⚠⚠ 独立：保存后 project 没被打回默认',
+            '⚠⚠ 独立：保存后 location 没被打回默认',
+            '⚠⚠ 独立：保存后 authMode 没被打回默认',
+            '⚠⚠ 独立：保存后 saJson 没被打回默认',
+            '（对照）保存后模型名还是刚手输的那个（别把这条跟上面四条混成一条）'
         ],
         // 对照组：**「切来源」这个动作本身**（它直接写 aiConfig.followGlobal）没被动 ——
         // 落盘、解锁、角标那几条绿着正说明红的是「保存把字段吃掉了」
@@ -318,6 +346,39 @@ const PROBES = [
             '跟随：改系统提示词也不会把生效值带歪',
             '独立：自己的那份（own）记下了新 Key',
             '切回跟随：生效值回到全局那份'
+        ]
+    },
+    {
+        id: 'R9',
+        why: '`getAiConfigFromInputs` 不带走 Vertex 那四个字段 → 在【ai对话】点一次保存就把独立那份的 Vertex 设置打回默认',
+        // 跟 R6 **同一个函数、同一种病**，但打的是第十八轮新加的四格：
+        //   `authMode` / `project` / `location` / `saJson`。
+        // 这四格在【ai对话】面板里**没有控件**（只在【API 全局配置】里改），
+        // 所以漏掉它们的症状比 R6 更隐蔽 —— 画面上**根本没有任何东西会变**，
+        // 只有用户真去用 Vertex（尤其完整模式）才会发现项目 / 位置没了。
+        // ⇒ 非单独一针不可：R6 的注入点把 followGlobal / own 也一起拿掉了，
+        //   没法证明这四条断言**恰好**盯着这四个字段。
+        from: "                authMode: aiConfig.authMode,\r\n" +
+              "                project: aiConfig.project,\r\n" +
+              "                location: aiConfig.location,\r\n" +
+              "                saJson: aiConfig.saJson,",
+        to:   "                /* 注入：Vertex 那四个字段不带走 */",
+        red: [
+            '⚠⚠ 独立：保存后 project 没被打回默认',
+            '⚠⚠ 独立：保存后 location 没被打回默认',
+            '⚠⚠ 独立：保存后 authMode 没被打回默认',
+            '⚠⚠ 独立：保存后 saJson 没被打回默认'
+        ],
+        // 对照组：**同一段里别的都还在** —— 模型能手输、提示会显隐、
+        // own 也没被抹掉（R9 只拿掉那四个字段，不像 R6 连 own 一起拿）
+        green: [
+            '⚠ 模型框是 INPUT（能手输），不是下拉',
+            '⚠ 手输一个候选里没有的模型名也能存下来（独立那份）',
+            '⚠ 而且立刻生效（读生效值）',
+            '⚠ 独立 + Vertex ⇒ 出现「那几项沿用全局」的提示',
+            '（对照）保存后模型名还是刚手输的那个（别把这条跟上面四条混成一条）',
+            '跟随 + Vertex ⇒ 提示收起',
+            '（对照）切回跟随之后 provider 镜像的是全局那份（不是 vertex）'
         ]
     }
 ];

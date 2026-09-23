@@ -1046,6 +1046,46 @@ const MOCK_SRC = `
     check('探针函数已还原（后续段落的断言不受影响）',
       await ev(`stCodePaintJson === window.__origPaintJson`), true);
 
+    // ========== F2. Gemini / Vertex：明说「工具调用不支持」，不静默按 OpenAI 发 ==========
+    section('F2. Gemini / Vertex 协议：工具调用不支持时要说出来');
+
+    // ⚠ 第十八轮加了第三种协议 `gemini`（Gemini 原生 / Vertex），但 Code 页的
+    //   Agent 工具调用只实现了 OpenAI 兼容 / Anthropic 两种形状
+    //   （`stCodeToolsFor` / `stCodeMessagesFor` / `stCodeParseReply` 全按这两种写）。
+    //   Gemini 的工具调用是**另一套形状**（`functionDeclarations`、parts 里的
+    //   `functionCall` / `functionResponse`），这一版没做。
+    //   ⇒ 必须在**发之前**拦住并说清楚。否则它会按 OpenAI 形状打 Google，
+    //     回来的 400 跟「协议不对」看起来毫无关系 —— 用户只会怀疑 Key 或模型名
+    await resetScript();
+    await clearCalls();
+    await ev(`(function(){
+      stAi.mode = 'own'; stAi.provider = 'vertex'; stAi.proto = 'gemini';
+      stAi.model = 'gemini-2.5-pro'; stAi.apiKey = 'sk-vertex-AAA';
+      stAi.baseUrl = 'https://aiplatform.googleapis.com';
+      stAiSave(); return true; })()`);
+    check('（准备）cfg 走的是 gemini 协议', (await ev(`stAiCfg()`)).proto, 'gemini');
+
+    await ev(`(function(){ document.getElementById('st-code-input').value = '随便改点什么'; return true; })()`);
+    await ev(`stCodeSend()`, true);
+    await sleep(400);
+    check('⚠ 报的是明确的错（不是静默发出去）',
+      await ev(`/Gemini \\/ Vertex 原生协议/.test(stCode.err || '')`), true);
+    check('⚠ 而且**一个请求都没发**（没按 OpenAI 形状打 Google）',
+      await ev(`window.__aiCalls.length`), 0, 0);
+    check('⚠ 提示里给了两条出路（换服务商 / 手动改协议）',
+      await ev(`/换个服务商/.test(stCode.err || '') && /OpenAI 兼容/.test(stCode.err || '')`), true);
+    check('没卡在 running 上（不会一直转圈）', await ev(`stCode.running`), false);
+    // 对照：同样这一步，换成 openai 协议就**会**发请求 ——
+    // 证明上面那条 0 是「被拦住」而不是「这个用例本来就不发」
+    await useOwn('openai', 'gpt-4o');
+    await setScript({ reply: '好的' });
+    await clearCalls();
+    await ev(`(function(){ document.getElementById('st-code-input').value = '随便改点什么'; return true; })()`);
+    await ev(`stCodeSend()`, true);
+    await sleep(400);
+    check('（对照）同样一步换成 openai 协议就会发出去',
+      await ev(`window.__aiCalls.length > 0`), true);
+
     // ================= G. 会话历史 =================
     section('G. 会话历史');
     await resetScript();

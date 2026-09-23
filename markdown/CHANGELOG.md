@@ -6,6 +6,135 @@
 
 ---
 
+## 2026-09-23（第十二段）· **服务商大扩充 + Google Vertex AI（两种验证模式）+ 手输模型名**
+
+**类型**：**产品改动**（`saki.html` / `index.html`）。
+
+> 起因：用户说「为【api全局配置】添加更多服务商支持（海外模型与国产模型的海外渠道），
+> 以及添加【google vertex AI】支持，要求支持两种验证模式（快速模式，与完整模式）
+> 并且支持手动输入模型名称」。
+
+### ① 服务商表：7 项 → **37 项**，而且只剩**一张表**
+
+以前有两份重复维护的清单：主页全局面板的 `AI_PROVIDERS`（7 个）和编写器的
+`ST_AI_PROVIDERS`（13 个）。加一个服务商要改两个地方，漏一个就是「下拉里有、取不到」。
+现在 `const ST_AI_PROVIDERS = AI_PROVIDERS;`，一张表分 6 组（下拉按 `<optgroup>` 分组）：
+
+| 组 | 项 |
+|---|---|
+| 海外 | `openai` `anthropic` `xai` `mistral` `groq` `together` `fireworks` `perplexity` `cerebras` `nvidia` `openrouter` |
+| 国产 | `deepseek` `moonshot` `glm` `qwen` `siliconflow` `minimax` `ark` `hunyuan` `qianfan` `spark` `stepfun` `lingyi` |
+| **国产 · 海外渠道** | `moonshot-intl` `glm-intl` `qwen-intl` `qwen-us` `qwen-hk` `siliconflow-intl` `minimax-intl` |
+| Google | `gemini`（兼容层）`gemini-native`（原生）`vertex` |
+| 本地 | `ollama` `lmstudio` `vllm` |
+| 其他 | `custom`（**必须留末位**） |
+
+⚠⚠ **海外渠道跟国内不是同一个端点、Key 也通常不通用** ⇒ 它们是**独立条目**，
+不是「同一个服务商的两个字段」。清单：
+
+| 条目 | 端点 |
+|---|---|
+| `moonshot-intl` | `https://api.moonshot.ai/v1` |
+| `glm-intl` | `https://api.z.ai/api/paas/v4`（Z.ai） |
+| `qwen-intl` / `qwen-us` / `qwen-hk` | `dashscope-intl` / `dashscope-us` / `cn-hongkong.dashscope` 三个 `compatible-mode/v1` |
+| `siliconflow-intl` | `https://api.siliconflow.com/v1` |
+| `minimax-intl` | `https://api.minimax.io/v1` |
+
+### ② 第三种协议 `gemini`（Gemini 原生 / Vertex AI）
+
+原来的协议层只有两种形状（OpenAI 兼容的 `/chat/completions`、Anthropic 的 `/messages`）。
+Gemini 的原生协议形状差得远，所以**没有塞进 `stAiEndpoint()`**，单开一组 `stAiGemini*`。
+三条路：
+
+| 路 | 端点 | 鉴权 |
+|---|---|---|
+| AI Studio 原生 | `generativelanguage.googleapis.com/v1beta/models/{m}:generateContent` | `x-goog-api-key` |
+| Vertex **快速模式**（Express） | `aiplatform.googleapis.com/v1/publishers/google/models/{m}:generateContent` | `x-goog-api-key` |
+| Vertex **完整模式**（Service Account） | `{loc}-aiplatform.googleapis.com/v1/projects/{p}/locations/{l}/publishers/google/models/{m}:generateContent` | `Authorization: Bearer <token>` |
+
+⚠⚠ **快速模式的路径里没有 `projects/` 段** —— 它不是「少了参数的完整模式」，是两个端点。
+⚠ 流式必须带 `?alt=sse`，不带的话服务端返的是「一段一段的 JSON 数组」而不是 SSE，
+表现为**「流式一直没输出，最后突然全出来」**。
+
+**完整模式**（用户要求的第二种验证模式）：Service Account JSON ⇒ 本机浏览器里
+`crypto.subtle.importKey('pkcs8', …)` 导入私钥 ⇒ 签 RS256 JWT ⇒
+`POST {token_uri}`（默认 `oauth2.googleapis.com/token`，
+`grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`）换 access token。
+私钥**不上传任何地方**；token 只缓存在**内存**（不落 localStorage），提前 60 秒续，
+缓存键是 `client_email`（换一份 SA 立刻拿新的，不会串用上一个项目的 token）。
+
+⚠ 为了让「换 token」这件事不破坏同步的 `stAiRequest()`（老套件直接断言它的 URL / 头 / 体），
+它被单独抽成 `stAiPlanAuth(plan, cfg)` —— 调用方拿到 `plan` 之后先 `await` 这一步。
+**`stAiRequest` 保持同步**，这是刻意的。
+
+### ③ 弹窗：认证模式 + Vertex 三格 + 手输模型名
+
+- 服务商下拉变成**分组**的（`aiFillProviderSelect` / `aiProviderOptionsHtml` 共用一套分组顺序）
+- 选 `vertex` 才出现：**认证模式**（快速 / 完整）、**项目 ID**、**位置 location**、
+  **Service Account JSON** 文本框；`Base URL` 自动填成 `aiplatform.googleapis.com`
+- 模型从**死下拉**改成 `input` + `datalist`（**能手输**，也保留「获取模型列表」）
+- `apigReadyCheck` 按认证模式判必填项（快速要 Key、完整要 SA JSON + 项目，都要模型名）
+
+### ④ 途中修掉的五个真 bug
+
+1. ⚠⚠ **`custom` 预设写死了 `proto: 'openai'`** ⇒ `stAiProtoOf()` 先查表查到就**不再猜**，
+   于是用户「自定义」粘 Anthropic 的域名时**按 OpenAI 形状发出去**（400）。
+   **界面显示是对的，只有真发一次请求才看得出来。**
+   改法：`custom` 的 `proto` 留空（`''` = 按 URL 猜），并把「猜」和「决议」合成一个 resolver，
+   两处调用点都走它。
+2. ⚠ **半成品 `cfg` 没有 `proto`** ⇒ `apigGather()` / `getAiConfigFromInputs()` 返回的对象里
+   不带协议，gemini / vertex 会被当成 openai 发（拿 Bearer 去打 Google、URL 里也不带模型名）。
+   加 `stAiEnsureProto(cfg)` 兜底。
+3. ⚠ **【ai对话】的「获取模型」自己写了一份 OpenAI 专属实现** ⇒ anthropic / gemini 用不了，
+   而且漏了去重（同一份响应里两个 `gpt-4o` 就真的显示两个）。改成委托 `stAiFetchModels`。
+4. ⚠⚠ **`getAiConfigFromInputs()` 不带走 Vertex 那四个字段** ⇒ 在【ai对话】点一次保存，
+   独立那份的 `project` / `location` / `authMode` / `saJson` 全被打回默认。
+   **画面上没有任何东西会变**，只有真去用 Vertex 才发现。（这一条是**写文档时读产品读出来的**）
+5. ⚠ **【ai对话】的模型框是死下拉**（只能从拉回来的列表里选）⇒ 改成 `input` + `datalist`。
+
+另外：**Code 页的 Agent 工具调用只支持 OpenAI 兼容 / Anthropic 两种形状**，
+Gemini 的工具调用是另一套（`functionDeclarations`、parts 里的 `functionCall`）——
+这一版没做，所以加了一道**明说**的闸门（`stCodeSend` 里），而不是静默按 OpenAI 形状发出去。
+
+### ⑤ 验证
+
+| 项 | 结果 |
+|---|---|
+| 判据 | **1 594 295 字节 / 30 892 行 / `sha1 47e78fa4a57f…`**（+43 665 / +645） |
+| `check.js` | 5 / 0（`SYNTAX` / `MISSING` / `DUPLICATE literal ids` / `UNDECLARED` / `ESCAPE-GATE` 全空） |
+| 本地整跑 | **18 套 / 2 558 通过 / 0 失败**（`apig-verify` 106 · `vertex-verify` 105 · `st-code` 676 · `st-ai` 343） |
+| 外部整跑 | **8 层 / 1 631 通过 / 0 失败** |
+| 反向测试 | `_reverse14.js` **9 针全部达标**（R9 是这轮新加的）；`_reverse15.js` **8 针全部达标** |
+| 两个审计 | 锚点 §2 十一行 + §3 全表对得上；节号 0 撞号（17 文件） |
+
+新套件 `_verify/vertex-verify.js`（105 条）：服务商表 / 协议判定 / 半成品兜底 /
+gemini URL 三条路 / 请求体 / Service Account / 弹窗 UI / 就绪判据。
+新工具 `_verify/_lint-suites.js` —— **扫「模板字符串里出现反引号」**。
+这个坑这一轮**连踩三次**（注释里写 `` `custom` `` 会把模板字符串提前结束，
+报的错却指向**模板字符串开头那一行**，离现场很远），所以做成闸门：改完套件先跑它。
+
+### ⑥ 反向测试反过来找出的三个套件洞
+
+1. `sa.threw` **只查「抛没抛」** ⇒ 把 `importKey` 的错误吞掉、后面 `subtle.sign(key = null)`
+   照样抛，用户看到的是 `parameter 2 is not of type CryptoKey` 这句天书。补一条「报的错要说清是私钥」。
+2. **完整模式该不该带 API Key** 没人看着 ⇒ 补一条。
+3. **README 里「服务商表（N 项」是个没人管的数字** —— 本轮就漂了（写 38、实际 37）。
+   给它加了个观察者：套件直接读 README 那句、跟表里的实际条数比。
+
+⚠ 另外：**「猜」和「决议」是两步，断言要打在决议上**。第一版只给 `stAiGuessProto`（猜）
+写了断言，它猜得全对；而真正决定请求形状的是 `stAiProtoOf`（决议）。真 bug 就藏在这条缝里
+（见上面第 1 条）—— **量得没错，但量错了对象。**
+
+### ⑦ 收尾时发现的一个操作坑
+
+**反向测试跑到一半时改产品，改完会被它还原掉。** `_reverse14.js` 在启动时把产品读进内存
+当基线，每个探针跑完都从那份内存写回磁盘 —— 我中途改了 `saki.html`，下一次还原就把它盖没了。
+⇒ 要么等它跑完再改，要么改完**回读一次**确认还在。另外中途 kill 会留下
+`_verify/_reverse14.bak`（里面是**干净基线**）和**被注入过的产品**：
+下次启动时套件会拒绝跑（那是对的），人工要先 `cp` 回来再删 `.bak`。
+
+---
+
 ## 2026-09-23（第十一段）· **API 全局配置**：一份真相源 + 三处「跟随」改指向
 
 **类型**：**产品改动**（`saki.html` / `index.html`）。

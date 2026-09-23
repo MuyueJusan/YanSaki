@@ -32,7 +32,7 @@ const TIMEOUT_MS = 15 * 60 * 1000;          // 单套上限。⚠ 别再往小�
                                             //   而**被截断的套件跟「通过了」长得一模一样**
                                             //   （汇总行照样打得出来）—— 宁可等，不许切
 
-// 17 套回归测试。**顺序就是打印顺序**：静态检查放最前（最快、也最先能拦住东西）。
+// 18 套回归测试。**顺序就是打印顺序**：静态检查放最前（最快、也最先能拦住东西）。
 const SUITES = [
     'check.js',
     'sb-verify.js', 'sb-verify2.js', 'sb-verify3.js', 'sb-verify4.js',
@@ -40,7 +40,8 @@ const SUITES = [
     'sb-verify9.js',
     'persona-verify.js',
     'game-verify.js',
-    'st-ai.js', 'apig-verify.js', 'st-code.js', 'sb-keep-compare.js', 'smoke.js'
+    'st-ai.js', 'apig-verify.js', 'vertex-verify.js', 'st-code.js',
+    'sb-keep-compare.js', 'smoke.js'
 ];
 
 // 目录里的其他 `.js` —— 不是回归测试，但**必须显式列出来**。

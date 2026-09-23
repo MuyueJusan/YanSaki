@@ -815,7 +815,16 @@ const MOCK_SRC = `
     check('切到独立配置后出现协议下拉', await ev(`!!document.getElementById('st-ai-proto')`), true);
     check('切到独立配置后出现 Key 输入框', await ev(`!!document.getElementById('st-ai-key')`), true);
     check('切到独立配置后出现模型输入框', await ev(`!!document.getElementById('st-ai-model')`), true);
-    check('服务商下拉有 13 个预设', await ev(`document.getElementById('st-ai-provider').options.length`), 13);
+    // ⚠ 不写死数字：预设表每加一个服务商，写死的断言就会来收账
+    //   （第十七轮从 13 涨到 30+，这条立刻红）。改成**跟表比**，另加一条下限
+    const nProv = await ev(`ST_AI_PROVIDERS.length`);
+    check('服务商下拉与预设表项数一致（不是写死的数字）',
+      await ev(`document.getElementById('st-ai-provider').options.length`), nProv, nProv);
+    check('服务商预设 ≥ 30（含海外渠道与 Google 系）', nProv, v => v >= 30, '>=30');
+    check('⚠ 预设里有 Vertex（proto = gemini）',
+      await ev(`(ST_AI_PROVIDERS.find(p => p.value === 'vertex') || {}).proto`), 'gemini');
+    check('⚠ 自定义那条**不**写死 proto（要按 Base URL 猜）',
+      await ev(`String((ST_AI_PROVIDERS.find(p => p.value === 'custom') || {}).proto)`), '');
     await shot('st-ai-own.png', '#st-panes .st-pane');
 
     await ev(`stAiModePick('follow')`);

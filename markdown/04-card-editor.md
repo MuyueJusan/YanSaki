@@ -1387,7 +1387,10 @@ stSbLook(b, 层, css)  =  这一层带 class 时，只放行属性名在 clsOwn 
 | `own` | 自己的 `stAi` | `localStorage['stAiCfg']` |
 
 **`follow` 是「现读」不是「复制」** —— 用户在 🔌 API 全局配置里换完服务商，这边下次点生成就是新的，
-不需要「同步一下」这种按钮。协议按 Base URL 猜（含 `anthropic` / `claude` → anthropic）。
+不需要「同步一下」这种按钮。协议走 `stAiProtoOf()`：**预设表里写死了就用它**，
+只有没写的（`custom`）才按 Base URL 猜（含 `anthropic` / `claude` → anthropic，
+`aiplatform` / `vertex` / `generativelanguage` → gemini —— ⚠ 但**先排掉**路径里带 `/openai`
+的那种，Gemini 的 OpenAI 兼容层域名里也有 `generativelanguage`）。
 
 ⚠⚠ **第十七轮之前这里读的是 `aiConfig`，那是个坑。** `aiConfig` 会跟着【AI 对话】的
 「独立配置」一起变 ⇒ 指向它等于**编写器又悄悄跟回了对话**（用户在对话页改独立配置，
@@ -1444,34 +1447,57 @@ JSON 里都不会出现 API Key 的影子。验证套件里有一条专门盯这
 
 ### 预设服务商（`ST_AI_PROVIDERS`）
 
-13 个：OpenAI / Anthropic / DeepSeek / Moonshot / 智谱 GLM / 通义千问 / 硅基流动 /
-Gemini（兼容层）/ xAI / OpenRouter / Mistral / Ollama / 自定义。
+⚠ **第十八轮起 `ST_AI_PROVIDERS` 就是 `AI_PROVIDERS` 本身**
+（`const ST_AI_PROVIDERS = AI_PROVIDERS;`）—— 以前是两份重复维护的清单（这边 13 个、
+主页那份 7 个），加一个服务商要改两个地方，漏一个就是「下拉里有、取不到」。
+现在是**一张表 37 项**，分 6 组，详见 [02-ai-chat.md](02-ai-chat.md) §二。
 
-每条带一个 `proto` 字段 —— **只有 Anthropic 是 `'anthropic'`，其余全是 OpenAI 兼容**。
+每条带一个 `proto` 字段（`openai` / `anthropic` / `gemini`）。⚠ **只有 `custom` 故意留空**，
+意思是「按 Base URL 猜」—— 给它写死一种协议的后果实测过：用户粘 Anthropic 的域名时，
+`stAiProtoOf()` 先查表查到就**不再猜**，于是按 OpenAI 形状发出去，界面显示还是对的。
 界面上可以手动顶掉（`stAi.proto`，空串 = 跟着服务商走）。
 
-### 双协议
+### 三种协议
 
-| | OpenAI 兼容 | Anthropic |
-|---|---|---|
-| 路径 | `{base}/chat/completions` | `{base}/messages` |
-| 认证 | `Authorization: Bearer <key>` | `x-api-key: <key>` |
-| 版本头 | — | `anthropic-version: 2023-06-01` |
-| 浏览器直连 | — | `anthropic-dangerous-direct-browser-access: true` |
-| system | 留在 `messages` 里 | 提到顶层 `system` 字段 |
-| 流式增量 | `choices[0].delta.content` | `content_block_delta` → `delta.text` |
-| 非流式正文 | `choices[0].message.content` | `content[]` 里 `type:'text'` 的块 |
+| | OpenAI 兼容 | Anthropic | Gemini / Vertex 原生 |
+|---|---|---|---|
+| 路径 | `{base}/chat/completions` | `{base}/messages` | 三条路，见 [02-ai-chat.md](02-ai-chat.md) §十一 |
+| 认证 | `Authorization: Bearer <key>` | `x-api-key: <key>` | `x-goog-api-key` 或 `Bearer <access_token>` |
+| 版本头 | — | `anthropic-version: 2023-06-01` | — |
+| 浏览器直连 | — | `anthropic-dangerous-direct-browser-access: true` | — |
+| system | 留在 `messages` 里 | 提到顶层 `system` 字段 | 抽进 `systemInstruction` |
+| 流式增量 | `choices[0].delta.content` | `content_block_delta` → `delta.text` | 每行一个完整的 `GenerateContentResponse`，取 `candidates[0].content.parts[].text` |
+| 非流式正文 | `choices[0].message.content` | `content[]` 里 `type:'text'` 的块 | 同流式（**形状完全一样**，所以共用一个取文函数） |
 
 Anthropic 的 `messages` 有两条硬约束，`stAiSplitSystem` / `stAiMergeRoles` 一次处理掉：
 **必须以 `user` 开头**、**不能有连续的相同角色**（合并成一条）。
+Gemini 那边**也有同样的两条**（`contents` 非空 + 首条必须是 `user`），由 `stAiGeminiBody` 处理。
 
 `stAiRequest(cfg, messages, opts)` 是纯函数 —— 请求长什么样**单独抽出来**，
 验证套件才能直接断言 URL / 头 / 体，而不是去猜「代码里写了」。
+⚠ 它只管 `openai` / `anthropic`：gemini 的 URL 里**要拼模型名**、头还可能**是异步的**
+（完整模式要现换 access token），形状对不上，所以它走 `stAiGemini*` 那一组，
+再由 `stAiPlanAuth(plan, cfg)` 把异步那部分补进 `plan.headers`。
+
+⚠ **Code 页的 Agent 工具调用只支持前两种** —— Gemini 的工具调用是另一套形状
+（`functionDeclarations`、parts 里的 `functionCall` / `functionResponse`），这一版没做。
+`stCodeSend()` 里有一道闸门**明说**这件事并拒绝发送；不拦的话它会按 OpenAI 形状打 Google，
+回来的 400 跟「协议不对」看起来毫无关系。
 
 ### 模型列表
 
-`stAiFetchModels` 认四种形状：`{data:[{id}]}` / `{data:[{id,display_name}]}` /
+`stAiFetchModels(cfg)` 认四种形状：`{data:[{id}]}` / `{data:[{id,display_name}]}` /
 裸数组 / `{models:[{name}]}`；顺手剥掉 Gemini 兼容层的 `models/` 前缀，去重后排序。
+**三种协议共用这一份**（第十八轮并的）：anthropic 换 `x-api-key` 那套头，
+gemini 走 `stAiGeminiModelsUrl()`（AI Studio 是 `/v1beta/models`，Vertex 快速模式是
+`/v1/publishers/google/models`，完整模式带 `projects/{p}/locations/{l}`）。
+
+⚠ 调用方给进来的 `cfg` 常是**半成品**（`apigGather()` / `getAiConfigFromInputs()` 返回的对象里
+没有 `proto`）⇒ 函数内第一步就是 `stAiEnsureProto(cfg)`。少了这步，gemini / vertex 会被
+当成 openai 发出去（拿 Bearer 去打 Google、URL 里也不带模型名）。
+
+⚠ **模型框一律 `input` + `datalist`，能选也能手输** —— 有些服务商的 `/models` 返不全，
+有些压根没这个接口。手输的值照样存得下来（全局面板、编写器、【ai对话】三处都是）。
 
 ⚠ **拉模型时不能要求先有模型**（`stAiReady(cfg, {needModel:false})`）——
 那一步本来就是为了挑模型，要求先有就成了死循环。
@@ -1895,6 +1921,14 @@ Anthropic 那边就是连续两条 assistant（400），OpenAI 那边也会因�
 
 `stAiEndpoint()` 是这一轮从 `stAiRequest` 里抽出来的：**「发去哪、带什么头」只有这一处**，
 `stAiRequest` 和 `stCodeRequest` 共用它。协议细节散成两份的那天，一定会出现「改了 A 忘了 B」。
+
+⚠⚠ **这里只认 `openai` / `anthropic` 两种形状。** 第十八轮加了第三种协议 `gemini`
+（Gemini 原生 / Vertex），但它的工具调用是**另一套形状**（`functionDeclarations`、
+parts 里的 `functionCall` / `functionResponse`），这一版**没实现**。
+⇒ `stCodeSend()` 里有一道闸门，遇到 `cfg.proto === 'gemini'` 就**明说**并拒绝发送。
+不拦的后果实测过：它会按 OpenAI 形状打 Google，回来的 400 跟「协议不对」看起来毫无关系，
+用户只会去怀疑 Key 或模型名。⚠ 这类「功能没做」的路径**必须自己喊出来** ——
+静默降级成另一种协议，比直接报错难查得多。
 
 ### 工具表（19 个内置 + 工具型 skill）
 
@@ -2906,7 +2940,7 @@ iframe），只要有一边把 `width` 写错了地方 —— 比如写到了 `.
 
 | 段 | 内容 |
 |---|---|
-| A | 配置层：`follow` 现读 AI 对话那套（改那边这边跟着变）、`own` 自己一套、协议按 Base URL 推断、就绪判定三种缺项、本机地址免 Key |
+| A | 配置层：`follow` 现读 **`apiGlobal`**（不是 `aiConfig`，改那边这边跟着变）、`own` 自己一套、协议走 `stAiProtoOf` 查表（`custom` 才按 Base URL 推断）、就绪判定三种缺项、本机地址免 Key |
 | B | 请求形状：OpenAI 走 `/chat/completions` + `Bearer`；Anthropic 走 `/messages` + `x-api-key` + `anthropic-version` + 浏览器直连头；system 提到顶层、首条补 `user`、连续同角色合并；结尾多一条斜杠不拼出 `//` |
 | C | 模型列表四种形状（`{data:[{id}]}` / `{data:[{id,display_name}]}` / 裸数组 / `{models:[{name}]}`）、去重排序、剥 `models/` 前缀、空列表报错 |
 | D | 流式：两套 SSE 都拼回原文；`onDelta` 每次给的是**累积全文**；非流式走 `resp.json()` 且请求体里 `stream:false` |
@@ -2935,6 +2969,7 @@ C 段和 J 段暴露过一个**真问题**：`stAiPullModels` 原本复用 `stAi
 |---|---|
 | A | 接线与布局：15 个选项卡里有 `code`、左右两栏、工具条的折叠菜单与动作按钮、窄屏分段控件 |
 | B | 协议层：`stCodeRequest` 两套形状（`tools[].function` vs `tools[].input_schema`）、URL / 头 / 体；工具数量**从 `ST_CODE_TOOLS` 枚举**而不是写死 |
+| F2 | **Gemini / Vertex 协议下明说「工具调用不支持」**：报的错里点名协议、**一个请求都没发**、给了两条出路、没卡在 `running` 上；对照 = 同一步换成 openai 协议**就会**发（证明那个 0 是「被拦住」而不是「本来就不发」） |
 | C | 消息转换：工具消息怎么进两套协议（`tool_calls` / `tool_result`）、连续 `tool_result` 并进同一条 user、`note` 两处都过滤 |
 | D | 回复解析：OpenAI `tool_calls[]` / Anthropic `tool_use` 块 → 统一的 `{text, calls[]}`；坏 JSON 的参数当空对象 |
 | E | 工具执行：`read_card` 不传 path 给整卡、传了只给那一个字段；`write_text` / `write_list` 只认白名单，越权路径**报错而不是静默**；`write_list` 三种 mode；世界书工具（摘要不含全文、删除进回收站、`update` 空值不覆盖）；超长结果截断（**两档预算**：读整份文档的工具 32 000 字符、其余 12 000，且断言「名字以 `read_` / `list_` 开头的一定都在读名单里、写工具一个都不许混进去」） |

@@ -291,7 +291,15 @@ const MOCK_SRC = `
 
     const fields = await ev(`(function(){
       const ids = ['apig-provider','apig-base-url','apig-api-key','apig-model','apig-stream',
-        'apig-temperature','apig-max-tokens','apig-first-seg','apig-fetch-btn','apig-test-btn'];
+        'apig-temperature','apig-max-tokens','apig-first-seg','apig-fetch-btn','apig-test-btn',
+        // 第十七轮加的：模型候选表 + Vertex 那几格（authMode / project / location / SA JSON）
+        // ⚠ 它们平时是 hidden 的，但**必须在 DOM 里** —— 漏了就只会在切到 Vertex 时才炸
+        // ⚠ id 一律现 grep 取真值，别照抄别猜
+        // ⚠ 这段在**模板字符串里** ⇒ 注释里绝不能出现反引号（会提前结束字符串，
+        //   报的是「missing ) after argument list」，看着跟注释毫无关系）
+        'apig-model-list','apig-auth-mode','apig-project','apig-location','apig-sa',
+        'apig-location-list','apig-vertex-box','apig-vertex-note',
+        'apig-key-field','apig-project-field','apig-location-field','apig-sa-field'];
       return ids.filter(id => !document.getElementById(id));
     })()`);
     check('弹窗字段齐全（缺的会列在这里）', fields.join(','), '', '');
@@ -305,9 +313,11 @@ const MOCK_SRC = `
       sel.value = 'custom'; syncApigProviderUI();
       document.getElementById('apig-base-url').value = 'https://global.test/v1';
       document.getElementById('apig-api-key').value = 'sk-GLOBAL-1';
-      const ms = document.getElementById('apig-model');
-      ms.innerHTML = '<option value="m-global">m-global</option>';
-      ms.value = 'm-global';
+      // ⚠ 模型控件是 input + datalist（可以手输）—— 往 input 上写 innerHTML 是**没用的**
+      //   （不报错、也不生效）。要灌候选就灌 datalist，要选值就写 input.value
+      document.getElementById('apig-model-list').innerHTML =
+        '<option value="m-global"></option>';
+      document.getElementById('apig-model').value = 'm-global';
       document.getElementById('apig-stream').checked = false;
       document.getElementById('apig-temperature').value = '0.3';
       document.getElementById('apig-max-tokens').value = '777';
@@ -399,9 +409,9 @@ const MOCK_SRC = `
     await sleep(250);
     await ev(`(function(){
       document.getElementById('apig-api-key').value = 'sk-GLOBAL-2';
-      const ms = document.getElementById('apig-model');
-      ms.innerHTML = '<option value="m-global-2">m-global-2</option>';
-      ms.value = 'm-global-2';
+      document.getElementById('apig-model-list').innerHTML =
+        '<option value="m-global-2"></option>';
+      document.getElementById('apig-model').value = 'm-global-2';
       return true; })()`);
     await ev(`document.querySelector('#apiGlobalModal .apig-btn-primary').click()`);
     await sleep(300);
@@ -452,6 +462,62 @@ const MOCK_SRC = `
     await sleep(200);
     check('跟随：改系统提示词不会冲掉独立那份', await ev(`(aiConfig.own || {}).apiKey`), 'sk-CHAT-OWN');
     check('跟随：改系统提示词也不会把生效值带歪', await ev(`aiConfig.apiKey`), 'sk-GLOBAL-2');
+
+    // ================= D2. 模型框能手输 + Vertex 那几格的交代 =================
+    section('D2. 【ai对话】：模型能手输 / Vertex 在独立模式下的交代');
+
+    // ⚠ 这一格第十八轮从**死下拉**改成 input + datalist。断言要打在
+    //   「控件类型」和「手输的值真能存下来」上 —— 只测「元素存在」的话，
+    //   改回 <select> 照样绿（「获取模型」之外一个模型都选不了）
+    check('⚠ 模型框是 INPUT（能手输），不是下拉',
+      await ev(`document.getElementById('ai-model').tagName`), 'INPUT');
+    check('⚠ 模型框挂上了 datalist（候选来自它）',
+      await ev(`document.getElementById('ai-model').getAttribute('list')`), 'ai-model-list');
+    check('⚠ 候选（datalist）与当前值是两个元素，不能读混',
+      await ev(`document.getElementById('ai-model').id !== document.getElementById('ai-model-list').id`), true);
+
+    // 切到独立模式才改得动
+    await ev(`document.querySelector('#ai-cfg-src .ai-src-btn[data-follow="0"]').click()`);
+    await sleep(250);
+    await ev(`(function(){ document.getElementById('ai-model').value = '手输的对话模型-abc'; return true; })()`);
+    await ev(`[...document.querySelectorAll('#ai-card button.ai-btn')].filter(b => b.textContent.trim() === '保存')[0].click()`);
+    await sleep(250);
+    check('⚠ 手输一个候选里没有的模型名也能存下来（独立那份）',
+      await ev(`(aiConfig.own || {}).model`), '手输的对话模型-abc');
+    check('⚠ 而且立刻生效（读生效值）', await ev(`aiConfig.model`), '手输的对话模型-abc');
+
+    // 选 Vertex ⇒ 这个面板**没有**「项目 / 位置 / 认证方式」那几格，得给一句交代
+    await ev(`(function(){
+      const sel = document.getElementById('ai-provider');
+      sel.value = 'vertex'; syncAiProviderUI(); return true; })()`);
+    await sleep(200);
+    check('⚠ 独立 + Vertex ⇒ 出现「那几项沿用全局」的提示',
+      await ev(`document.getElementById('ai-vertex-hint').style.display !== 'none'`), true);
+
+    // ⚠⚠ 这个面板没有那四格的控件，但保存时 `getAiConfigFromInputs()` 返回的是
+    //   **新对象**、`aiSyncOwnFromEffective()` 又拿它去 `apiGlobalPick()` ——
+    //   漏带这四个字段 = 在【ai对话】点一次保存，独立那份的 Vertex 设置被打回默认。
+    //   画面上什么都看不出来，只有真去用 Vertex 才炸（第十八轮修过）
+    await ev(`(function(){
+      aiConfig.project = 'my-proj-1'; aiConfig.location = 'us-central1';
+      aiConfig.authMode = 'sa'; aiConfig.saJson = '{"client_email":"x@y.z"}';
+      return true; })()`);
+    await ev(`[...document.querySelectorAll('#ai-card button.ai-btn')].filter(b => b.textContent.trim() === '保存')[0].click()`);
+    await sleep(250);
+    check('⚠⚠ 独立：保存后 project 没被打回默认', await ev(`(aiConfig.own || {}).project`), 'my-proj-1');
+    check('⚠⚠ 独立：保存后 location 没被打回默认', await ev(`(aiConfig.own || {}).location`), 'us-central1');
+    check('⚠⚠ 独立：保存后 authMode 没被打回默认', await ev(`(aiConfig.own || {}).authMode`), 'sa');
+    check('⚠⚠ 独立：保存后 saJson 没被打回默认', await ev(`(aiConfig.own || {}).saJson`), '{"client_email":"x@y.z"}');
+    check('（对照）保存后模型名还是刚手输的那个（别把这条跟上面四条混成一条）',
+      await ev(`(aiConfig.own || {}).model`), '手输的对话模型-abc');
+
+    // 切回跟随 ⇒ 提示收起（跟随时整页都是全局的镜像，没什么可交代的）
+    await ev(`document.querySelector('#ai-cfg-src .ai-src-btn[data-follow="1"]').click()`);
+    await sleep(250);
+    check('跟随 + Vertex ⇒ 提示收起',
+      await ev(`document.getElementById('ai-vertex-hint').style.display`), 'none');
+    check('（对照）切回跟随之后 provider 镜像的是全局那份（不是 vertex）',
+      await ev(`document.getElementById('ai-provider').value`), 'custom');
 
     // ================= E. 编写器跟随的是全局 =================
     section('E. 【角色卡编写器】跟随的是全局，不是【ai对话】');
@@ -538,32 +604,49 @@ const MOCK_SRC = `
 
     await setScript({ fail: '', models: 'openai' });
     await ev(`(window.__aiCalls = [], true)`);
+    // ⚠ 先把输入框清空：apigFetchModels 会把**当前输入的值**前置进候选
+    //   （免得手输过的名字被拉取冲掉）⇒ 不清空的话候选里会多一项，
+    //   下面那些「精确相等」的断言就全错了 —— 红的是断言不是产品
+    await ev(`document.getElementById('apig-model').value = ''`);
     await ev(`document.querySelector('#apiGlobalModal #apig-fetch-btn').click()`);
     await sleep(800);
-    check('获取模型：下拉里出现了拉到的模型',
-      await ev(`[...document.getElementById('apig-model').options].map(o => o.value).join(',')`),
-      'gpt-4o,gpt-4o-mini');
+    // ⚠ 模型控件现在是 input + datalist（**可以手输**，第十七轮改的）——
+    //   候选读 datalist，当前值读 input，两处不是同一个元素。
+    //   原来读的是 `.options`（只有 <select> 才有），改完控件就崩在这里
+    const dlOpts = `[...document.getElementById('apig-model-list').options].map(o => o.value)`;
+    check('获取模型：候选（datalist）里出现了拉到的模型',
+      await ev(`${dlOpts}.join(',')`), 'gpt-4o,gpt-4o-mini');
     check('获取模型：去重了（4o 只出现一次）',
-      await ev(`[...document.getElementById('apig-model').options].filter(o => o.value === 'gpt-4o').length`), 1);
+      await ev(`${dlOpts}.filter(v => v === 'gpt-4o').length`), 1);
+    check('⚠ 模型框是 INPUT（能手输），不是下拉',
+      await ev(`document.getElementById('apig-model').tagName`), 'INPUT');
+    check('⚠ 模型框挂上了 datalist（候选来自它）',
+      await ev(`document.getElementById('apig-model').getAttribute('list')`), 'apig-model-list');
     check('获取模型：请求发去了 /models',
       await ev(`window.__aiCalls.length && /\\/models$/.test(window.__aiCalls[window.__aiCalls.length-1].url)`), true);
     check('获取模型：带上了 Bearer 头',
       await ev(`window.__aiCalls[window.__aiCalls.length-1].headers.Authorization`), 'Bearer sk-GLOBAL-2');
+
+    // 手输一个**不在候选里**的模型名 —— 这是新能力的核心，别只测「从列表里选」
+    await ev(`document.getElementById('apig-model').value = '手输的模型名-xyz'`);
+    await ev(`document.querySelector('#apiGlobalModal .apig-btn-primary').click()`);
+    await sleep(300);
+    check('⚠ 手输一个候选里没有的模型名也能存下来',
+      await ev(`apiGlobal.model`), '手输的模型名-xyz');
+    await ev(`document.getElementById('apig-model').value = ''`);
 
     // 另外两种返回形状也要认（复用 stAiModelIds 的收益，别只在一种形状上绿）
     await setScript({ models: 'alt' });
     await ev(`document.querySelector('#apiGlobalModal #apig-fetch-btn').click()`);
     await sleep(700);
     check('获取模型：认 `{ models: [...] }` 这种形状',
-      await ev(`[...document.getElementById('apig-model').options].map(o => o.value).join(',')`),
-      'qwen-max,qwen-plus');
+      await ev(`${dlOpts}.join(',')`), 'qwen-max,qwen-plus');
 
     await setScript({ models: 'bare' });
     await ev(`document.querySelector('#apiGlobalModal #apig-fetch-btn').click()`);
     await sleep(700);
     check('获取模型：认裸数组形状，且剥掉 models/ 前缀',
-      await ev(`[...document.getElementById('apig-model').options].map(o => o.value).join(',')`),
-      'gemini-2.5-pro,llama3');
+      await ev(`${dlOpts}.join(',')`), 'gemini-2.5-pro,llama3');
 
     // 空列表要报错，不能静默当成成功
     await setScript({ models: 'empty' });
