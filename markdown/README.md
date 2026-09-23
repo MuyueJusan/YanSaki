@@ -103,6 +103,23 @@ cp "C:/Users/YanSaki/.workbuddy-ai/skills/verify-single-file-html-app/SKILL.md" 
 cp "C:/Users/YanSaki/.workbuddy-ai/skills/git-push-existing-github-repo/SKILL.md" markdown/SKILL-git-push.md
 ```
 
+### 反向：在**新设备**上把技能与记忆装回去（`setup-dev.sh`）
+
+`.workbuddy-ai/` 不进仓库，所以换一台机器 clone 下来之后，**技能和记忆都还没装** ——
+而且镜像的**文件名 / 路径跟运行时对不上**（`SKILL-git-push.md` → `git-push-existing-github-repo/SKILL.md`），
+手动 `cp` 很容易装错地方或者**装反方向**。仓库根的 `setup-dev.sh` 就干这件事：
+
+```bash
+bash setup-dev.sh              # 只看计划（默认，什么都不改）
+bash setup-dev.sh --go         # 真装：只补本地没有的，已存在的一律不动
+bash setup-dev.sh --go --force # 连已存在的也覆盖（在别的设备上改过、要拉回来时用）
+```
+
+⚠ **默认不覆盖是故意的** —— 记忆的真相源是**本地**（`markdown/` 才是副本），
+在**写这份记忆的那台机器**上跑，覆盖等于把新内容冲掉。
+⚠ 脚本**绝不碰** `.workbuddy-ai/git/credentials`；新设备第一次推送要自己配一次凭据
+（见 `SKILL-git-push.md` 第 3 节 —— 凭据文件要放在被 gitignore 掉的目录里）。
+
 ### 仓库与发布（2026-09-23 接入）
 
 `G:\saki`（工作副本）→ **push** → `github.com/MuyueJusan/YanSaki`（公开仓库，`main`）→ **GitHub Pages** → `https://yansaki.top/`
