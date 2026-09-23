@@ -1,7 +1,11 @@
 # 05 · 小游戏
 
-> 对应代码：HTML `5566–5650`（入口 + 弹窗），JS `5954–7479`，CSS `1664–1916`
-> （行号为 2026-09-21 第二十四轮实测；改完请用 `_verify/_audit-anchors.js` 复核 README 的两张表）
+> 对应代码（⚠ 行号**会漂** —— 下面是第二十四轮实测，之后往 `<style>` 里插过 CSS、又加过一个弹窗，
+> 这几个数就没再跟；跳转请 `grep` 横幅原文，别照抄数字）：
+> HTML `5566–5650`（入口 + 弹窗），JS `5954–7479`，CSS `1664–1916`
+>
+> ⚠ `_verify/_audit-anchors.js` **只复核 `README.md` 的 §2 / §3 两张表，管不到本文件** ——
+> 别拿它打 ✅ 当成「上面这几个数也对」的证据。（全套 `_verify/*.js` 里没有任何一个管分册的行号。）
 
 ---
 
@@ -9,8 +13,18 @@
 
 ### 入口按钮
 
+⚠ **这个按钮**上面**还有一个同款按钮** —— 第十七轮加的【🔌 API 全局配置】（`#api-global-btn`，
+`onclick="openApiGlobalModal()"`）。两者**共用 `.game-entry-btn` 这个类**（就是那条 `margin-top`），
+所以 `.game-entry-btn` 这类**类名锚点会指向第一处**（API 全局配置那个），要精确就用 `#` 那个 id。
+
 ```html
-<button class="action-btn game-entry-btn" onclick="openCatGame()">
+<!-- 上面那个（第十七轮加的，见 02-ai-chat.md 十） -->
+<button class="action-btn game-entry-btn" id="api-global-btn" onclick="openApiGlobalModal()">
+    <span>🔌 API 全局配置</span>
+</button>
+
+<!-- 小游戏入口 -->
+<button class="action-btn game-entry-btn" id="game-entry-btn" onclick="openCatGame()">
     <span>🐱 小游戏</span>
 </button>
 ```

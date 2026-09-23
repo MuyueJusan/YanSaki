@@ -1,6 +1,7 @@
 # 02 · AI 对话
 
-> 对应代码：HTML `3293–3518`，JS `4723–5360`、`11127–11483`，CSS `526–1660`
+> 对应代码（⚠ 行号**会漂** —— 下面这几个数是旧轮次实测、之后往 `<style>` 里插过东西就没再跟，
+> 跳转请 `grep` 横幅原文，别照抄数字）：HTML `3293–3518`，JS `4723–5360`、`11127–11483`，CSS `526–1660`
 
 ---
 
@@ -323,3 +324,58 @@ const retryable = (opts.retryable !== undefined) ? opts.retryable : !isUser;
 被关掉的那一块整体降透明度 + `pointer-events: none`（CSS 853 行）。
 
 **开场白也受这个开关影响**：`promptEnabled === false` 时不使用预设自带开场白 —— 不然会出现「AI 说自己是猫猫 Saki，但猫猫的人设根本没发出去」的错位。
+
+---
+
+## 十、API 全局配置 与「配置来源」（第十七轮）
+
+> 这一节跨三处界面：**主页的弹窗** + **本选项卡顶部的来源开关** + **编写器的 AI 助手**
+> （后者见 `04-card-editor.md` 十五）。
+
+### 一份真相源
+
+| 名字 | 存哪 | 是什么 |
+|---|---|---|
+| `apiGlobal` | `localStorage['apiGlobalCfg']` | **全站唯一真相源**：服务商 / Base URL / Key / 模型 / 温度 / max_tokens / 流式 / **第一段** |
+| `aiConfig.followGlobal` | `localStorage['aiChatConfig']` | 本选项卡的配置来源：`true`（默认）跟随全局 / `false` 用自己那份 |
+| `aiConfig.own` | `localStorage['aiChatConfig']` | 「独立配置」时自己那一套 |
+
+⚠⚠ **`aiConfig` 顶层那 8 个 API 字段是「生效值」，不是真相源。** 全站 40 多个读点
+（`aiConfig.apiKey` / `aiConfig.model` …）**一行都没改**，只在两处刷新：载入时
+（`initApiGlobal()`）与全局面板保存后（`saveApiGlobal()`），都走 `aiApplyEffective()`。
+⇒ 为什么不用「每个读点按来源取」：40 多个点里漏一个，就是**一处静默的旧值** ——
+那种错**不报错、界面也正常**，只有发出去的请求带着旧 Key。
+
+⚠ **写 `aiChatConfig` 一律走 `aiPersist()`**（唯一入口）。`own` 快照只在用户**真的在本页改了**
+那几个字段时才同步（`aiSyncOwnFromEffective()`，自带 `followGlobal === false` 守卫）——
+放进 `aiPersist()` 无条件跑的话，**跟随模式下改一次系统提示词就会把用户那份独立配置静默冲掉**。
+
+### 一次性迁移
+
+`apiGlobalCfg` 不存在 ⇒ 用现有 `aiChatConfig` 的 API 字段 + 第一段**播种**，同时把 `own` 也播一份
+（免得用户一切到「独立配置」就面对一片空白），`followGlobal` 默认 `true`。
+⇒ 升级后外观与效果**跟升级前一模一样**，只是从此全局是唯一可改的地方。
+⚠ 播种**只做一次**（`apiGlobalLoad()` 返回 `firstTime` 才落盘）—— 每次都播的话，
+用户在全局面板改过的东西**会在下次刷新被老配置盖回去**。
+
+### 界面
+
+- 主页 **【🔌 API 全局配置】**（`#api-global-btn`，在【🐱 小游戏】**上方**）⇒ 弹窗 `#apiGlobalModal`
+  （复用 `.modal-overlay` / `.game-card`，含复古皮肤覆盖）。里面：服务商 / Base URL / Key /
+  模型（含**获取模型列表**）/ 流式 / 温度 / max_tokens / 第一段 + **测试连接** + **保存**。
+  ⚠ 卡片是白底，而 `.ai-btn` / `.ai-switch-track` 是「白字 / 半透明白」—— 直接搬进来**看不见**，
+  所以按弹窗作用域覆盖了一遍（`.apig-*` + `body.retro-mode` 那几条）。
+- 本选项卡面板顶部两个按钮：**🔗 跟随 API 全局配置 / 🔑 独立配置**；折叠状态下也有角标显示当前来源。
+- ⚠ 跟随时那批 API 控件是**真 `disabled`**（不是 readonly）—— **绝不留「能改、但下次刷新又变回去」
+  的假输入框**；旁边给一个「打开 API 全局配置」的出口，`applyAiSettings()` 的缺项提示也会指到全局去。
+- **全局配置里没有「系统提示词」** —— 那不是 API 配置，仍归本选项卡。
+
+### 谁读哪一份
+
+| 消费方 | 跟随 | 独立 |
+|---|---|---|
+| 本选项卡（对话 / `firstSegText()`） | `apiGlobal` | `aiConfig.own` |
+| 编写器的 AI 助手（`stAiCfg()`） | `apiGlobal` | `stAi`（**它自己的**开关，与本页无关） |
+
+⚠ 两个开关**互不影响**：本页切「独立配置」**不会**把编写器拖走。套件里有一条断言专门盯这个
+（「独立：编写器**跟随模式**仍然读全局（它不跟对话跑）」—— ⚠ 断言名里那四个字是关键）。

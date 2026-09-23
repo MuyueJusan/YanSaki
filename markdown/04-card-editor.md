@@ -1383,19 +1383,29 @@ stSbLook(b, 层, css)  =  这一层带 class 时，只放行属性名在 clsOwn 
 
 | 模式 | 取哪份配置 | 存哪 |
 |---|---|---|
-| `follow`（默认） | 现读【AI 对话】选项卡的 `aiConfig` | 不存，那边改这边跟着变 |
+| `follow`（默认） | 现读 **`apiGlobal`**（🔌 API 全局配置） | 不存，全局那边改这边跟着变 |
 | `own` | 自己的 `stAi` | `localStorage['stAiCfg']` |
 
-**`follow` 是「现读」不是「复制」** —— 用户在 AI 对话页换完服务商，这边下次点生成就是新的，
+**`follow` 是「现读」不是「复制」** —— 用户在 🔌 API 全局配置里换完服务商，这边下次点生成就是新的，
 不需要「同步一下」这种按钮。协议按 Base URL 猜（含 `anthropic` / `claude` → anthropic）。
+
+⚠⚠ **第十七轮之前这里读的是 `aiConfig`，那是个坑。** `aiConfig` 会跟着【AI 对话】的
+「独立配置」一起变 ⇒ 指向它等于**编写器又悄悄跟回了对话**（用户在对话页改独立配置，
+编写器的行为跟着变，而界面上写着「跟随全局」）。现在**两处一起**读 `apiGlobal`：
+`stAiFollowCfg()`（真正取值）与 `stAiFollowFields()`（那张「跟随到了什么」的只读表）——
+⚠ **只改一处就是「表里写着全局、实际取对话」**。
 
 ⚠ **配置一律不进卡。** `stAi` 存在自己的 localStorage 键里，草稿（`stCardDraft`）和导出的
 JSON 里都不会出现 API Key 的影子。验证套件里有一条专门盯这个。
 
 ### 「第一段」：永远排在发给模型的最前面
 
-两处配置各有一个「第一段」输入框 —— 【AI 对话】的高级设置里一个（`aiConfig.firstSeg`），
-【AI 助手】页一个（`stAi.firstSeg`，跟随模式下是**只读镜像**，显示的是 AI 对话那份）。
+两处配置各有一个「第一段」输入框 —— 【AI 对话】的高级设置里一个，
+【AI 助手】页一个（`stAi.firstSeg`，跟随模式下是**只读镜像**）。
+⚠ **两份的源头都在 `apiGlobal.firstSeg`**（第十七轮）：【ai对话】默认**跟随**全局，
+只有切到「独立配置」才用自己那份。⚠ 编写器**有自己的** `follow` / `own` 开关（`stAi.mode`）——
+跟随取 `apiGlobal.firstSeg`、独立取自己的 `stAi.firstSeg`，而且它跟【ai对话】的开关
+**互不影响**（对话切独立**不会**把编写器拖走，套件里有一条专门盯这个）。
 
 它跟各功能面板自己拼的 `system` / `user` 是两回事：那两个是程序按参数生成的，
 这一段**原样排在最前面**。三个功能面板共用一条出口 `stAiPlanMessages(plan)`：
@@ -2834,9 +2844,12 @@ iframe），只要有一边把 `width` 写错了地方 —— 比如写到了 `.
 
 整条链要发网络请求，所以跟 `st-ai.js` 一个做法：`Page.addScriptToEvaluateOnNewDocument` 里
 把 `window.fetch` 整个换掉，配 `window.__aiScript = { reply, fail, delay }` 与
-`window.__aiCalls`（**刷新之后桩还在**）。⚠ 每次 `reload()` 之后要**重配一遍 `aiConfig`** ——
-内存里改的没落过盘，刷新就回到 localStorage 那份，后面那条 `gen` 会红在
-「还没配 Base URL」上，看着像功能坏了。
+`window.__aiCalls`（**刷新之后桩还在**）。⚠ 每次 `reload()` 之后要**重配一遍 `apiGlobal`**
+（并 `apiGlobalPersist(); aiApplyEffective();`）—— 内存里改的没落过盘，刷新就回到 localStorage 那份，
+后面那条 `gen` 会红在「还没配 Base URL」上，看着像功能坏了。
+⚠⚠ **第十七轮起必须配 `apiGlobal` 而不是 `aiConfig`**：这两条路都走 `stAiCfg()`，
+而它读的是全局那份 ⇒ 直接写 `aiConfig.*` 的话**请求压根不会发出去**（症状正是上面那句
+「还没配 Base URL」，看着像功能坏了）。同一坑在 `persona-verify.js` 里踩过一次（19 条红）。
 
 | 段 | 内容 |
 |---|---|
