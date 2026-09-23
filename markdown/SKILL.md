@@ -5084,9 +5084,9 @@ suite crashed, its last line was `-1/0 通过`; the regex skipped the `-` and ma
   other does not.**
 
 
-## Three gates that lie about which side is broken
+## Four gates that lie about which side is broken
 
-All three were hit on the same project in one afternoon. The shape is identical: **an assertion's
+All four were hit on the same project, three of them in one afternoon. The shape is identical: **an assertion's
 *premise* stopped being true because of legitimate content, and the red looked like a product bug.**
 The rule: **before believing a red, go `grep` the product for the thing the gate names.**
 
@@ -5174,4 +5174,51 @@ returned the full **1 515 017 bytes** and a sha1 matching the local file exactly
   clearly-too-small size means the downloaded artefact is not what you think it is.
 
 (Still keep polling for genuine CDN lag — an earlier round needed three tries.)
+
+---
+
+## Reverse tests: the two ways an assertion can be *unable* to fail
+
+A reverse test (inject a break → assert exactly which assertions go red → restore → verify the file
+byte-for-byte) is usually described as "proving the assertions can fail". Two shapes came out of it
+that are worth naming separately, because in both of them **the probe is correct and the suite is
+green**.
+
+### An assertion that passes under **both** implementations cannot tell them apart
+
+The suite had: *"switch back to 'follow global'; the card editor still reads the global config."*
+It looked like the assertion that pins the follow-target. It was not. **The act of clicking
+"follow global" itself normalises the effective config to the global values** — so "read the global
+object" and "read the effective copy" return the same string *whichever one the code actually reads*.
+The probe (make the follow-target read the effective copy) was expected to turn it red; it stayed
+green, and the assertion had to be reclassified as a control group.
+
+⇒ **An assertion is only as strong as the state the code is in when it runs.** If a preceding action
+collapses two candidate sources onto the same value, the assertion is decoration. When you write
+"X reads A, not B", **arrange the fixture so A and B differ**, then assert the *value*. This is the
+same rule as "a control group must be different, not merely present" — applied to the **subject** of
+the assertion rather than to its control.
+
+### An injection with **no observable effect** means the suite is missing an assertion
+
+A probe removed a guard from a sync helper. **Nothing went red — not one assertion.** The tempting
+reading is "the guard is dead code". The correct reading is "**no assertion watches that path**".
+Working out the real scenario (the persistence routine also runs in follow mode, so an unguarded
+sync silently overwrites the user's independent config) produced a new assertion — and only then did
+the probe go red as intended.
+
+⇒ Read a silent probe both ways round. It is either (a) the probe is wrong, or (b) **the suite has a
+hole** — and (b) is the more common of the two once a suite is mature. A reverse test is therefore
+also an **unwatched-path finder**, not merely a proof that assertions can fail.
+
+## Never run the same harness twice at once
+
+Two runs of the same headless harness were launched concurrently — the first was still going when
+the second started. Both printed identical per-suite numbers and both passed. **That was luck.**
+
+The harness allocates a Chrome profile and a debugging port per run; concurrent runs can collide,
+and a collision is not a reliable failure — it can also produce a *pass for the wrong reason*.
+⇒ Serialise **every** run, including repeats of the same suite. "The two harnesses must not overlap"
+is only half the rule; the same suite must not overlap itself either. Check for an already-running
+run before backgrounding another one.
 

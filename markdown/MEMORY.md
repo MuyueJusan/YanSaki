@@ -11,7 +11,7 @@
 - ⚠⚠ **新增功能可能让旧套件的「前提」失效，而不是打坏产品** —— 断言**集体假红**时**看数值是不是全 0**（全 0 = 元素不可见）⇒ **让断言走真实路径**。⚠ **靠 class 变 `position:fixed` 的卡片隐藏必须写 `:not(.全屏类)`**，且**断言 computed `display`**。
 - ⚠ **`saki.html` 是 CRLF** ⇒ JS 里 `.` **不匹配 `\r`**，`$` 锚行尾的正则**整条静默失败**；⚠⚠ **`\r` 也会从运行时数据进来**（模型输出 / `fetch` / 旧 `localStorage`）⇒ 用 `$` 或按行切的正则**进函数先归一 `\r\n?`→`\n`**（六之二十八）。⚠ Git Bash `grep -c $'\r'` 对 CRLF 报 0（**不可靠**）⇒ Node 读 `latin1` 后 `match(/\r\n/g)`。⚠ `markdown/` 是**纯 LF**。
 - ⚠ **`check.js` 改完先跑**：`SYNTAX` / `MISSING` / `DUPLICATE literal ids` / `UNDECLARED` / `ESCAPE-GATE`。⚠ **它读页面不读生成物**（**过时的输入比没有检查更坏**）；**新加构建函数必须来改 `ESCAPE_ALLOW` 白名单**。
-- ⚠ **整跑一律用 `run-all.js`**（手写 `for` + `grep`/`tail` 会让格式不匹配的那几套**静默变空行**）。⚠⚠ **它抓不到「某套只跑了一部分」** ⇒ **两套 harness 一律串行**、timeout **≥ 900 s**，跑完**拿逐套数字跟 `README` §7 表对一遍**。
+- ⚠ **整跑一律用 `run-all.js`**（手写 `for` + `grep`/`tail` 会让格式不匹配的那几套**静默变空行**）。⚠⚠ **它抓不到「某套只跑了一部分」** ⇒ **harness 一律串行**（**同一套也别并发** —— 撞 profile / 端口时红绿都不可信）、timeout **≥ 900 s**，跑完**拿逐套数字跟 `README` §7 表对一遍**。
 - ⚠ **Chrome 层超时 / 报「`NOT FOUND` 锚点变了」时，先量网络、先去产品里 `grep` 那个锚点，别先怀疑产品**（主页 `@import` 拉 Google Fonts ⇒ 超时**假红**）；判回归**拿改动前的副本跑同一个 harness**。⚠ **探针收尾 `kill()` 在前、删 profile 在后**，句柄挂**模块作用域**。
 
 ## ① 工程约定
@@ -20,12 +20,12 @@
 - ⚠ **别按功能名猜目标，先 `grep` 出所有候选** —— 同一个中文名常落在两处 DOM 上（两个「展开键」：`stToggleTabs` / `toggleStArea`），**改一个不修另一个**。⚠ **量得没错但量错了对象 = 没量。**
 - **文档 `G:\saki\markdown\`**：`README.md` + `01…06` + `CHANGELOG.md`（**最新在上**）。改功能要同步分册 + CHANGELOG + README 计数。
 - ⚠ **行号与「共 N 个」都会静默漂** ⇒ 计数一律**从源码枚举**；⚠ **往 `<head>` 插 CSS 会让后面锚点整体后移** ⇒ **别靠加法算，重新 `grep`**（核对交 `_verify/_audit-anchors.js`）。⚠ **同一个数常有多种载体**（README / 分册 / **产品注释** / 历史日志），**产品注释里的数字对所有静态检查隐身**。⚠ **节号会撞号** ⇒ `_verify/_audit-sections.js`（范围**同一父节内**）。
-- **两处 `_verify`**：`G:\saki\_verify\`（**16 套**，零依赖）+ `C:\Users\YanSaki\WorkBuddy AI\2026-09-17-00-10-39\_verify\`（8 层，要 `NODE_PATH=…/node/workspace/node_modules`）。⚠ **条数会每轮涨** ⇒ **现量 / 见 `README` §7 表**，别抄；同名不同地，各用各的 `run-all.js`。
+- **两处 `_verify`**：`G:\saki\_verify\`（**17 套**，零依赖）+ `C:\Users\YanSaki\WorkBuddy AI\2026-09-17-00-10-39\_verify\`（8 层，要 `NODE_PATH=…/node/workspace/node_modules`）。⚠ **条数会每轮涨** ⇒ **现量 / 见 `README` §7 表**，别抄；同名不同地，各用各的 `run-all.js`。
 - ⚠ **生成物不进仓库**（**产物用完就删**）—— **留两份就一定有一份是错的**。⚠ 临时 profile 残留用 `_verify/_purge-tmp.js` 数（**默认只数，`--go` 才删**）。⚠ **过滤「存什么 / 传什么」一律白名单**，但**白名单自己也会漏** ⇒ **旁边必须配「未收录项」报告**。⚠ 注释中文、讲「为什么」，坑写成 `⚠` 留在代码里。
 - ⚠ **`markdown/` 里有 5 份镜像**（`MEMORY.md` / `RULES.md` / `YYYY-MM-DD.md` / `SKILL.md` / `SKILL-git-push.md`）；**源在 `.workbuddy-ai/memory/` 与 `~/.workbuddy-ai/skills/`**。**先写完日志再同步**，`cp` 后 `cmp` 逐字节核对；**新设备用 `setup-dev.sh` 装回**。
 - ⚠⚠ **`git push` 绿 + 远端 blob 一致 ≠ 上线了** —— 唯一判据是**线上字节的 sha1**；⚠ **刚推完立刻查线上会 CDN 假红**；⚠ `cancelled` 且 **0 个 job** = 多条 workflow 抢同一个 `concurrency` 组互掐（六之二十）。
 - **Git**：`G:\saki` → `github.com/MuyueJusan/YanSaki`（**公开**，`yansaki.top` 的 Pages，`build_type=workflow` ⇒ 靠 `static.yml` 部署，**`CNAME` 与 workflow 都不能删**）。`.workbuddy-ai/` **永不入库**。⚠ **`index.html` 是发布用副本**，推前必须同步。⚠⚠ **转私有会让 Pages 变 404，转回公开也不自动恢复**。
-- ⚠ **Edit 报成功 ≠ 落盘**（踩过**十二次**）。⚠ 两形态：① 「插入」时把 `old_string` 写成锚点行本身 ⇒ **锚点行整条被替换掉** ⇒ **「插入」要把锚点行也抄进 `new_string`**；② 同一文件连发多条 Edit **全报成功、一条没落盘** ⇒ **改完立刻 `grep` 回读那一处**。⚠ **同一处改动分散在多个调用点最容易漏**；**文档 / 记忆也一样** → **一条一条发**。
+- ⚠ **Edit 报成功 ≠ 落盘**（踩过**十三次**）。⚠ 两形态：① 「插入」时把 `old_string` 写成锚点行本身 ⇒ **锚点行整条被替换掉** ⇒ **「插入」要把锚点行也抄进 `new_string`** —— ⚠⚠ **文档上一样成立、而且更隐蔽**：`CHANGELOG` 的段头连同分隔线被吃掉，文件照样解析、看着完全正常，**只有 `grep "^## "` 数段头才发现**（六之三十二）；② 同一文件连发多条 Edit **全报成功、一条没落盘** ⇒ **改完立刻 `grep` 回读那一处**。⚠ **同一处改动分散在多个调用点最容易漏**；**文档 / 记忆也一样** → **一条一条发**。
 
 ## ②–⑦ 索引（⚠ 抄一份就会跟 `RULES.md` 分叉 ⇒ 动到哪块先读对应那节）
 
