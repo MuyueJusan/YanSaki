@@ -34,7 +34,12 @@ const branchArg = process.argv.find(a => a.startsWith('--branch='));
 const BRANCH = branchArg ? branchArg.split('=')[1] : 'main';
 
 const git = (...a) => cp.execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();
-const gitBuf = (...a) => cp.execFileSync('git', a, { cwd: ROOT, encoding: 'buffer' });
+// ⚠⚠ `maxBuffer` 必须显式给：`execFileSync` 默认只有 **1 MB**，而 `saki.html` / `index.html`
+//   都是 **1.5 MB** 上下 ⇒ 读它们自己的 blob 时 `spawnSync` 直接 `ENOBUFS` + `SIGTERM`
+//   （报错长得像「git 挂了」，其实是 Node 把管道掐了）。
+//   2026-09-23 实测：推到 `M index.html → blob …` 这一步就崩，栈顶是 `gitBuf`。
+//   ⇒ **凡是用 `execFileSync` 读「可能很大的文件内容」的地方，都要给 maxBuffer。**
+const gitBuf = (...a) => cp.execFileSync('git', a, { cwd: ROOT, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
 
 function token() {
     if (!fs.existsSync(CRED)) return null;

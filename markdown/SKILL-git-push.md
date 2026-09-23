@@ -285,6 +285,21 @@ const iso = new Date((epoch + off * 60) * 1000)
 ⚠ **Make it default to dry-run.** A script that writes to a remote should not write by default
 (same principle as a cleanup script defaulting to "count only").
 
+⚠⚠ **`execFileSync` defaults to a 1 MB `maxBuffer` — and you are about to read multi-megabyte blobs.**
+This bit the implementation on a later real use: `git cat-file blob <sha>:index.html` for a **1.5 MB**
+file blew up with `spawnSync git ENOBUFS` + `SIGTERM`, which reads like "git crashed" but is really
+Node cutting the pipe. The stack pointed at the *helper*, not at the API call, so a quick skim of the
+log is misleading. Give the buffer helper an explicit ceiling:
+
+```js
+const gitBuf = (...a) =>
+  execFileSync("git", a, { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 });
+```
+
+⚠ It only bites **the first time a large file actually changes** — if that blob is already on the
+remote, nothing reads it and the script looks perfectly healthy. **"It worked last time" is not
+evidence**; check the ceiling while you are writing the script, not while you are debugging it.
+
 A working implementation lives at `_verify/api-push.js` in the `G:\saki` project — it handles a
 whole chain of pending commits, gates on every sha, and refuses to move the ref unless the final
 commit sha equals the local one. Verified end-to-end: blob, tree and commit shas all matched,
