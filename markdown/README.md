@@ -135,8 +135,25 @@ bash setup-dev.sh --go --force # 连已存在的也覆盖（在别的设备上�
 
 ⚠⚠ **`CNAME` 和 `static.yml` 都不能删** —— 删了域名断、站点不再更新。
 ⚠ 另外两条 workflow（`hugo.yml` / `jekyll-gh-pages.yml`）是 GitHub 建 Pages 时自动塞进来的**废件**：
-`hugo.yml` **0 成 9 败**、`jekyll-gh-pages.yml` 3 成 5 败，每次 push 都跑、都红，
-还跟 `static.yml` 抢同一个 concurrency group 互相取消。**留着纯噪声，删掉不影响部署。**
+`hugo.yml` **0 成 9 败**、`jekyll-gh-pages.yml` 3 成 5 败，每次 push 都跑、都红。
+⚠⚠ **它们不是「纯噪声」—— 会真的把部署掐掉。** 三条 workflow **全部**
+`on: push: branches:["main"]`、**全部** `concurrency: { group: "pages", cancel-in-progress: false }`；
+而 GitHub 的语义是**新进入同一组的 run 会取消「已在排队（pending）」的那个**
+（`cancel-in-progress: false` 只保证不打断**正在跑**的）⇒ 一次 push 同时触发三条 ⇒ **互相取消**，
+谁恰好在 pending 谁死（实测两次：`68e9d84` / `4002051`，run 从 created 到 updated 只差 **1 秒**）。
+**症状是「推送成功、线上没变」**，很容易误判成 CDN 缓存。
+**判据**：被取消的 run `GET /actions/runs/<id>/jobs` 返回 **`total_count: 0`**
+（一条 job 都没调度 ⇒ **不是**构建失败），且 `GET /deployments` 里最新那条**还停在更早的 sha**
+（排队阶段被取消**根本不会创建 deployment**）。
+**解锁**：`POST /actions/workflows/static.yml/dispatches {"ref":"main"}` ——
+`workflow_dispatch` 只触发被点的那一条，独占并发组（实测 21 秒、7 个 step 全绿）。
+**真正的修法是把这两条删掉**；⚠ 删之前先问（删掉会连带清掉它们的历史记录）。
+诊断工具 `_verify/deploy-check.js`（只读）；细节见 `SKILL-git-push.md` §9 与 `RULES.md` 六之二十。
+
+> ⚠⚠ **`git push` 绿 + 远端 blob 一致，只证明「仓库对了」，不证明「站点对了」。**
+> 唯一的判据是**线上那个文件的字节算 sha1，跟本地比**：
+> `node _verify/deploy-check.js`（线上 `index.html` vs 本地，逐字节；`--runs` 顺带查 Actions / deployment）。
+> ⚠ 别用 HEAD 请求比字节数 —— HEAD 的 `content-length` 是压缩后的，要 GET。
 
 **行尾**：`.gitattributes` 写死 `* -text`，**外加**本地 `core.autocrlf=false`，两道都要。
 本仓库**混行尾**（`saki.html` / `index.html` 纯 CRLF；`markdown/` / `_verify/` 纯 LF），
@@ -604,6 +621,7 @@ N="C:/Users/YanSaki/.workbuddy-ai/binaries/node/versions/22.22.2-2/node.exe"
 | `shots/` | **探针 / 套件的产物**：截图（`.png`）与对比用的 HTML（`.html`）。⚠ 现在里面有 **57 个 png + 9 个 html**（快照，2026-09-21） —— 都**不是输入**，删掉不影响任何检查，重跑对应脚本会再生成。⚠ 别把它当「目录里只有 `.js`」——**一次性探针的产出全在这儿**，找截图先来这儿，别在 `_verify/` 根下 `ls *.png`（那里一个都没有） |
 | `_purge-tmp.js` | **数 / 清临时 profile 残留**：`node _purge-tmp.js` 只数，`--go` 才真删（**默认不删是故意的** —— 会删东西的脚本不该把「删」设成默认动作）。⚠ 只认本仓库造过的 **12 个**前缀白名单（`cdp-` / `diag-` / `diagth-` / `font-` / `fontd-` / `fontpx-` / `fontv-` / `fontvar-` / `probe-sb-` / `pbtn-` / `pfnt-` / `dbg-`），且必须是 `os.tmpdir()` 下的目录 —— **绝不递归删 tmpdir 本身**。⚠⚠ 它还会打印**「未收录的前缀」**（tmpdir 里有、但不在白名单里的一律列出来）—— **那一道才是这份脚本真正的防线**：白名单是手写的、一定会漏，而漏掉的后果是**静默少扫一批**（见上面那段「那次全清并不全」） |
 | `_audit-counts.js` | **审计「N 个 X」这类计数断言**：挖出全仓文档里「数字 + 量词 + 名词」并按名词归组，**同一名词出现多个数字就打 ⚠**（那些是「至少有一处错」的候选）。⚠ **默认排除 `CHANGELOG.md`** —— 它是历史文本（「当时是 12 个」也是对的），拿它当当前断言会淹掉信号；要一起扫加 `--with-changelog`。⚠ 它只负责**找出候选**，判对错要回源码枚举 —— 静态检查**看不见事实** |
+| `deploy-check.js` | **线上那个页面是不是本地这一份**（只读，⚠ **不是套件** —— 它依赖网络，已登记进 `run-all.js` 的 `NOT_A_SUITE`）：GET 线上 `index.html`，跟本地 `index.html` 比 **字节数 + sha1**，顺带核 `saki.html` 跟它一不一致（⚠ 站点发的是 `index.html`，忘了 `cp` 就会在这行报出来）。加 `--runs` 再查：最近 5 次 `static.yml` 的结论（`cancelled` 会**顺带数 job** —— `total_count: 0` 就是「排队阶段被掐」，见 §1 那段）、最近 3 次 deployment、以及**当前有几条 active workflow**（> 1 就提醒逐个核 `on:` 与 `concurrency:`）。**退出码 0 = 线上与本地逐字节一致。** ⚠ 为什么需要它：`git push` 绿 + 远端 blob 一致 **只证明仓库对了，不证明站点对了**（`RULES.md` 六之二十） |
 | `_audit-anchors.js` | **核对本文件 §2 / §3 那两张行号表**（只读）：§2 断言每个 `id="X"` / 首个 `class="…X…"` **就在**表里那个行号上，§3 断言表里那些行号**必须是注释横幅开头**（漂了就报「最近的上一个横幅在 N」—— 直接给出真值）。⚠ 硬判据**抓不到「漂到了另一个横幅上」**（那种情况照样是横幅 ⇒ 照样 ✅），所以补一道**软提示**：区块名跟横幅正文**共享不到 2 个字** ⇒ 打 ⚠（**不计入失败、不影响退出码**；门槛跟名字长度挂钩，否则「名字里只剩 1 个中文字」会变成永远在报的检查）。⚠ 判据用「共享字」不用「整串包含」—— 表里的名字是**编者概括**，实测「可折叠字段」vs 横幅「可折叠**的**字段（…）」、「浮层复古皮肤」vs「复古皮肤：浮层…」两处都栽在这上面。⚠ **往 `<head>` 插一段 CSS 会让后面所有锚点整体后移，而且同一张表里可能有两种位移**（实测 §3 里 `2424→2444` 是 **+20**、`2580→2621` 是 **+41** 并存）⇒ **别靠加法算，跑它**。⚠ 它只管「行号对不对」，不管「这一节该不该在这儿」——**语义仍要人看** |
 
 > ⚠⚠ **历史状态（2026-09-20 审查时）：每一套 CDP 套件都会在系统临时目录里留一个 Chrome profile，

@@ -51,6 +51,9 @@ const NOT_A_SUITE = [
                           //   留着过期的生成物才是坑：检查会**对着旧代码给答案**。
     'extract.js',         // 从 saki.html 抽出内联 <script> 写到 blk0.js（**临时分析用**，产物用完就删）
     'run-all.js',         // 就是本文件（跑全部套件的 runner）
+    'deploy-check.js',    // **只读**：线上 index.html 跟本地是不是逐字节一致（+ `--runs` 查 Actions /
+                          //   deployment / workflow 条数）。⚠ 不是套件：它依赖网络，不该进整跑。
+                          //   起因见 RULES.md 六之二十：`git push` 绿 + 远端 blob 一致 **≠ 上线了**。
     'sb-diag.js', 'sb-diag3.js', 'sb-diag5.js', 'sb-diag-class.js',  // 一次性诊断
     'sb-shot-color.js', 'sb-zoom.js', 'sb-zoom5.js'                  // 一次性截图 / 探针
 ];
