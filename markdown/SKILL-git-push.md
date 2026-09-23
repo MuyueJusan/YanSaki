@@ -186,6 +186,20 @@ git. Run the push on its own, or read `${PIPESTATUS[0]}`.
 `Empty reply from server` / `CONNECT tunnel failed, response 502`. Retry; a push that already
 printed `old..new  main -> main` succeeded server-side.
 
+⚠⚠ **Don't put backticks in a double-quoted `git commit -m "..."`.** The shell performs command
+substitution *before* git ever sees the string, so `` `1.` `` becomes "run the command `1.`" —
+which fails with `command not found` and **silently leaves an empty gap in the message**. Observed:
+
+```
+git commit -m "补 D：注入 `1.` `3.` `5.`（跳号）⇒ …"
+  → bash.exe: line 1: 1.: command not found
+  → the stored message reads:  补 D：注入   （跳号）⇒ …
+```
+
+The push still succeeds, so nothing tells you the message was mangled. Either use **single quotes**
+for `-m`, or (better, for anything multi-line or containing code) write the message to a file and
+use `git commit -F <file>`. Same trap applies to `$`, `!`, and `\` in double quotes.
+
 ### When the git transport is blocked, verify over the REST API
 
 `api.github.com` often works when git-over-HTTPS does not, and it needs **no token for a public
