@@ -2117,6 +2117,48 @@ assert(!NOT_CARD.some(n => ALL_PERMS.some(p => PERMS[p].includes(n))));  // 确�
 familiar — "oh, another exception" — and you add it to the skip list instead of fixing the bug.
 An unnamed exception in a derived assertion is how the assertion quietly dies.
 
+### Moving an item (not adding one) has its own three shapes — two of them never turn red
+
+The section above is about *adding* a thing. **Reordering** an existing one is a different job:
+count-bound assertions don't care, but order-bound ones do — and again only some of them turn red.
+
+| shape | example | turns red? |
+|---|---|---|
+| walk list is a **literal array** | `for (const [id, marker] of [['a','#a'], …])` | ❌ **no** — the moved item isn't in it; you silently cover one item fewer |
+| **substring regex** | `/sb,code,export/.test(ids.join(','))` | ❌ **no** — see below |
+| **hard-coded adjacency** | `pi - di === 1` | ✅ yes |
+
+The substring one is the sneaky one. Move `persona` between `code` and `export` and the joined id
+string becomes `…,sb,code,persona,export,…` — `/sb,code,export/` **still matches**, because the
+substring `sb,code` is intact and the regex never looks past `export`. Nothing goes red; the item
+is just **dropped out of coverage**. Fix: enumerate the whole run (`/sb,code,persona,export/`), and
+put what you're watching into the assertion *name* (`'code sits between sb and export, persona
+right after it'`) so the next person knows which line to touch.
+
+⚠ **Don't write an order assertion as "is this substring present".** Either enumerate the full run,
+or assert adjacency (`indexOf(b) - indexOf(a) === 1`).
+
+The adjacency form *does* go red — but changing the number isn't enough. `pi - ci === 1` only says
+"next to `code`"; it says nothing about having *left* `desc`. So pair it with a control:
+
+```js
+check('it sits right after `code`',        pi - ci, 1, 1);
+check('it is NOT next to `desc` any more', pi - di, v => v !== 1, '≠1');   // ← the control
+```
+
+Without the control, a no-op reorder (the item left exactly where it was) still reads green.
+
+⚠ **The predicate occupies one slot; only one "expected for humans" value follows it.** Getting the
+arity wrong is easy: a `check(name, actual, pred, expect)` helper takes **4** args, so writing the
+control in the positive assertion's shape —
+`check(name, pi - di, 1, v => v !== 1, '≠1')` — silently makes `pred` the literal `1`, and the
+assertion ends up comparing `11 === 1`. It does go red — but only because the two numbers happened
+to differ. **Read your helper's signature before copying an assertion's shape.**
+
+⚠ Same family as the count case: a hard-coded item count also lives in **user-visible copy** and in
+**code comments** ("the 14 tabs on the left…"). Static checks never read comments — `grep` is the
+only thing that finds them.
+
 ### A setter that defaults a missing parameter to empty silently wipes the field
 
 A data-loss bug that no happy-path test will ever find, because the call *succeeds*:
@@ -3823,6 +3865,53 @@ harness (await the font), not in the CSS.
 This is the *"measuring the right thing"* family: `getBoundingClientRect().height` of a text-bearing
 control is `line-box + padding + border`, so it inherits every font-swap. Any assertion whose margin
 is smaller than the font's line-height delta is a coin flip.
+
+### Your `check(actual, expected)` helper compares with `===` — so array/object expectations are *always* false
+
+The tiny assertion helper is the first thing you write and the last thing you question:
+
+```js
+const check = (name, actual, pred, expect) => {
+  const ok = typeof pred === 'function' ? pred(actual) : actual === pred;
+  ...
+};
+```
+
+That `actual === pred` branch is **reference equality**. Hand it an array or an object and the assertion
+can never pass — while the failure line prints `actual=[…]  expect=[…]` with the two sides **looking
+identical**. It reads exactly like a product bug, and it is not.
+
+Four assertions died this way in one round: `[] === []` (three of them) plus a 36-element label array that
+matched character for character. Two fixes, both fine:
+
+- pass a predicate — `check('count matches', got, v => JSON.stringify(v) === JSON.stringify(exp), exp)`
+- or make the helper itself deep — `typeof pred === 'function' ? pred(actual) : JSON.stringify(actual) === JSON.stringify(pred)`
+
+Symptom to memorise: **the expectation and the actual value are visibly the same, and it is still red.**
+
+### "It's loaded lazily" — reset the memo first, because rendering the thing under test already loaded it
+
+Asserting a lazy read is easy to get wrong in a way that *looks* like it works:
+
+```js
+await reload();            // fresh page: the field is null
+await openThePane();       // ← rendering the pane calls the getter, which populates it
+check('still null', await ev('state.field'), null);   // ❌ always red, for a boring reason
+```
+
+By the time you can *observe* the value, the observation path has already exercised the code you meant to
+test. Don't drop the assertion — make the setup do the work:
+
+```js
+await ev('state.field = null');                        // force it back to "not read yet"
+check('reads back from storage', await ev('getter()'), expected);
+```
+
+Generalises to any "was it computed on demand?" claim: **reset the memo, then call.** The same trap runs the
+other way too — a pane that computes a label at *build* time won't reflect a config change until it is
+re-rendered, so "the status line says X" needs a `rerender()` between the change and the check (asserting
+without one silently reads the *previous* render's value, which is how one more assertion went red for a
+non-product reason).
 
 ---
 

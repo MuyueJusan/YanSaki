@@ -777,7 +777,7 @@ const MOCK_SRC = `
 
     // ================= I. 面板 =================
     section('I. 面板渲染');
-    check('选项卡数量变成 14', await ev(`document.querySelectorAll('#st-tabs .st-tab').length`), 14);
+    check('选项卡数量变成 15', await ev(`document.querySelectorAll('#st-tabs .st-tab').length`), 15);
     check('选项卡里有「AI 助手」', await ev(`!!Array.from(document.querySelectorAll('#st-tabs .st-tab'))
       .find(b => /AI 助手/.test(b.textContent))`), true);
 

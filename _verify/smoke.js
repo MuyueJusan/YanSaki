@@ -1,4 +1,4 @@
-// 全应用冒烟：改过 stSet 之后，确认 14 个选项卡都还能渲染、零 console 报错
+// 全应用冒烟：改过 stSet 之后，确认 15 个选项卡都还能渲染、零 console 报错
 const fs = require('fs'); const os = require('os'); const path = require('path');
 const http = require('http'); const { spawn } = require('child_process');
 const PAGE_FILE = 'G:/saki/saki.html';
@@ -153,13 +153,13 @@ function check(name, actual, pred, expect) {
   await ev('toggleStArea()');
   await sleep(600);
 
-  console.log('== 编写器：14 个选项卡逐个切 ==');
+  console.log('== 编写器：15 个选项卡逐个切 ==');
   await ev('openStEditor()');
   const tabs = await ev(`(function(){ const out = [];
     document.querySelectorAll('[onclick*="stSwitchTab"]').forEach(el => {
       const m = /stSwitchTab\\('([^']+)'\\)/.exec(el.getAttribute('onclick')); if (m) out.push(m[1]); });
     return out; })()`);
-  check('选项卡数量 14', tabs.length, 14);
+  check('选项卡数量 15', tabs.length, 15);
   for (const t of tabs) {
     let r;
     try { r = await ev(`(function(){ stSwitchTab(${JSON.stringify(t)});

@@ -28,14 +28,17 @@ const path = require('path');
 
 const DIR = __dirname;
 const NODE = process.execPath;              // 用当前这个 node，别写死路径
-const TIMEOUT_MS = 4 * 60 * 1000;           // 单套上限。慢的是走 CDP 的那几套
+const TIMEOUT_MS = 15 * 60 * 1000;          // 单套上限。⚠ 别再往小里调：慢的是走 CDP 的那几套，
+                                            //   而**被截断的套件跟「通过了」长得一模一样**
+                                            //   （汇总行照样打得出来）—— 宁可等，不许切
 
-// 15 套回归测试。**顺序就是打印顺序**：静态检查放最前（最快、也最先能拦住东西）。
+// 16 套回归测试。**顺序就是打印顺序**：静态检查放最前（最快、也最先能拦住东西）。
 const SUITES = [
     'check.js',
     'sb-verify.js', 'sb-verify2.js', 'sb-verify3.js', 'sb-verify4.js',
     'sb-verify5.js', 'sb-verify6.js', 'sb-verify7.js', 'sb-verify8.js',
     'sb-verify9.js',
+    'persona-verify.js',
     'game-verify.js',
     'st-ai.js', 'st-code.js', 'sb-keep-compare.js', 'smoke.js'
 ];

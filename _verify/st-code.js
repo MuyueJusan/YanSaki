@@ -322,9 +322,12 @@ const MOCK_SRC = `
     // ================= A. 接线与布局 =================
     section('A. 接线与布局');
     check('选项卡里有 code', await ev(`ST_TABS.some(t => t.id === 'code')`), true);
-    check('code 排在 sb 和 export 之间',
-      await ev(`ST_TABS.map(t => t.id).join(',')`), v => /sb,code,export/.test(v), 'sb,code,export');
-    check('选项卡总数 14', await ev(`ST_TABS.length`), 14);
+    // ⚠ 这条原来是 /sb,code,export/ —— persona 插进 code 后面之后，那个正则**照样匹配**
+    //   （`sb,code` 还在，子串对得上），正则跑到 export 就不再看后面 ⇒ 等于把 persona
+    //   从覆盖里静默漏掉。改成显式列出整段，多一个选项卡就当场红。
+    check('code 排在 sb 和 export 之间、persona 紧跟其后',
+      await ev(`ST_TABS.map(t => t.id).join(',')`), v => /sb,code,persona,export/.test(v), 'sb,code,persona,export');
+    check('选项卡总数 15', await ev(`ST_TABS.length`), 15);
 
     await ev('openStEditor()');
     await sleep(200);

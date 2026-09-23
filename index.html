@@ -2382,7 +2382,7 @@
         /* ==========================================================================
            SillyTavern 角色卡编写器
              · 页面上是一个普通折叠卡片，点标题 / ⛶ 全屏打开
-             · 全屏浮层里左侧是十四个选项卡，可以折叠成一条图标栏
+             · 全屏浮层里左侧是十五个选项卡，可以折叠成一条图标栏
            ========================================================================== */
         .st-container { overflow: visible; }
 
@@ -5522,9 +5522,10 @@
         <div class="ai-collapse-wrapper">
             <div class="ai-collapse-inner">
                 <div class="ai-hint st-card-hint">
-                    新建一张卡，或者把已有的 PNG / JSON 卡导进来改写。左侧九个选项卡分别管
+                    新建一张卡，或者把已有的 PNG / JSON 卡导进来改写。左侧十五个选项卡分别管
                     <b>名字</b> / <b>类型</b> / <b>角色描述</b> / <b>系统提示词</b> / <b>元信息</b> /
-                    <b>世界书</b> / <b>开场白</b> / <b>正则</b> / <b>导出</b>，
+                    <b>AI 助手</b> / <b>世界书</b> / <b>开场白</b> / <b>正则</b> / <b>酒馆助手</b> /
+                    <b>MVU</b> / <b>状态栏</b> / <b>Code</b> / <b>人设生成器</b> / <b>导出</b>，
                     最后能写成 <b>PNG 角色卡</b>（<code>chara</code> / <code>ccv3</code> 数据块）或 <b>JSON</b>。
                     选项卡栏可以折叠成一条图标。
                 </div>
@@ -15265,7 +15266,7 @@
 
         // ==========================================================================
         // 角色卡编写器：UI
-        //   左侧九个选项卡（可以折叠成一条图标栏），右侧是当前选项卡的内容。
+        //   左侧十五个选项卡（可以折叠成一条图标栏），右侧是当前选项卡的内容。
         //   文本输入走 stSet() 只改状态、不重画 —— 否则每敲一个字都会丢焦点；
         //   只有结构变化（换规格、换位置、增删条目）才整块重画，重画前把焦点和
         //   光标位置记下来，画完还回去。
@@ -15285,6 +15286,9 @@
             { id: 'mvu', ico: '🧮', label: 'MVU' },
             { id: 'sb', ico: '🎨', label: '状态栏' },
             { id: 'code', ico: '⌨', label: 'Code' },
+            // ⚠ 人设生成器**排在 Code 后面**（用户指定的位置）。别按「它产出的东西是角色描述」
+            //   顺手挪回 `desc` 旁边 —— 那是个看起来更合理的错位。
+            { id: 'persona', ico: '🎭', label: '人设生成器' },
             { id: 'export', ico: '💾', label: '导出' }
         ];
 
@@ -15322,6 +15326,16 @@
             //   而且忙态必须扛得过 stRerender，否则「生成中…」一重绘就没了
             sbPfAiDesc: '',
             sbPfAiBusy: false,
+            // —— 人设生成器 ——
+            // ⚠ 同 sbPfName / sbPfAiDesc 那条理由：面板参数不能只活在 DOM 里，
+            //   stRerender 会把整个 pane 重建，只写在 input 上的话一切页就没了；
+            //   忙态也必须扛得过重绘，否则「生成中…」一重绘就变回「生成人设」
+            personaReq: '',      // 用户写的设定 / 要求
+            personaOut: '',      // 生成结果（可编辑，要用户点「写入」才进卡）
+            personaBusy: false,
+            // 自定义模板。**null = 还没从 localStorage 读过**（懒加载，见 stPersonaTpl()）——
+            // 初始化成 '' 的话那个「读过没有」的判断就永远成立，自定义模板永远读不出来
+            personaTpl: null,
             // 画布上的拖动是「自由摆放（像素级）」还是「结构排序（换顺序）」。
             // **默认自由摆放** —— 「像编辑 ppt 一样」的默认动作就是把东西拖到想放的
             // 地方，而不是让编辑器猜「你想插到第几行」
@@ -15625,6 +15639,7 @@
             switch (tab) {
                 case 'spec': return stPaneSpec();
                 case 'desc': return stPaneDesc();
+                case 'persona': return stPanePersona();
                 case 'sys': return stPaneSys();
                 case 'meta': return stPaneMeta();
                 case 'ai': return stPaneAi();
@@ -21924,6 +21939,360 @@
                         id: 'mes', rows: 8,
                         ph: '<START>\n{{user}}: 你好\n{{char}}: 嗯。'
                     }) +
+                '</div>';
+        }
+
+        // ==========================================================================
+        // 编写器 · 人设生成器
+        //
+        // 写一句设定，让 AI 按一份**模板**逐项填好，生成一整份人设。
+        //
+        // 三个设计决定：
+        // ① 模板**可改、存浏览器本地**（localStorage 键 stPersonaTpl），**不写进卡** ——
+        //    跟 AI 配置同一条理由：它是用户自己的偏好，不是角色卡的一部分。
+        // ② 生成结果**不自动进卡**。先在预览格里给你看、可以手改，点「写入」才进角色描述 ——
+        //    「生成的东西必须先能反悔」，跟「AI 生成预制块」同一条规矩。
+        // ③ 写入前如果角色描述非空，**弹 confirm**。覆盖别人手写的内容是这一族里最不可逆的
+        //    动作，不能静默做；追加那条路不用问（它不破坏已有内容）。
+        // ==========================================================================
+
+        const ST_PERSONA_TPL_KEY = 'stPersonaTpl';
+        const ST_PERSONA_REQ_MAX = 2000;
+        const ST_PERSONA_TPL_MAX = 8000;
+        const ST_PERSONA_OUT_MAX = 20000;
+
+        // 默认模板。**逐字照用户给的那一份**，半角 / 全角冒号混用是原文如此 ——
+        // 别「顺手统一」成一种：它是给人看的填空稿，用户自己写的那份才是准的。
+        // ⚠ 这份常量同时也是「恢复默认模板」的目标，改它等于改默认值。
+        const ST_PERSONA_TPL_DEFAULT = [
+            '基本信息:',
+            '姓名:',
+            '年龄:',
+            '性别:',
+            '身高:',
+            '身份:',
+            '背景故事:',
+            '外貌:',
+            '发型:',
+            '眼睛:',
+            '肤色:',
+            '脸型:',
+            '体型:',
+            '三围：',
+            '气味：',
+            '衣着风格:',
+            '校园/工作的日常装：',
+            '- 风格：',
+            '- 标志性穿着：',
+            '- 配饰习惯：',
+            '休闲装:',
+            '- 风格：',
+            '- 标志性穿着：',
+            '- 配饰习惯：',
+            '居家服:',
+            '- 风格：',
+            '- 标志性穿着：',
+            '- 配饰习惯：',
+            '泳装：',
+            '内衣：',
+            '性格:',
+            '核心特质:',
+            '恋爱特质:',
+            '生活习惯:',
+            '情绪表现:',
+            '愤怒时:',
+            '高兴时:',
+            '缺点弱点:',
+            '喜好厌恶:',
+            '喜欢:',
+            '讨厌:',
+            '补充：'
+        ].join('\n');
+
+        // 懒加载：只有「没读过」才去读 localStorage。
+        // 空串 = 没自定义过 ⇒ 用默认（所以清空模板 = 回到默认，不是「用空模板」）
+        function stPersonaTpl() {
+            if (typeof stEditor.personaTpl !== 'string') {
+                let v = null;
+                try { v = localStorage.getItem(ST_PERSONA_TPL_KEY); } catch (e) {}
+                stEditor.personaTpl = (typeof v === 'string' && v.trim())
+                    ? v : ST_PERSONA_TPL_DEFAULT;
+            }
+            // ⚠ 内存里是空串时也要**回落默认**。用户把框清空 → stPersonaTplSet 把键删了，
+            //   但内存里留下一个 ''；如果这里原样返回它，面板上会同时出现三种互相矛盾的说法：
+            //   标签写「（默认）」（它问的是 localStorage）、框里是空的、点生成又报「模板是空的」。
+            //   回落之后三者一致 —— 这也正是 hint 承诺的那句「清空 = 回到默认模板」。
+            return stEditor.personaTpl.trim() ? stEditor.personaTpl : ST_PERSONA_TPL_DEFAULT;
+        }
+
+        // 「现在用的是不是默认模板」要**问 localStorage**，不能拿当前值跟常量比 ——
+        // 用户把自定义模板改得跟默认一模一样时，前者说「已自定义」、后者说「默认」，
+        // 而「恢复默认」按下去的效果一样，两种说法都没错，但**显示要跟存储一致**
+        function stPersonaTplIsDefault() {
+            try {
+                const v = localStorage.getItem(ST_PERSONA_TPL_KEY);
+                return !(typeof v === 'string' && v.trim());
+            } catch (e) { return true; }
+        }
+
+        function stPersonaReqSet(v) {
+            stEditor.personaReq = String(v == null ? '' : v).slice(0, ST_PERSONA_REQ_MAX);
+        }
+
+        function stPersonaOutSet(v) {
+            stEditor.personaOut = String(v == null ? '' : v).slice(0, ST_PERSONA_OUT_MAX);
+        }
+
+        function stPersonaTplSet(v) {
+            const s = String(v == null ? '' : v).slice(0, ST_PERSONA_TPL_MAX);
+            stEditor.personaTpl = s;
+            // ⚠ 清空时**删键**而不是存空串 —— 存了空串，「是不是默认」就再也分不出来，
+            //   下次打开会显示一份空模板，而 AI 那边等于没模板可用
+            try {
+                if (!s.trim()) localStorage.removeItem(ST_PERSONA_TPL_KEY);
+                else localStorage.setItem(ST_PERSONA_TPL_KEY, s);
+            } catch (e) {}
+        }
+
+        function stPersonaTplReset() {
+            stEditor.personaTpl = ST_PERSONA_TPL_DEFAULT;
+            try { localStorage.removeItem(ST_PERSONA_TPL_KEY); } catch (e) {}
+            stRerender();
+            stExportMsg('✅ 模板已恢复默认（' + stPersonaLabels(ST_PERSONA_TPL_DEFAULT).length +
+                ' 项）。', 'ok');
+        }
+
+        // 从模板里数出「有哪些字段」——只认**以冒号结尾**的行（模板是空稿，值还没填）。
+        // 两个用途：① 面板上显示「N 项」；② 生成完拿它数「模型漏了几项」
+        function stPersonaLabels(tpl) {
+            const out = [];
+            String(tpl || '').split('\n').forEach(line => {
+                const m = line.match(/^[\s\-]*([^:：\n]{1,12})[:：]\s*$/);
+                if (!m) return;
+                const k = m[1].trim();
+                if (k && out.indexOf(k) < 0) out.push(k);
+            });
+            return out;
+        }
+
+        function stPersonaSysPrompt() {
+            return [
+                '你是角色卡「人设」写手。用户会给你一个设定或要求，你按**用户给的模板**逐项填好，',
+                '输出一整份人设。',
+                '',
+                '## 硬规则',
+                '1. **只输出填好的人设本身**。不要解释、不要寒暄、不要 ``` 围栏、不要重复模板以外的标题。',
+                '2. **严格照模板的结构和顺序**：模板里每一行都要保留，内容接在原来的冒号后面。',
+                '   形如 `姓名:` 的行 → `姓名: 艾莉丝`；以 `- ` 开头的子项**保持缩进和顺序**。',
+                '3. 模板里**没有**的字段不要自己加。用户没提到的细节你来补，但要**跟用户给的设定一致**。',
+                '4. 每一格都要写实：外貌 / 衣着那几项给具体的颜色、材质、款式，',
+                '   别写「普通」「随意」「看情况」这种空话；身高 / 三围这类数值给具体数字，别写「未知」。',
+                '5. 用中文。语气克制，不要对用户说话、不要加点评。',
+                '6. 整份长度控制在 1200 字以内。'
+            ].join('\n');
+        }
+
+        function stPersonaUserPrompt(req, tpl) {
+            const c = stEditor.card || {};
+            const ctx = [];
+            if (stStr(c.name)) ctx.push('这张卡现在的名字：' + stStr(c.name));
+            const parts = ['用户的要求：' + req, ''];
+            if (ctx.length) {
+                parts.push('## 这张卡的现状（跟它保持一致，别冲突）');
+                ctx.forEach(x => parts.push(x));
+                parts.push('');
+            }
+            parts.push('## 模板（照它的结构逐项填）');
+            parts.push(tpl);
+            return parts.join('\n');
+        }
+
+        // 模型偶尔会把整份东西包进 ``` 围栏。**只做这一种清洗** ——
+        // 再多的「智能」清洗（比如删掉开头那句「好的，这是人设：」）会顺手吃掉真正的第一行，
+        // 而那种错**看不出来**：输出照样有内容、照样能写进卡
+        function stPersonaText(raw) {
+            let s = String(raw == null ? '' : raw).replace(/\r\n/g, '\n').trim();
+            const fence = s.match(/^```[a-zA-Z]*\n([\s\S]*?)\n?```$/);
+            if (fence) s = fence[1].trim();
+            return s;
+        }
+
+        async function stPersonaRun() {
+            if (stEditor.personaBusy) return;
+            if (!stEditor.card) return;
+            const req = String(stEditor.personaReq || '').trim();
+            if (!req) {
+                stExportMsg('⚠ 先写一句你想要什么（例如「冷淡的吸血鬼女仆，喜欢红茶」）。', 'warn');
+                const el = document.getElementById('st-persona-req');
+                if (el) { try { el.focus(); } catch (e) {} }
+                return;
+            }
+            const tpl = String(stPersonaTpl() || '').trim();
+            if (!tpl) {
+                stExportMsg('⚠ 模板是空的 —— 点「恢复默认模板」，或者自己写一份（每行以冒号结尾）。', 'warn');
+                return;
+            }
+            const cfg = stAiCfg();
+            const ready = stAiReady(cfg);
+            if (!ready.ok) {
+                stExportMsg('⚠ ' + ready.why, 'warn');
+                return;
+            }
+            stEditor.personaBusy = true;
+            stRerender();
+            stExportMsg('⏳ 正在让 AI 生成人设…', '');
+            let text = '';
+            try {
+                text = await stAiChat([
+                    { role: 'system', content: stPersonaSysPrompt() },
+                    { role: 'user', content: stPersonaUserPrompt(req, tpl) }
+                ], {
+                    cfg: cfg, stream: false,
+                    temperature: cfg.temperature,
+                    // 人设比预制块长得多，下限给到 2048
+                    maxTokens: Math.max(2048, cfg.maxTokens)
+                });
+            } catch (e) {
+                stEditor.personaBusy = false;
+                stRerender();
+                stExportMsg('❌ AI 生成失败：' + stAiErrText(e), 'bad');
+                return;
+            }
+            stEditor.personaBusy = false;
+            const out = stPersonaText(text).slice(0, ST_PERSONA_OUT_MAX);
+            if (!out) {
+                stRerender();
+                stExportMsg('❌ 模型返回了空内容。换个说法再试一次。', 'bad');
+                return;
+            }
+            stEditor.personaOut = out;
+            stRerender();
+            // 「对上了几项」—— 跟预制块那边报「几条路径对得上」同一个口径：
+            // 只说「成功」的话，模型悄悄改写了标题用户是看不见的
+            const labels = stPersonaLabels(tpl);
+            const hit = labels.filter(k => out.indexOf(k) >= 0).length;
+            const miss = labels.length - hit;
+            stExportMsg('✅ 生成了 ' + out.length + ' 字符' +
+                (labels.length ? '；模板 ' + labels.length + ' 项里对上了 ' + hit + ' 项' : '') +
+                (miss ? '（' + miss + ' 项没出现 —— 模型可能改写了标题，先看一眼再写入）' : '') +
+                '。', miss ? 'warn' : 'ok');
+        }
+
+        function stPersonaApply(mode) {
+            const out = String(stEditor.personaOut || '').trim();
+            if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn'); return; }
+            if (!stEditor.card) return;
+            const cur = stStr(stEditor.card.description);
+            if (mode === 'append') {
+                // 描述本来是空的就当成写入 —— 不然会留一个空行开头
+                if (!cur.trim()) { stPersonaApply('replace'); return; }
+                stSet('card.description', cur.replace(/\s+$/, '') + '\n\n' + out);
+                stExportMsg('✅ 已追加到角色描述（现在 ' +
+                    stStr(stEditor.card.description).length + ' 字符）。', 'ok');
+                return;
+            }
+            if (cur.trim() && !window.confirm('角色描述里已经有 ' + cur.length +
+                ' 个字符，「写入」会**整个替换**掉它。要继续吗？')) {
+                stExportMsg('已取消 —— 角色描述没动。', 'warn');
+                return;
+            }
+            stSet('card.description', out);
+            stExportMsg('✅ 已写入角色描述（' + out.length + ' 字符）。', 'ok');
+        }
+
+        function stPersonaCopy() {
+            const out = String(stEditor.personaOut || '');
+            if (!out) { stExportMsg('⚠ 还没有生成结果。', 'warn'); return; }
+            const done = ok => stExportMsg(ok
+                ? '✅ 已复制（' + out.length + ' 字符）。'
+                : '复制失败，请手动选中预览框里的文字。', ok ? 'ok' : 'warn');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(out).then(() => done(true), () => done(false));
+                return;
+            }
+            // headless / 非安全上下文里 navigator.clipboard 可能没有，退回老路
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = out;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                const ok = document.execCommand('copy');
+                ta.remove();
+                done(ok);
+            } catch (e) { done(false); }
+        }
+
+        function stPanePersona() {
+            const busy = stEditor.personaBusy === true;
+            const tpl = stPersonaTpl();
+            const out = String(stEditor.personaOut || '');
+            const cfg = stAiCfg();
+            const ready = stAiReady(cfg);
+            const custom = !stPersonaTplIsDefault();
+            const labels = stPersonaLabels(tpl);
+            const hit = out ? labels.filter(k => out.indexOf(k) >= 0).length : 0;
+            return stPaneHead('🎭 人设生成器',
+                '写一句设定或要求，AI 按下面这份<b>模板</b>逐项填好，生成一整份人设。' +
+                '模板可以换成你自己的（存在浏览器本地，<b>不写进卡</b>）；' +
+                '生成结果先给你过目、可以直接改，点<b>写入</b>才进角色描述。') +
+                '<div class="st-sub">你想要什么</div>' +
+                '<div class="st-field st-wide">' +
+                    '<label for="st-persona-req">设定 / 要求 ' +
+                        '<span class="st-hint-inline">写人设的由头，越具体越准</span></label>' +
+                    '<textarea id="st-persona-req" rows="3"' +
+                        ' placeholder="例如：冷淡的吸血鬼女仆，喜欢红茶，讨厌阳光，说话很短"' +
+                        ' oninput="stPersonaReqSet(this.value)">' +
+                        escapeHtml(stEditor.personaReq || '') + '</textarea>' +
+                '</div>' +
+                '<div class="st-sub">模板' + (custom ? '（已自定义）' : '（默认）') + '</div>' +
+                '<div class="st-field st-wide">' +
+                    '<label for="st-persona-tpl">模板内容 ' +
+                        '<span class="st-hint-inline">' + labels.length +
+                        ' 项 · 清空 = 回到默认模板</span></label>' +
+                    '<textarea id="st-persona-tpl" rows="14"' +
+                        ' oninput="stPersonaTplSet(this.value)">' +
+                        escapeHtml(tpl) + '</textarea>' +
+                '</div>' +
+                '<div class="st-actions">' +
+                    '<button class="st-big" type="button" id="st-persona-run"' +
+                        (busy ? ' disabled' : '') + ' onclick="stPersonaRun()">' +
+                        (busy ? '⏳ 生成中…' : '✨ 生成人设') + '</button>' +
+                    '<button class="st-big st-plain" type="button" id="st-persona-tpl-reset"' +
+                        ' onclick="stPersonaTplReset()">↩ 恢复默认模板</button>' +
+                '</div>' +
+                '<div class="st-ai-status' + (ready.ok ? ' st-ok' : ' st-warn') + '"' +
+                    ' id="st-persona-ai-status">' +
+                    '当前生效：' + escapeHtml(stAiModeLabel(cfg)) +
+                    (ready.ok ? '' : '\n⚠ ' + escapeHtml(ready.why)) +
+                '</div>' +
+                '<div class="st-sub">生成结果' + (out
+                    ? '（' + out.length + ' 字符' + (labels.length
+                        ? ' · 模板 ' + labels.length + ' 项对上了 ' + hit + ' 项' : '') + '）'
+                    : '') + '</div>' +
+                (out
+                    ? '<div class="st-field st-wide">' +
+                        '<label for="st-persona-out">可以在这里直接改，改完再写入 ' +
+                            '<span class="st-hint-inline">不会自动进卡</span></label>' +
+                        '<textarea id="st-persona-out" rows="16"' +
+                            ' oninput="stPersonaOutSet(this.value)">' +
+                            escapeHtml(out) + '</textarea>' +
+                      '</div>' +
+                      '<div class="st-actions">' +
+                        '<button class="st-big" type="button" id="st-persona-write"' +
+                            ' onclick="stPersonaApply(\'replace\')">📝 写入角色描述</button>' +
+                        '<button class="st-big st-plain" type="button" id="st-persona-append"' +
+                            ' onclick="stPersonaApply(\'append\')">➕ 追加到角色描述</button>' +
+                        '<button class="st-big st-plain" type="button" id="st-persona-copy"' +
+                            ' onclick="stPersonaCopy()">📋 复制</button>' +
+                      '</div>'
+                    : '<div class="st-empty">还没有生成结果。写好要求，点上面的「✨ 生成人设」。</div>') +
+                '<div class="st-note">' +
+                    '模板里<b>每一行都以冒号结尾</b>，AI 会在冒号后面填内容 —— ' +
+                    '所以你可以自由增删行、改字段名，它会跟着变。<br>' +
+                    '⚠ 生成结果<b>要你点一下才进卡</b>；角色描述里已经有内容时，' +
+                    '「写入」还会先问一句，追加不用问（它不覆盖已有内容）。' +
                 '</div>';
         }
 

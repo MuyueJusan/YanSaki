@@ -1,0 +1,304 @@
+// _reverse13.js —— 反向测试 `persona-verify.js`（第十一轮「人设生成器」那一套）。
+//
+// 为什么必须有：`persona-verify.js` 报「154 通过 / 0 失败」只说明**这次**没红，
+// 不说明它**会**红。一个永远为真的断言会让整套看着很绿、其实什么都没验。
+// 这一套里最需要被反向测试的是这四件事：
+//   ① 模板「清空 = 回到默认」—— 这条**差点写成永远为真**：面板上写着这句承诺，
+//      而当时 `stPersonaTpl()` 会把内存里的空串原样返回 ⇒ 标签说「（默认）」、
+//      框里是空的、点生成又报「模板是空的」。**写套件的时候才发现**，顺手修了。
+//      所以必须有一个探针把它按回去，证明这条断言真的盯着它。
+//   ② 覆盖非空角色描述**必须弹 confirm** —— 「生成的东西必须先能反悔」这条规矩里
+//      唯一不可逆的动作。断言写成「弹过 confirm」很容易，写成「不弹就红」才算数。
+//   ③ 围栏清洗 —— 洗多了会吃掉真正的第一行，而**输出照样有内容、照样能写进卡**，
+//      肉眼看不出来。所以「没包围栏的不许动」和「包围栏的必须洗」要成对存在。
+//   ④ 全角冒号 —— 用户给的那份模板里半角 / 全角是混着用的，只认半角的话
+//      会静默少掉 9 个字段，而**面板照样渲染、生成照样成功**。
+//
+// ⚠ 注入点在**产品**（`saki.html`），不在套件。每个探针都是**一处**最小改动，
+//   跑完立刻还原，收尾核 sha1 —— 不核的话「注入过的产品」会被当成基线。
+// ⚠ 每个探针都配了**对照组**（`green`）：那些断言在被注入之后**必须还是绿的**。
+//   没有对照组的话，「全红」也能骗过这一关。
+// ⚠⚠ 探针点名的断言必须在基线里真的存在（见下面那段存在性闸门）：
+//   `red` 里的名字漂了 ⇒「预期该红的都红了」**永远红**；
+//   `green` 里的名字漂了 ⇒「对照组一条都没红」**天然成立** —— 对照组被悄悄削弱，
+//   而整套照样打 ✅。两边的名单都要查。
+//
+//   ⚠ 这一套的失败项列表符是 `-`（`persona-verify.js` 的 `fails.join('\n  - ')`）。
+//
+//   探针 R1：`stPersonaTpl()` 不再「空则回落默认」 → 清空模板之后面板自相矛盾
+//   探针 R2：`stPersonaApply` 去掉覆盖前的 confirm   → 直接抹掉别人手写的角色描述
+//   探针 R3：`stPersonaText` 去掉围栏清洗             → 整份输出带着 ``` 进卡
+//   探针 R4：`stPersonaLabels` 只认半角冒号          → 静默少认 9 个字段
+//   探针 R5：`stPersonaTplSet` 清空时存空串而不是删键 → 「是不是默认」再也分不出来
+//
+// 跑法：node _reverse13.js   （基线 + 5 个探针 = 6 次整跑）
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { spawnSync } = require('child_process');
+
+const DIR = __dirname;
+const PAGE = path.join(DIR, '..', 'saki.html');
+const SUITE = path.join(DIR, 'persona-verify.js');
+const BAK = path.join(DIR, '_reverse13.bak');
+
+// ⚠ 上一次没还原干净就拒绝启动 —— 否则会把「注入过的产品」当成基线备份下来
+if (fs.existsSync(BAK)) {
+    console.log('⚠ 目录里还留着 _reverse13.bak —— 上一次没还原。' +
+        '先人工核对 saki.html，再删掉它重跑。');
+    process.exit(1);
+}
+
+// ⚠ 原样读，别 replace(/\r/g,'')，否则会把 CRLF 写没
+const ORIG = fs.readFileSync(PAGE, 'utf8');
+const sha1 = s => crypto.createHash('sha1').update(s, 'utf8').digest('hex');
+const H0 = sha1(ORIG);
+
+let bad = 0;
+const expect = (name, cond, extra) => {
+    console.log((cond ? '  ✅ ' : '  ❌ ') + name + (extra ? '   ' + extra : ''));
+    if (!cond) bad++;
+};
+const nm = s => String(s).trim();
+
+function runSuite() {
+    const r = spawnSync(process.execPath, [SUITE], {
+        cwd: DIR, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 300000
+    });
+    return { code: r.status, out: String(r.stdout || '') + String(r.stderr || '') };
+}
+// 汇总行用来确认「确实跑完了」—— 提前退出的话它会缺
+function summaryOf(out) {
+    const m = out.match(/(\d+)\s*通过\s*\/\s*(\d+)\s*失败/);
+    return m ? { pass: Number(m[1]), fail: Number(m[2]) } : null;
+}
+// 失败项那一列。⚠ 两种列表符都剥（`-` 和 `·`）—— 同族套件用的不一样，
+//   照抄上一套的写法会**一条都匹配不上**，而且表现为「对照组没红 ✅」，看着像过了
+function failsOf(out) {
+    const i = out.lastIndexOf('失败项：');
+    if (i < 0) return [];
+    return out.slice(i).split(/\r?\n/).slice(1)
+        .map(s => s.replace(/^\s*[-\u00b7]\s*/, '')).map(nm).filter(Boolean);
+}
+// 基线里**真的绿过**的断言名。
+// ⚠⚠ 一律 `nm()`（trim）之后再比：`check()` 打的是 `  ✅ ` + 名字，而**名字自己
+//   可能带前导空格**，那个正则的 `\s+` 会把名字自己的空格一起吃掉。
+function passesOf(out) {
+    return (out.match(/^\s*✅\s+(.*)$/gm) || [])
+        .map(s => nm(s.replace(/^\s*✅\s*/, '')));
+}
+// 比对一律过这一道 —— 别在调用点手写 `indexOf(x)`
+const hit = (list, x) => list.indexOf(nm(x)) >= 0;
+
+const PROBES = [
+    {
+        id: 'R1',
+        why: '`stPersonaTpl()` 不再「空则回落默认」 → 清空模板之后面板自相矛盾',
+        // 这一针就是**我写套件时发现并修掉的那个 bug 的复原**。
+        // 修之前：`stPersonaTplSet('')` 把内存设成空串、键删掉，
+        // 而 `stPersonaTpl()` 因为 `typeof === 'string'` 就直接返回那个空串 ——
+        // 于是标签（问 localStorage）说「（默认）」、框里是空的、点生成报「模板是空的」。
+        from: "            return stEditor.personaTpl.trim() ? stEditor.personaTpl : ST_PERSONA_TPL_DEFAULT;",
+        to:   "            return stEditor.personaTpl;   // 注入：空串不再回落默认",
+        red: [
+            '清空之后 stPersonaTpl() 回落到默认模板（不然面板会说「默认」却给空模板）',
+            '重绘之后模板框里是默认模板（不是空的）'
+        ],
+        // 对照组：**「从 localStorage 读回来」那一路没被动** —— 内存是 null 时照样读盘，
+        // 所以「刷新之后模板还在」「内存清空后能读回来」必须还是绿的。
+        // 它们绿着正好说明这一针打的是「空串回落」而不是「懒加载」
+        green: [
+            '默认模板**逐字**等于用户给的那份',
+            '模板框里显示的就是它',
+            '标签写着「（默认）」',
+            '项数跟独立算出来的一致',
+            '模板写进了状态',
+            '而且存进了 localStorage',
+            '刷新之后模板还在（读的就是刚才存的那份）',
+            '刷新之后模板框里也是它',
+            '内存清空后 stPersonaTpl() 能从 localStorage 读回来',
+            '超长模板被截到上限',
+            '点「恢复默认模板」之后模板回到默认'
+        ]
+    },
+    {
+        id: 'R2',
+        why: '`stPersonaApply` 去掉覆盖前的 confirm → 直接抹掉别人手写的角色描述',
+        from: "            if (cur.trim() && !window.confirm('角色描述里已经有 ' + cur.length +\r\n" +
+              "                ' 个字符，「写入」会**整个替换**掉它。要继续吗？')) {\r\n" +
+              "                stExportMsg('已取消 —— 角色描述没动。', 'warn');\r\n" +
+              "                return;\r\n" +
+              "            }",
+        to:   "            /* 注入：覆盖非空描述不再问 */",
+        red: [
+            '非空描述 ⇒ 弹了 confirm',
+            'confirm 的话里说了会整个替换',
+            '答「不要」⇒ 角色描述**一点没动**',
+            '答「不要」⇒ 提示说已取消',
+            '非空描述 ⇒ 也弹了 confirm（对照组）'
+        ],
+        // 对照组：**追加那一路和空描述那一路都没被动**。它们绿着正好说明
+        // 红的是「覆盖非空时少问了一句」，不是「写入整体坏了」
+        green: [
+            '空描述 ⇒ 直接写进去',
+            '空描述 ⇒ **不弹** confirm（没东西可覆盖）',
+            '提示说已写入',
+            '追加 ⇒ 不弹 confirm',
+            '追加之后原文还在开头',
+            '追加之后新内容接在后面（中间空一行）',
+            '追加的提示说「已追加」',
+            '答「要」⇒ 整个替换成新内容',
+            '没有结果时点写入 ⇒ 提示「还没有生成结果」',
+            '没有结果时点写入 ⇒ 卡没动',
+            '没有结果时点写入 ⇒ 不弹 confirm',
+            '没有结果时点追加 ⇒ 卡也没动',
+            '描述是纯空白时追加 ⇒ 不留空行开头'
+        ]
+    },
+    {
+        id: 'R3',
+        why: '`stPersonaText` 去掉围栏清洗 → 整份输出带着 ``` 进卡',
+        // ⚠ 这个锚点**跨行**，所以必须显式写 `\r\n`（产品是 CRLF）。
+        //   单行锚点会匹配不上，而症状是「注入点命中 0 次」——还算好抓
+        from: "            const fence = s.match(/^```[a-zA-Z]*\\n([\\s\\S]*?)\\n?```$/);\r\n" +
+              "            if (fence) s = fence[1].trim();",
+        to:   "            /* 注入：不清洗围栏 */",
+        red: [
+            '围栏被洗掉了',
+            '洗完之后第一行就是正文（没有 ``` 残留）',
+            '带语言标记的围栏也洗掉了'
+        ],
+        // 对照组：**没包围栏的那条没被动** —— 它绿着才说明这一针打的是「洗」，
+        // 不是「把第一行也一起吃了」。这也是「洗多了」唯一会被抓到的地方
+        green: [
+            '结果进了状态',
+            '面板上出现了结果框',
+            '结果框里的内容跟状态一致',
+            '三个按钮都出来了',
+            '空态没了',
+            '提示说「对上了 3 项」',
+            '全中 ⇒ 提示是 ok（不是 warn）',
+            '小标题报了几字符 + 对上几项',
+            '漏了 1 项 ⇒ 提示说「1 项没出现」',
+            '没包围栏的原样留着（清洗不许吃掉第一行）',
+            '首行没有被吃掉',
+            '空回复 ⇒ 报「模型返回了空内容」'
+        ]
+    },
+    {
+        id: 'R4',
+        why: '`stPersonaLabels` 只认半角冒号 → 静默少认 9 个字段',
+        // 用户给的那份模板里半角 / 全角是**混着用**的（`三围：`、`- 风格：`、`补充：`…）。
+        // 只认半角的话：面板照样渲染、生成照样成功、提示照样打 ✅ ——
+        // 只有「项数」悄悄变小。所以这一条只能靠**独立算一遍**来抓
+        from: "                const m = line.match(/^[\\s\\-]*([^:：\\n]{1,12})[:：]\\s*$/);",
+        to:   "                const m = line.match(/^[\\s\\-]*([^:\\n]{1,12}):\\s*$/);   // 注入：只认半角",
+        red: [
+            '项数跟独立算出来的一致',
+            '全角冒号那几行也认（三围 / 气味 / 泳装 / 内衣）',
+            '「风格」只算了一项',
+            '末项是「补充」',
+            '标签上写了项数'
+        ],
+        // 对照组：**半角那一半没被动**。它们绿着正好说明红的是「全角漏了」，
+        // 不是「一个字段都没认出来」
+        green: [
+            '默认模板**逐字**等于用户给的那份',
+            '模板框里显示的就是它',
+            '项数里没有重复（风格 / 标志性穿着 / 配饰习惯 各出现 3 次，只能算一项）',
+            '首项是「基本信息」',
+            '模板写进了状态',
+            '清空之后 stPersonaTpl() 回落到默认模板（不然面板会说「默认」却给空模板）',
+            '提示说「对上了 3 项」'
+        ]
+    },
+    {
+        id: 'R5',
+        why: '`stPersonaTplSet` 清空时存空串而不是删键 → 「是不是默认」再也分不出来',
+        // ⚠ 探针粒度落在**存储**上，不落在显示上 —— 因为显示那一层
+        //   （`stPersonaTplIsDefault` 的 `v.trim()`）本来就容得下空串，
+        //   所以这一针**只该红一条**。多红了说明套件里有别的东西顺带盯着存储，
+        //   那是意外耦合，值得看一眼
+        from: "                if (!s.trim()) localStorage.removeItem(ST_PERSONA_TPL_KEY);\r\n" +
+              "                else localStorage.setItem(ST_PERSONA_TPL_KEY, s);",
+        to:   "                localStorage.setItem(ST_PERSONA_TPL_KEY, s);   // 注入：清空也存空串",
+        red: [
+            '清空之后 localStorage 的键被删了（不是存了个空串）'
+        ],
+        green: [
+            '清空之后「是不是默认」为 true',
+            '清空之后 stPersonaTpl() 回落到默认模板（不然面板会说「默认」却给空模板）',
+            '重绘之后模板框里是默认模板（不是空的）',
+            '而且存进了 localStorage',
+            'localStorage 的键也被清掉了'
+        ]
+    }
+];
+
+// 先跑一遍**没注入**的，拿到基线（也顺便确认套件本身现在是绿的）
+console.log('== 基线（未注入）==');
+const base = runSuite();
+const bs = summaryOf(base.out);
+const basePass = passesOf(base.out);
+expect('套件能跑完（有汇总行）', !!bs, JSON.stringify(bs));
+expect('基线是绿的（0 失败）', !!bs && bs.fail === 0, JSON.stringify(bs));
+console.log('     基线 ' + (bs ? bs.pass : '?') + ' 条绿（这一套的断言总数）');
+
+// ⚠ 基线里一条 ✅ 都没有 ⇒ 下面的「名字还在不在」全部无从谈起，
+//   而且 `red` 会一条都匹配不上还打 ✅。直接拦掉
+expect('基线里能抽到断言名（否则后面的存在性检查是空转）', basePass.length > 0, basePass.length);
+
+// 先把所有探针点名的断言核一遍存在性 —— 这步**不需要跑套件**，纯离线。
+// 名字对不上就直接停，别浪费后面 5 次整跑。
+console.log('\n== 探针点名的断言，在基线里都在吗 ==');
+let stale = 0;
+for (const p of PROBES) {
+    const miss = p.red.concat(p.green).filter(x => !hit(basePass, x));
+    expect(p.id + ' 点名的 ' + (p.red.length + p.green.length) + ' 条断言都在基线里',
+        miss.length === 0, miss.length ? '找不到：' + miss.join(' / ') : '');
+    stale += miss.length;
+}
+if (stale) {
+    console.log('\n⚠ 有 ' + stale + ' 条探针期望对不上基线 —— 后面的整跑没有意义，先修期望。');
+    process.exit(1);
+}
+
+for (const p of PROBES) {
+    console.log('\n== ' + p.id + '：' + p.why + ' ==');
+    const cnt = ORIG.split(p.from).length - 1;
+    expect('注入点在产品里唯一（命中 ' + cnt + ' 次）', cnt === 1, cnt);
+    if (cnt !== 1) { bad++; continue; }
+
+    fs.writeFileSync(BAK, ORIG, 'utf8');
+    fs.writeFileSync(PAGE, ORIG.replace(p.from, p.to), 'utf8');
+    let r;
+    try {
+        r = runSuite();
+    } finally {
+        fs.writeFileSync(PAGE, ORIG, 'utf8');   // 无论跑成什么样都先还原
+    }
+    const s = summaryOf(r.out);
+    const got = failsOf(r.out);
+
+    expect('注入后套件跑完了（有汇总行）', !!s, JSON.stringify(s));
+    expect('  退出码是 1', r.code === 1, r.code);
+    expect('  确实红了（失败数 > 0）', !!s && s.fail > 0, s && s.fail);
+
+    const missRed = p.red.filter(x => !hit(got, x));
+    expect('预期该红的都红了（' + p.red.length + ' 条）', missRed.length === 0, missRed);
+    const badGreen = p.green.filter(x => hit(got, x));
+    expect('对照组一条都没红（' + p.green.length + ' 条）', badGreen.length === 0, badGreen);
+    expect('没有预期之外的红（恰好这几条）', got.length === p.red.length,
+        '实际 ' + got.length + ' 条' + (got.length === p.red.length ? '' : '：' + got.join(' / ')));
+
+    expect('还原后产品与基线逐字节一致', sha1(fs.readFileSync(PAGE, 'utf8')) === H0);
+}
+
+// 收尾：备份文件必须删掉，且产品没被动过
+if (fs.existsSync(BAK)) fs.unlinkSync(BAK);
+console.log('\n== 收尾 ==');
+expect('没留下 .bak', !fs.existsSync(BAK));
+expect('saki.html 与基线逐字节一致', sha1(fs.readFileSync(PAGE, 'utf8')) === H0);
+
+console.log('\n===== 反向测试（人设生成器）：' + (bad ? bad + ' 项不达标' : '全部达标') + ' =====');
+process.exit(bad ? 1 : 0);

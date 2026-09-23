@@ -1,0 +1,16 @@
+# ⚠ 本仓库**绝不**做行尾转换（这一条是硬要求，别删）。
+#
+# 这个项目的文件是**混行尾**的：
+#   saki.html / index.html / index2.html / 「saki - 副本*.html」 → 纯 CRLF
+#   markdown/ 与 _verify/ 下的全部文件                            → 纯 LF
+#
+# 而系统级 gitconfig（PortableGit 的 etc/gitconfig）里 core.autocrlf = **true**。
+# 一旦它生效：
+#   ① saki.html 提交时被转成 LF（仓库里存 LF、检出时转回 CRLF，往返看似无损，但
+#      任何一次 `git show` / `git diff` 出来的都不是磁盘上那份字节）；
+#   ② **markdown/ 那批纯 LF 文件检出时会被悄悄改成 CRLF** ⇒ 四份镜像的 `cmp`
+#      逐字节核对、`wc -c`、sha1 全部对不上，而且症状离现场很远。
+#
+# `-text` 的意思是「对行尾转换而言当作二进制」—— git 一个字节都不动。
+# 配套还有本地 `core.autocrlf=false`（已设），两者一起才彻底。
+* -text

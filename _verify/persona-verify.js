@@ -1,0 +1,763 @@
+// 第十一轮：**人设生成器** —— 写一句设定，AI 按一份模板逐项填好，生成一整份人设
+//
+// 要证的六件事：
+//   ① 模板**可以换**，而且换了之后**真的存下来了**（localStorage）、刷新还在、
+//      清空 = 回到默认 —— 而「现在用的是不是默认」这个显示必须**跟存储一致**
+//   ② 生成结果**不自动进卡**：先落在状态里、给你看、可以手改，点「写入」才进角色描述
+//      （「生成的东西必须先能反悔」，跟第 9 轮 AI 生成预制块同一条规矩）
+//   ③ 覆盖非空的角色描述**必须弹 confirm**；追加不用弹（它不破坏已有内容）—— 两条都要有**对照**
+//   ④ 面板参数**不能只活在 DOM 里**（stRerender 会重建整个 pane），
+//      忙态也一样 —— 「生成中…」必须扛得过一次重绘
+//   ⑤ 提示词里**真的**带上了用户的原文 + 模板全文 + 这张卡的现状
+//   ⑥ 失败路径（没配 / 网络不通 / 401 / 空回复）都有能看懂的话，且忙态一定归位
+//
+// 十一 段：
+//   A. 装载与零报错
+//   B. 选项卡：在不在、位置对不对、**真按钮**能不能切过去
+//   C. 面板元素齐全（含反向对照：还没生成时结果框 / 三个按钮**不该在**）
+//   D. 模板逻辑：默认逐字 / 懒加载 / 自定义落盘 / 刷新还在 / 清空回默认 / 恢复默认按钮
+//      / 项数统计（含去重）/ 「是不是默认」跟存储一致 / 超长截断
+//   E. 状态而不是 DOM：走**真实输入路径**（oninput）+ 重绘之后还在
+//   F. 提示词：系统提示词 + 用户提示词（要求原文 / 模板全文 / 卡的名字）
+//   G. 未配 AI：不发请求、只给提示、忙态归位（配好之后作对照）
+//   H. 生成成功：围栏清洗 / 结果进状态 / 面板出现结果框 / 「对上了几项」（漏项 → warn，全中 → ok）
+//   I. 写入与追加：空描述直接写 / 非空描述要 confirm（含**取消**对照）/ 追加不弹窗
+//   J. 复制 + 忙态扛重绘 + 失败路径（网络不通 / 401 / 空回复）
+//   K. 收尾零报错
+//
+// 跑法：node persona-verify.js
+
+const PAGE_FILE = 'G:/saki/saki.html';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const http = require('http');
+const { spawn } = require('child_process');
+const SHOTS = path.join(__dirname, 'shots');
+fs.mkdirSync(SHOTS, { recursive: true });
+
+const CHROME = [
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+].find(p => fs.existsSync(p));
+if (!CHROME) { console.log('找不到 Chrome / Edge'); process.exit(1); }
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const t0 = Date.now();
+const log = m => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s] ${m}`);
+
+let pass = 0, fail = 0;
+const fails = [];
+function check(name, actual, pred, expect) {
+  const ok = typeof pred === 'function' ? pred(actual) : actual === pred;
+  if (ok) { pass++; console.log(`  ✅ ${name}`); }
+  else {
+    fail++; fails.push(name);
+    console.log(`  ❌ ${name}  actual=${JSON.stringify(actual)}  expect=${expect === undefined ? pred : JSON.stringify(expect)}`);
+  }
+}
+function section(t) { console.log('\n== ' + t + ' =='); }
+
+class CDP {
+  constructor(ws) {
+    this.ws = ws; this.id = 0; this.pending = new Map(); this.handlers = new Map();
+    ws.addEventListener('message', ev => {
+      const m = JSON.parse(ev.data);
+      if (m.id && this.pending.has(m.id)) {
+        const p = this.pending.get(m.id); this.pending.delete(m.id);
+        if (m.error) p.rej(new Error(JSON.stringify(m.error))); else p.res(m.result);
+      } else if (m.method) (this.handlers.get(m.method) || []).forEach(f => f(m.params));
+    });
+  }
+  on(method, fn) {
+    if (!this.handlers.has(method)) this.handlers.set(method, []);
+    this.handlers.get(method).push(fn);
+  }
+  send(method, params = {}, sessionId, timeout = 30000) {
+    const id = ++this.id;
+    return new Promise((res, rej) => {
+      const tm = setTimeout(() => { this.pending.delete(id); rej(new Error(`CDP 超时 ${method}`)); }, timeout);
+      this.pending.set(id, { res: v => { clearTimeout(tm); res(v); }, rej: e => { clearTimeout(tm); rej(e); } });
+      this.ws.send(JSON.stringify({ id, method, params, ...(sessionId && { sessionId }) }));
+    });
+  }
+}
+
+const CANDIDATES = [8995, 8996, 8997, 8998];
+let HTTP_PORT = CANDIDATES[0];
+function pickPort() {
+  return new Promise(resolve => {
+    const tryOne = i => {
+      if (i >= CANDIDATES.length) { resolve(); return; }
+      const probe = http.createServer();
+      probe.on('error', () => { try { probe.close(); } catch (e) {} tryOne(i + 1); });
+      probe.listen(CANDIDATES[i], '127.0.0.1', () => probe.close(() => {
+        HTTP_PORT = CANDIDATES[i]; resolve();
+      }));
+    };
+    tryOne(0);
+  });
+}
+function startServer() {
+  const dir = path.dirname(PAGE_FILE), base = path.basename(PAGE_FILE);
+  return new Promise((res, rej) => {
+    const srv = http.createServer((req, rep) => {
+      const u = decodeURIComponent(req.url.split('?')[0]);
+      const f = path.join(dir, u === '/' ? base : u.replace(/^\/+/, ''));
+      fs.readFile(f, (e, buf) => {
+        if (e) { rep.writeHead(404); rep.end('nope'); return; }
+        const ext = path.extname(f).toLowerCase();
+        rep.writeHead(200, {
+          'Content-Type': ext === '.html' ? 'text/html; charset=utf-8'
+            : ext === '.ttf' ? 'font/ttf' : 'application/octet-stream',
+          'Cache-Control': 'no-store'
+        });
+        rep.end(buf);
+      });
+    });
+    srv.on('error', rej);
+    srv.listen(HTTP_PORT, '127.0.0.1', () => res(srv));
+  });
+}
+
+// 用户给的那份默认模板，**在测试里独立写一遍** —— 不引用产品常量，
+// 否则「产品把常量改错了」这件事在测试里永远看不见（拿常量比自己永远相等）
+const TPL_EXPECT = [
+  '基本信息:', '姓名:', '年龄:', '性别:', '身高:', '身份:', '背景故事:',
+  '外貌:', '发型:', '眼睛:', '肤色:', '脸型:', '体型:', '三围：', '气味：',
+  '衣着风格:', '校园/工作的日常装：', '- 风格：', '- 标志性穿着：', '- 配饰习惯：',
+  '休闲装:', '- 风格：', '- 标志性穿着：', '- 配饰习惯：',
+  '居家服:', '- 风格：', '- 标志性穿着：', '- 配饰习惯：',
+  '泳装：', '内衣：', '性格:', '核心特质:', '恋爱特质:', '生活习惯:', '情绪表现:',
+  '愤怒时:', '高兴时:', '缺点弱点:', '喜好厌恶:', '喜欢:', '讨厌:', '补充：'
+].join('\n');
+
+// 独立算一遍「模板里有多少个字段」——**换一种写法**（剥掉行首的 `- `、看行尾是不是冒号），
+// 而不是抄产品那个正则。抄正则的话，正则写错时两边一起错
+function expectLabels(tpl) {
+  const out = [];
+  String(tpl).split('\n').forEach(line => {
+    const t = line.replace(/^[\s-]+/, '').replace(/\s+$/, '');
+    if (!/[:：]$/.test(t)) return;
+    const k = t.slice(0, -1).replace(/\s+$/, '');
+    if (k && out.indexOf(k) < 0) out.push(k);
+  });
+  return out;
+}
+
+// 假 fetch 的源码。用 addScriptToEvaluateOnNewDocument 装 —— **刷新之后桩还在**，
+// 「自定义模板刷新还在不在」那一段才立得住
+const MOCK_SRC = `
+window.__aiCalls = [];
+window.__aiScript = { reply: '', fail: '', delay: 0 };
+window.__copied = null;
+// clipboard 也桩掉：headless 下 navigator.clipboard.writeText 会因为「文档没聚焦」而 reject，
+// 那是环境问题不是产品问题 —— 但那样就分不清「复制按钮接错了」和「浏览器不让写」
+try {
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: t => { window.__copied = String(t); return Promise.resolve(); } }
+  });
+} catch (e) {}
+window.fetch = async function (url, init) {
+  init = init || {};
+  let body = null;
+  try { body = init.body ? JSON.parse(init.body) : null; } catch (e) {}
+  window.__aiCalls.push({ url: String(url), method: init.method || 'GET',
+    headers: init.headers || {}, body: body });
+  const S = window.__aiScript;
+  if (S.delay) await new Promise(r => setTimeout(r, S.delay));
+  if (S.fail === 'network') throw new TypeError('Failed to fetch');
+  if (S.fail === 'http401') return new Response('{"error":{"message":"invalid api key"}}',
+    { status: 401, headers: { 'Content-Type': 'application/json' } });
+  const content = (S.fail === 'notjson') ? '好的，这是人设。'
+    : String(S.reply == null ? '' : S.reply);
+  return new Response(JSON.stringify({ choices: [{ message: { content: content } }] }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } });
+};
+`;
+
+(async () => {
+  // 端口不能写死、也不能纯随机：连跑整套时上一轮 Chrome 还没退干净就会占着
+  // 刚抽到的号，症状是「Chrome 调试端口没起来」—— 跟被测页面一点关系都没有
+  await pickPort();
+  const cdpPort = await (async () => {
+    for (let i = 0; i < 80; i++) {
+      const p = 9500 + Math.floor(Math.random() * 900);
+      const free = await new Promise(res => {
+        const probe = http.createServer();
+        probe.on('error', () => { try { probe.close(); } catch (e) {} res(false); });
+        probe.listen(p, '127.0.0.1', () => probe.close(() => res(true)));
+      });
+      if (free) return p;
+      await sleep(40);
+    }
+    return 9500 + Math.floor(Math.random() * 900);
+  })();
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-persona-'));
+  const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', '--disable-gpu',
+    '--no-first-run', '--hide-scrollbars',
+    `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${profile}`], { stdio: 'ignore' });
+
+  let cdp = null, SID = null, srv = null;
+  const ev = async (expr, awaitPromise = false, timeout = 30000) => {
+    const r = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise }, SID, timeout);
+    if (r.exceptionDetails) {
+      throw new Error('页面异常: ' + (r.exceptionDetails.exception
+        ? r.exceptionDetails.exception.description : r.exceptionDetails.text));
+    }
+    return r.result.value;
+  };
+  const shot = async (name) => {
+    const r = await cdp.send('Page.captureScreenshot', { format: 'png' }, SID);
+    fs.writeFileSync(path.join(SHOTS, name), Buffer.from(r.data, 'base64'));
+    console.log(`  📸 ${name} (${Math.round(Buffer.from(r.data, 'base64').length / 1024)} KB)`);
+  };
+
+  // —— 页面内的小工具 ——
+  const script = (o) => ev(`(function(){ Object.assign(window.__aiScript, ${JSON.stringify(o)}); return true; })()`);
+  const clearCalls = () => ev(`(window.__aiCalls = [], true)`);
+  const callN = () => ev(`window.__aiCalls.length`);
+  const lastCall = () => ev(`(function(){ const c = window.__aiCalls; return c.length ? c[c.length-1] : null; })()`);
+  const msgText = () => ev(`(stEditor.msg && stEditor.msg.text) || ''`);
+  const msgKind = () => ev(`(stEditor.msg && stEditor.msg.kind) || ''`);
+  const desc = () => ev(`(stEditor.card && stEditor.card.description) || ''`);
+  const dlg = () => ev(`window.__dlg || []`);
+  const dlgClear = () => ev(`(window.__dlg = [], true)`);
+  const confirmYes = (v) => ev(`(window.__confirmYes = ${v ? 'true' : 'false'}, true)`);
+  const tplStored = () => ev(`(function(){ try { return localStorage.getItem('stPersonaTpl'); } catch (e) { return 'ERR'; } })()`);
+  const busy = () => ev(`stEditor.personaBusy === true`);
+  const out = () => ev(`String(stEditor.personaOut || '')`);
+  const tab = () => ev(`stEditor.tab`);
+  const gen = () => ev(`stPersonaRun()`, true, 40000);
+  const waitFor = async (expr, ms = 15000) => {
+    const t = Date.now();
+    while (Date.now() - t < ms) { if (await ev(expr)) return true; await sleep(120); }
+    return false;
+  };
+  // 走**真输入路径**：改 DOM 的 value 再派发 input 事件。
+  // 直接调 stPersonaReqSet 只证明「那个函数写得对」，证明不了「输入框接上了它」
+  const typeIn = (id, v) => ev(`(function(){
+    const el = document.getElementById(${JSON.stringify(id)});
+    if (!el) return false;
+    el.value = ${JSON.stringify(v)};
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true; })()`);
+  const openPersona = async () => {
+    await ev(`openStEditor()`);
+    await ev(`stSwitchTab('persona')`);
+    await sleep(250);
+  };
+  const reload = async () => {
+    const l = new Promise(res => cdp.on('Page.loadEventFired', res));
+    await cdp.send('Page.reload', {}, SID);
+    await l;
+    await ev(`document.fonts.ready.then(() => true)`, true);
+    await sleep(500);
+  };
+  // ⚠ 刷新之后 aiConfig 会回到 localStorage 里那份（我在内存里改的没存过），
+  //   所以每次 reload 之后都得重配一遍 —— 否则后面那条 gen 会红在
+  //   「还没配 Base URL」上，看着像功能坏了
+  const configAi = () => ev(`(function(){
+    aiConfig.provider = 'deepseek';
+    aiConfig.baseUrl = 'https://api.deepseek.com/v1';
+    aiConfig.apiKey = 'sk-test-KKK';
+    aiConfig.model = 'deepseek-chat';
+    aiConfig.temperature = 0.7;
+    aiConfig.maxTokens = 2048;
+    return true; })()`);
+
+  try {
+    let wsUrl = null;
+    for (let i = 0; i < 80; i++) {
+      try { wsUrl = (await (await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).json()).webSocketDebuggerUrl; } catch (e) {}
+      if (wsUrl) break; await sleep(250);
+    }
+    if (!wsUrl) throw new Error('连不上 CDP');
+    const ws = new WebSocket(wsUrl);
+    await new Promise(r => ws.addEventListener('open', r));
+    cdp = new CDP(ws);
+    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+    SID = (await cdp.send('Target.attachToTarget', { targetId, flatten: true })).sessionId;
+    await cdp.send('Page.enable', {}, SID);
+    await cdp.send('Runtime.enable', {}, SID);
+    // 页内的 confirm 一律换成同步桩（走 CDP 应答约 20% 会翻车）
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `window.__dlg = [];
+        window.__confirmYes = true;
+        window.confirm = function (m) { window.__dlg.push(String(m)); return window.__confirmYes !== false; };
+        ${MOCK_SRC}`
+    }, SID);
+    const consoleErrors = [];
+    cdp.on('Runtime.consoleAPICalled', p => {
+      if (p.type === 'error') consoleErrors.push((p.args || []).map(a => a.value || a.description).join(' '));
+    });
+    cdp.on('Runtime.exceptionThrown', p => {
+      const d = p.exceptionDetails;
+      consoleErrors.push('EXCEPTION: ' + (d.exception ? d.exception.description : d.text));
+    });
+
+    srv = await startServer();
+    await cdp.send('Emulation.setDeviceMetricsOverride',
+      { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, SID);
+    let loaded = new Promise(res => cdp.on('Page.loadEventFired', res));
+    await cdp.send('Page.navigate', { url: `http://127.0.0.1:${HTTP_PORT}/` }, SID);
+    await loaded;
+    await ev('localStorage.clear()');
+    await reload();
+    log('页面加载完成');
+
+    // ============ A. 装载与零报错 ============
+    section('A. 装载与零报错');
+    check('页面无 console 错误', consoleErrors.filter(x => !/favicon/i.test(x)),
+      v => v.length === 0, []);
+    check('假 fetch 装上了', await ev(`typeof window.fetch === 'function' && Array.isArray(window.__aiCalls)`), true);
+    check('clipboard 桩装上了', await ev(`!!(navigator.clipboard && navigator.clipboard.writeText)`), true);
+
+    await openPersona();
+    check('编辑器已打开',
+      await ev(`document.getElementById('st-overlay').classList.contains('active')`), true);
+    check('卡在（否则后面写角色描述无从谈起）', await ev(`!!stEditor.card`), true);
+
+    // ============ B. 选项卡 ============
+    section('B. 选项卡：在不在、位置对不对、真按钮能不能切');
+    const tabs = await ev(`ST_TABS.map(t => ({ id: t.id, ico: t.ico, label: t.label }))`);
+    check('选项卡总数 15（加了这个之后）', tabs.length, 15);
+    const pi = tabs.findIndex(t => t.id === 'persona');
+    const ci = tabs.findIndex(t => t.id === 'code');
+    const di = tabs.findIndex(t => t.id === 'desc');
+    check('人设生成器在清单里', pi >= 0, true);
+    // ⚠ 它现在排在 **Code 后面**（用户指定），不是「角色描述」后面。
+    //   别按「它产出的东西是角色描述」把这条改回 desc —— 那是看起来更合理的错位。
+    check('它紧跟在 Code 后面', pi - ci, 1, 1);
+    // 反向对照：既然挪走了，就**不该**还贴着「角色描述」。
+    // 少了这条，只把顺序原样留在 desc 后面也能让上面那条正断言「看起来还行」
+    // —— 正断言只要求挨着 code，不要求离开 desc。
+    check('它不再跟在「角色描述」后面（对照组）', pi - di, v => v !== 1, '≠1');
+    check('标签是「人设生成器」', tabs[pi] && tabs[pi].label, '人设生成器');
+    check('图标是 🎭', tabs[pi] && tabs[pi].ico, '🎭');
+
+    check('选项卡按钮渲染出来了', await ev(`!!document.getElementById('st-tab-persona')`), true);
+    check('按钮上的字是「人设生成器」',
+      await ev(`(document.querySelector('#st-tab-persona .st-tab-label') || {}).textContent`), '人设生成器');
+    // 走**真按钮** —— 要验的正是「接对了没有」，不是「函数存在」
+    await ev(`document.getElementById('st-tab-persona').click()`);
+    await sleep(250);
+    check('点真按钮切到了 persona 页', await tab(), 'persona');
+    check('按钮拿到了 active 类',
+      await ev(`document.getElementById('st-tab-persona').classList.contains('active')`), true);
+
+    // ============ C. 面板元素 ============
+    section('C. 面板元素齐全（含反向对照）');
+    check('需求输入框在', await ev(`!!document.getElementById('st-persona-req')`), true);
+    check('模板框在', await ev(`!!document.getElementById('st-persona-tpl')`), true);
+    check('生成按钮在', await ev(`!!document.getElementById('st-persona-run')`), true);
+    check('「恢复默认模板」按钮在', await ev(`!!document.getElementById('st-persona-tpl-reset')`), true);
+    check('AI 状态行在', await ev(`!!document.getElementById('st-persona-ai-status')`), true);
+    check('生成按钮文案是「✨ 生成人设」',
+      await ev(`document.getElementById('st-persona-run').textContent.trim()`), '✨ 生成人设');
+    check('生成按钮没被禁用', await ev(`document.getElementById('st-persona-run').disabled`), false);
+    check('生成按钮真的接上了 onclick',
+      await ev(`typeof document.getElementById('st-persona-run').onclick === 'function'`), true);
+    check('需求框给了例子',
+      await ev(`document.getElementById('st-persona-req').getAttribute('placeholder')`),
+      v => /例如/.test(v), '含「例如」');
+    // 反向对照：还没生成，结果区**不该在** —— 少了这几条，「结果框一直都在」
+    // 这种退化（比如空态被顺手删了）会被上面前几条掩盖
+    check('还没生成 ⇒ 没有结果框', await ev(`!!document.getElementById('st-persona-out')`), false);
+    check('还没生成 ⇒ 没有「写入」按钮', await ev(`!!document.getElementById('st-persona-write')`), false);
+    check('还没生成 ⇒ 没有「追加」按钮', await ev(`!!document.getElementById('st-persona-append')`), false);
+    check('还没生成 ⇒ 没有「复制」按钮', await ev(`!!document.getElementById('st-persona-copy')`), false);
+    check('空态说了「还没有生成结果」',
+      await ev(`(function(){ const e = document.querySelector('#st-panes .st-empty');
+        return e ? e.textContent : ''; })()`), v => /还没有生成结果/.test(v), '含「还没有生成结果」');
+    await shot('persona-01-pane.png');
+
+    // ============ D. 模板逻辑 ============
+    section('D. 模板逻辑');
+    check('默认模板**逐字**等于用户给的那份', await ev(`stPersonaTpl()`), TPL_EXPECT);
+    check('模板框里显示的就是它',
+      await ev(`document.getElementById('st-persona-tpl').value`), TPL_EXPECT);
+    check('标签写着「（默认）」',
+      await ev(`(function(){ const s = [...document.querySelectorAll('#st-panes .st-sub')];
+        const h = s.filter(x => /^模板/.test(x.textContent))[0];
+        return h ? h.textContent : ''; })()`), v => /（默认）/.test(v), '含「（默认）」');
+
+    // 项数：独立算一遍，再跟产品给的对
+    const exp = expectLabels(TPL_EXPECT);
+    const got = await ev(`stPersonaLabels(stPersonaTpl())`);
+    // ⚠ 数组不能用 `===` 比 —— 那是**引用相等**，两份内容一样的数组永远不等。
+    //   第一版就是这么写的，于是这两条「红」得毫无信息量（actual 跟 expect 明明一样）
+    const sameArr = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    check('项数跟独立算出来的一致', got, v => sameArr(v, exp), exp);
+    check('项数里没有重复（风格 / 标志性穿着 / 配饰习惯 各出现 3 次，只能算一项）',
+      got.length, new Set(got).size);
+    check('「风格」只算了一项', got.filter(k => k === '风格').length, 1);
+    check('首项是「基本信息」', got[0], '基本信息');
+    check('末项是「补充」', got[got.length - 1], '补充');
+    check('全角冒号那几行也认（三围 / 气味 / 泳装 / 内衣）',
+      ['三围', '气味', '泳装', '内衣'].filter(k => got.indexOf(k) < 0), v => v.length === 0, []);
+    check('`- 风格：` 这种带前缀的子项认成了「风格」而不是「- 风格」',
+      got.indexOf('- 风格'), -1);
+    check('标签上写了项数',
+      await ev(`document.querySelector('#st-persona-tpl').parentNode.querySelector('.st-hint-inline').textContent`),
+      v => v.indexOf(String(exp.length)) === 0, '以「' + exp.length + '」开头');
+
+    // 自定义 → 落盘
+    const MY_TPL = '姓名:\n年龄:\n性别:';
+    await typeIn('st-persona-tpl', MY_TPL);
+    check('模板写进了状态', await ev(`stEditor.personaTpl`), MY_TPL);
+    check('而且存进了 localStorage', await tplStored(), MY_TPL);
+    check('「是不是默认」跟着变成 false', await ev(`stPersonaTplIsDefault()`), false);
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('重绘之后模板框里还是它（对照组：证明上一条不是白写的）',
+      await ev(`document.getElementById('st-persona-tpl').value`), MY_TPL);
+    check('标签改成了「（已自定义）」',
+      await ev(`(function(){ const s = [...document.querySelectorAll('#st-panes .st-sub')];
+        const h = s.filter(x => /^模板/.test(x.textContent))[0];
+        return h ? h.textContent : ''; })()`), v => /已自定义/.test(v), '含「已自定义」');
+
+    // 刷新还在 —— 懒加载那条路（内存里是 null，只能从 localStorage 读）
+    await reload();
+    await openPersona();
+    await configAi();
+    check('刷新之后模板还在（读的就是刚才存的那份）', await ev(`stPersonaTpl()`), MY_TPL);
+    check('刷新之后模板框里也是它',
+      await ev(`document.getElementById('st-persona-tpl').value`), MY_TPL);
+    // ⚠ 「懒加载」这条要**单独**证，不能拿刷新后那个值当证据：渲染面板时就会调
+    //   stPersonaTpl()，等我们去读的时候它早被填好了。手动把内存清成 null 再读一次，
+    //   走的才只剩 localStorage 一条路
+    await ev(`(stEditor.personaTpl = null, true)`);
+    check('内存清空后 stPersonaTpl() 能从 localStorage 读回来',
+      await ev(`stPersonaTpl()`), MY_TPL);
+
+    // 超长截断
+    const HUGE = 'あ'.repeat(9000);
+    await typeIn('st-persona-tpl', HUGE);
+    check('超长模板被截到上限', await ev(`stEditor.personaTpl.length`), 8000);
+    check('截断之后存进去的也是截过的',
+      await ev(`localStorage.getItem('stPersonaTpl').length`), 8000);
+
+    // 清空 = 回到默认（而且**删键**，不是存空串）
+    await typeIn('st-persona-tpl', '');
+    check('清空之后 localStorage 的键被删了（不是存了个空串）', await tplStored(), null);
+    check('清空之后「是不是默认」为 true', await ev(`stPersonaTplIsDefault()`), true);
+    check('清空之后 stPersonaTpl() 回落到默认模板（不然面板会说「默认」却给空模板）',
+      await ev(`stPersonaTpl()`), TPL_EXPECT);
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('重绘之后模板框里是默认模板（不是空的）',
+      await ev(`document.getElementById('st-persona-tpl').value`), TPL_EXPECT);
+
+    // 「恢复默认模板」按钮
+    await typeIn('st-persona-tpl', '只有一项:');
+    check('先自定义一下', await tplStored(), '只有一项:');
+    await ev(`document.getElementById('st-persona-tpl-reset').click()`);
+    await sleep(200);
+    check('点「恢复默认模板」之后模板回到默认', await ev(`stPersonaTpl()`), TPL_EXPECT);
+    check('localStorage 的键也被清掉了', await tplStored(), null);
+    check('模板框里也刷新成默认了',
+      await ev(`document.getElementById('st-persona-tpl').value`), TPL_EXPECT);
+    check('当面说了恢复了多少项', await msgText(), v => /恢复默认/.test(v), '含「恢复默认」');
+    check('提示是 ok 不是 warn', await msgKind(), '');
+
+    // ============ E. 状态而不是 DOM ============
+    section('E. 面板参数活在状态里（重绘之后还在）');
+    const REQ = '冷淡的吸血鬼女仆，喜欢红茶，讨厌阳光，说话很短';
+    await typeIn('st-persona-req', REQ);
+    check('需求写进了状态', await ev(`stEditor.personaReq`), REQ);
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('重绘之后需求框里还是它', await ev(`document.getElementById('st-persona-req').value`), REQ);
+    await typeIn('st-persona-req', 'あ'.repeat(2500));
+    check('超长需求被截到上限', await ev(`stEditor.personaReq.length`), 2000);
+    await typeIn('st-persona-req', REQ);
+
+    // ============ F. 提示词 ============
+    section('F. 提示词内容');
+    await ev(`stSet('card.name', '夜乃')`);
+    await clearCalls();
+    await script({ reply: '姓名: 夜乃' });
+    await gen();
+    const call = await lastCall();
+    check('确实发了 1 次请求', await callN(), 1);
+    check('发去了 /chat/completions（OpenAI 形状）',
+      call && call.url, v => /\/chat\/completions$/.test(v || ''), '以 /chat/completions 结尾');
+    const msgs = (call && call.body && call.body.messages) || [];
+    check('两条消息：system + user', msgs.length, 2);
+    check('第一条是 system', msgs[0] && msgs[0].role, 'system');
+    const sys = (msgs[0] && msgs[0].content) || '';
+    const usr = (msgs[1] && msgs[1].content) || '';
+    check('system 里有「硬规则」', /硬规则/.test(sys), true);
+    check('system 要求只输出人设本身（不许寒暄 / 围栏）',
+      /只输出填好的人设本身/.test(sys), true);
+    check('system 要求照模板的结构和顺序', /严格照模板的结构和顺序/.test(sys), true);
+    check('system 要求别加模板以外的字段', /没有.*的字段不要自己加|不要自己加/.test(sys), true);
+    check('system 说了用中文', /用中文/.test(sys), true);
+    check('user 里带上了用户的要求原文', usr.indexOf(REQ) >= 0, true);
+    check('user 里带上了**模板全文**', usr.indexOf(TPL_EXPECT) >= 0, true);
+    check('user 里带上了这张卡的名字（跟它保持一致）',
+      /这张卡现在的名字：夜乃/.test(usr), true);
+    check('user 里有「照它的结构逐项填」这一节', /## 模板/.test(usr), true);
+    check('maxTokens 至少给了 2048（人设比预制块长得多）',
+      call && call.body && call.body.max_tokens, v => v >= 2048, '>= 2048');
+
+    // ============ G. 未配 AI ============
+    section('G. 未配 AI：不发请求、只给提示');
+    await ev(`(function(){ aiConfig.baseUrl = ''; aiConfig.apiKey = ''; aiConfig.model = ''; return true; })()`);
+    check('就绪判定先确认一下是「没配」', (await ev(`stAiReady(stAiCfg())`)).ok, false);
+    // ⚠ 状态行是**建面板时**算出来的，改了配置得重绘才看得见 —— 不重绘就检查它，
+    //   检查到的是上一次渲染的旧值（第一版就这么红了一条）
+    await ev(`stRerender()`);
+    await sleep(150);
+    await clearCalls();
+    await gen();
+    check('没配就不发请求', await callN(), 0);
+    check('而且当面说了为什么', await msgText(), v => /还没配|还没填|还没选/.test(v), '含「还没配/填/选」');
+    check('提示是 warn 而不是 ok', await msgKind(), 'warn');
+    check('忙态没有卡住', await busy(), false);
+    check('状态行也标了 warn',
+      await ev(`document.getElementById('st-persona-ai-status').className`),
+      v => /st-warn/.test(v), '含 st-warn');
+
+    await configAi();
+    check('配好之后就绪判定通过（对照组）', (await ev(`stAiReady(stAiCfg())`)).ok, true);
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('状态行跟着变成 ok',
+      await ev(`document.getElementById('st-persona-ai-status').className`),
+      v => /st-ok/.test(v), '含 st-ok');
+
+    // 需求空着也不该发请求
+    await clearCalls();
+    await typeIn('st-persona-req', '   ');
+    await gen();
+    check('需求空着 ⇒ 不发请求', await callN(), 0);
+    check('而且提示先去写一句', await msgText(), v => /先写一句/.test(v), '含「先写一句」');
+    await typeIn('st-persona-req', REQ);
+
+    // ============ H. 生成成功 ============
+    section('H. 生成成功：清洗 / 进状态 / 面板 / 「对上了几项」');
+    // ① 全中：三项都出现 → ok
+    const OK_REPLY = '姓名: 夜乃\n年龄: 19\n性别: 女';
+    await ev(`stPersonaTplSet('姓名:\\n年龄:\\n性别:')`);
+    await ev(`stRerender()`);
+    await sleep(150);
+    await script({ reply: OK_REPLY });
+    await gen();
+    check('结果进了状态', await out(), OK_REPLY);
+    check('面板上出现了结果框', await ev(`!!document.getElementById('st-persona-out')`), true);
+    check('结果框里的内容跟状态一致',
+      await ev(`document.getElementById('st-persona-out').value`), OK_REPLY);
+    check('三个按钮都出来了',
+      await ev(`['st-persona-write','st-persona-append','st-persona-copy']
+        .every(id => !!document.getElementById(id))`), true);
+    check('空态没了', await ev(`!!document.querySelector('#st-panes .st-empty')`), false);
+    check('提示说「对上了 3 项」', await msgText(), v => /对上了 3 项/.test(v), '含「对上了 3 项」');
+    check('全中 ⇒ 提示是 ok（不是 warn）', await msgKind(), '');
+    check('小标题报了几字符 + 对上几项',
+      await ev(`(function(){ const s = [...document.querySelectorAll('#st-panes .st-sub')];
+        const h = s.filter(x => /^生成结果/.test(x.textContent))[0];
+        return h ? h.textContent : ''; })()`), v => /对上了 3 项/.test(v), '含「对上了 3 项」');
+    await shot('persona-02-generated.png');
+
+    // ② 漏一项 → warn，并且说出漏了几项（对照组：证明①那条不是恒真）
+    await script({ reply: '姓名: 夜乃\n年龄: 19' });
+    await gen();
+    check('漏了 1 项 ⇒ 提示说「1 项没出现」', await msgText(), v => /1 项没出现/.test(v), '含「1 项没出现」');
+    check('漏项时提示是 warn', await msgKind(), 'warn');
+    check('但结果照样进了状态（不是整份丢掉）', await out(), '姓名: 夜乃\n年龄: 19');
+
+    // ③ 围栏要被洗掉
+    await script({ reply: '```\n姓名: 夜乃\n年龄: 19\n性别: 女\n```' });
+    await gen();
+    check('围栏被洗掉了', await out(), OK_REPLY);
+    check('洗完之后第一行就是正文（没有 ``` 残留）',
+      await ev(`String(stEditor.personaOut).indexOf('\`\`\`')`), -1);
+    // 带语言标记的围栏也要洗
+    await script({ reply: '```markdown\n姓名: 夜乃\n```' });
+    await gen();
+    check('带语言标记的围栏也洗掉了', await out(), '姓名: 夜乃');
+    // 但**没包围栏**的不能被动 —— 那会吃掉真正的第一行
+    await script({ reply: '姓名: 夜乃\n年龄: 19\n性别: 女' });
+    await gen();
+    check('没包围栏的原样留着（清洗不许吃掉第一行）', await out(), OK_REPLY);
+    check('首行没有被吃掉', await ev(`String(stEditor.personaOut).split('\\n')[0]`), '姓名: 夜乃');
+
+    // ④ 空回复 → 报错，而且**不许把上一次的结果清掉**
+    await script({ reply: '' });
+    await gen();
+    check('空回复 ⇒ 报「模型返回了空内容」', await msgText(), v => /空内容/.test(v), '含「空内容」');
+    check('空回复时上一次的结果**没被清掉**（对照）', await out(), OK_REPLY);
+    check('空回复时提示是 bad', await msgKind(), 'bad');
+    check('空回复之后忙态归位', await busy(), false);
+
+    // ⑤ 手改结果也要进状态（不是只改 DOM）
+    await script({ reply: OK_REPLY });
+    await gen();
+    await typeIn('st-persona-out', '姓名: 手改的');
+    check('手改结果进了状态', await out(), '姓名: 手改的');
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('重绘之后结果框里还是手改的那份',
+      await ev(`document.getElementById('st-persona-out').value`), '姓名: 手改的');
+
+    // ============ I. 写入与追加 ============
+    section('I. 写入与追加');
+    await ev(`stSet('card.description', '')`);
+    await ev(`stSet('card.name', '夜乃')`);
+    await script({ reply: OK_REPLY });
+    await gen();
+    await dlgClear();
+    await ev(`document.getElementById('st-persona-write').click()`);
+    await sleep(200);
+    check('空描述 ⇒ 直接写进去', await desc(), OK_REPLY);
+    check('空描述 ⇒ **不弹** confirm（没东西可覆盖）', (await dlg()).length, 0);
+    check('提示说已写入', await msgText(), v => /已写入角色描述/.test(v), '含「已写入角色描述」');
+    check('提示是 ok', await msgKind(), '');
+
+    // 追加：不弹窗，保留原文
+    await dlgClear();
+    await ev(`document.getElementById('st-persona-append').click()`);
+    await sleep(200);
+    check('追加 ⇒ 不弹 confirm', (await dlg()).length, 0);
+    check('追加之后原文还在开头',
+      await desc(), v => v.indexOf(OK_REPLY) === 0, '以原文开头');
+    check('追加之后新内容接在后面（中间空一行）',
+      await desc(), OK_REPLY + '\n\n' + OK_REPLY);
+    check('追加的提示说「已追加」', await msgText(), v => /已追加/.test(v), '含「已追加」');
+
+    // 写入覆盖非空描述：必须问
+    await dlgClear();
+    await confirmYes(false);          // 先答「不要」
+    await ev(`document.getElementById('st-persona-write').click()`);
+    await sleep(200);
+    check('非空描述 ⇒ 弹了 confirm', (await dlg()).length, 1);
+    check('confirm 的话里说了会整个替换', (await dlg())[0], v => /整个替换/.test(v), '含「整个替换」');
+    check('答「不要」⇒ 角色描述**一点没动**', await desc(), OK_REPLY + '\n\n' + OK_REPLY);
+    check('答「不要」⇒ 提示说已取消', await msgText(), v => /已取消/.test(v), '含「已取消」');
+
+    await dlgClear();
+    await confirmYes(true);           // 再答「要」
+    await ev(`stSet('card.description', '别人手写的旧描述')`);
+    await ev(`document.getElementById('st-persona-write').click()`);
+    await sleep(200);
+    check('非空描述 ⇒ 也弹了 confirm（对照组）', (await dlg()).length, 1);
+    check('答「要」⇒ 整个替换成新内容', await desc(), OK_REPLY);
+    await confirmYes(true);
+
+    // 结果空着的时候点写入 / 追加：只给提示，不动卡
+    await ev(`stSet('card.description', '不该被动')`);
+    await ev(`stPersonaOutSet('')`);
+    await dlgClear();
+    await ev(`document.getElementById('st-persona-write').click()`);
+    await sleep(150);
+    check('没有结果时点写入 ⇒ 提示「还没有生成结果」', await msgText(), v => /还没有生成结果/.test(v), '含「还没有生成结果」');
+    check('没有结果时点写入 ⇒ 卡没动', await desc(), '不该被动');
+    check('没有结果时点写入 ⇒ 不弹 confirm', (await dlg()).length, 0);
+    await ev(`stPersonaApply('append')`);
+    check('没有结果时点追加 ⇒ 卡也没动', await desc(), '不该被动');
+
+    // 描述是纯空白时追加应当走「写入」而不是留个空行开头
+    await ev(`stPersonaOutSet('新内容')`);
+    await ev(`stSet('card.description', '   ')`);
+    await ev(`stPersonaApply('append')`);
+    check('描述是纯空白时追加 ⇒ 不留空行开头', await desc(), '新内容');
+
+    // ============ J. 复制 + 忙态 + 失败路径 ============
+    section('J. 复制 / 忙态 / 失败路径');
+    await ev(`stPersonaOutSet('要复制的这一段')`);
+    await ev(`stRerender()`);
+    await sleep(150);
+    await ev(`(window.__copied = null, true)`);
+    await ev(`document.getElementById('st-persona-copy').click()`);
+    await sleep(250);
+    check('复制按钮把结果送进了剪贴板', await ev(`window.__copied`), '要复制的这一段');
+    check('复制之后提示说已复制', await msgText(), v => /已复制/.test(v), '含「已复制」');
+
+    // 忙态：给个慢回复，点真按钮，中途检查
+    await script({ reply: OK_REPLY, delay: 1500 });
+    await clearCalls();
+    await ev(`document.getElementById('st-persona-run').click()`);
+    await sleep(300);
+    check('忙态为 true', await busy(), true);
+    check('按钮变成「⏳ 生成中…」',
+      await ev(`document.getElementById('st-persona-run').textContent.trim()`), '⏳ 生成中…');
+    check('按钮被禁用', await ev(`document.getElementById('st-persona-run').disabled`), true);
+    // 忙的时候重绘一次 —— 「忙态只活在 DOM 里」的话这里就穿帮了
+    await ev(`stRerender()`);
+    await sleep(150);
+    check('重绘之后按钮还是「⏳ 生成中…」（忙态扛得过重绘）',
+      await ev(`document.getElementById('st-persona-run').textContent.trim()`), '⏳ 生成中…');
+    check('重绘之后还是禁用',
+      await ev(`document.getElementById('st-persona-run').disabled`), true);
+    check('重绘之后状态行还写着正在生成',
+      await ev(`document.getElementById('st-status').textContent`), v => /正在让 AI 生成人设/.test(v), '含「正在让 AI 生成人设」');
+    // 再点一次不许重复发请求
+    await ev(`stPersonaRun()`);
+    check('忙的时候再点一次 ⇒ 不重复发请求', await callN(), 1);
+    await waitFor(`stEditor.personaBusy === false`, 10000);
+    check('生成完忙态归位', await busy(), false);
+    check('生成完按钮文案回到「✨ 生成人设」',
+      await ev(`document.getElementById('st-persona-run').textContent.trim()`), '✨ 生成人设');
+    check('生成完按钮不再禁用',
+      await ev(`document.getElementById('st-persona-run').disabled`), false);
+    check('结果进了状态', await out(), OK_REPLY);
+
+    // 网络不通
+    await script({ reply: '', fail: 'network', delay: 0 });
+    await ev(`stPersonaOutSet('')`);
+    await gen();
+    check('网络不通 ⇒ 报「生成失败」', await msgText(), v => /AI 生成失败/.test(v), '含「AI 生成失败」');
+    check('网络不通 ⇒ 提示里给了可能原因', await msgText(), v => /Failed to fetch/.test(v), '含「Failed to fetch」');
+    check('网络不通 ⇒ 提示是 bad', await msgKind(), 'bad');
+    check('网络不通 ⇒ 忙态归位', await busy(), false);
+    check('网络不通 ⇒ 结果没被写进去', await out(), '');
+
+    // 401
+    await script({ fail: 'http401' });
+    await gen();
+    check('401 ⇒ 报「生成失败」', await msgText(), v => /AI 生成失败/.test(v), '含「AI 生成失败」');
+    check('401 ⇒ 提示里带上了服务端的话',
+      await msgText(), v => /401|invalid api key|api key/i.test(v), '含 401 或 api key');
+    check('401 ⇒ 忙态归位', await busy(), false);
+
+    // 模型回一堆寒暄（不是人设）—— 照样收下，但不许崩
+    await script({ reply: '好的，这是人设。', fail: '' });
+    await gen();
+    check('模型回寒暄也不崩，原样收下（不做「智能」清洗）', await out(), '好的，这是人设。');
+    check('提示照样是 warn（模板一项都没对上）', await msgKind(), 'warn');
+    check('而且说出了几项没出现', await msgText(), v => /没出现/.test(v), '含「没出现」');
+
+    // ============ K. 收尾 ============
+    section('K. 收尾零报错');
+    await ev(`stSwitchTab('desc')`);
+    await sleep(200);
+    await ev(`stSwitchTab('persona')`);
+    await sleep(200);
+    check('来回切页之后面板还在', await ev(`!!document.getElementById('st-persona-req')`), true);
+    check('来回切页之后需求还在状态里', await ev(`stEditor.personaReq`), REQ);
+    check('收尾无 console 错误', consoleErrors.filter(x => !/favicon/i.test(x)),
+      v => v.length === 0, []);
+    if (consoleErrors.length) console.log('    ' + consoleErrors.slice(0, 5).join('\n    '));
+
+  } catch (e) {
+    fail++;
+    console.log('\n💥 套件自己炸了：' + (e && e.stack ? e.stack : e));
+  } finally {
+    try { if (srv) srv.close(); } catch (e) {}
+    try { if (cdp && cdp.ws) cdp.ws.close(); } catch (e) {}
+    try { chrome.kill(); } catch (e) {}
+    await sleep(400);
+    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+  }
+
+  console.log(`\n== 汇总 ==`);
+  console.log(`${pass} 通过 / ${fail} 失败`);
+  if (fails.length) console.log('失败项：\n  - ' + fails.join('\n  - '));
+  process.exit(fail ? 1 : 0);
+})();

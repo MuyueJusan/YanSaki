@@ -1,0 +1,15 @@
+# 项目记忆 / 工作区数据 —— **不进仓库**。
+# 里面有 MEMORY.md / RULES.md / 每日日志 / SKILL.md，记的是工作习惯与内部约定，
+# 跟产品本身无关。⚠ 这条别删。
+.workbuddy-ai/
+
+# 跑套件时重生成的截图 —— 每次内容都不一样，进仓库只会把 diff 搅乱。
+# ⚠ 只排除产物目录；`_verify/*.js` 是套件本体，**要进仓库**。
+_verify/shots/
+
+# 备份与编辑器零碎
+*.bak
+_reverse*.bak
+*~
+Thumbs.db
+desktop.ini
