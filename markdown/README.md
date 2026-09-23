@@ -28,8 +28,17 @@
 ```
 G:\saki\
 ├── saki.html                 ← **唯一要改的文件**（全部代码内联）
-│                               ⚠ 真品判据：**1 467 029 字节**（`sha1 65df7b0b…`）。
+│                               ⚠ 真品判据：**1 487 774 字节 / 29 110 行**（`sha1 ecb46ca8de99…`）。
 │                                 旁边那几份「副本」字节数都很接近，别靠文件名认。
+│                                 ⚠ **这个数会漂** —— 本行原来写的 `1 467 029 / 65df7b0b` 是旧快照
+│                                    （那 1 467 029 字节现在是**远端上一版 `index.html`**）。
+│                                    判据永远现量：`sha1sum saki.html`
+├── index.html                ← **发布副本**，内容与 `saki.html` **逐字节相同**（在 git 里是同一个 blob）。
+│                               ⚠ 站点发的是**它**（GitHub Pages 只认 `index.html`）⇒
+│                                 **改完 `saki.html` 要顺手 `cp saki.html index.html`**，否则线上还是旧的。
+│                                 ⚠ **别把它当独立文件改** —— 两边一分叉就没人知道哪份是对的。
+├── .gitattributes            ← `* -text`：**绝不**做行尾转换（本项目混行尾，理由见本节末尾「仓库与发布」）
+├── .gitignore                ← 排除 `.workbuddy-ai/`（记忆 / 凭据）与 `_verify/shots/`（每次重生成的截图）
 ├── saki - 副本.html           ┐
 ├── saki - 副本 (2).html       │
 ├── saki - 副本 (3).html       ├ ⚠⚠ **六份历史副本，没有一份是当前版**（sha1 互不相同）。
@@ -73,7 +82,7 @@ G:\saki\
 
 ### 本目录里有两类文件：**文档** 和 **镜像**
 
-上面 `01…06` / `README` / `CHANGELOG` 是文档，直接改。另外四份**不是文档，是镜像** ——
+上面 `01…06` / `README` / `CHANGELOG` 是文档，直接改。另外五份**不是文档，是镜像** ——
 源头在别处，**改这里没有任何效果**（应用不读它们），只会让你以为记忆已经更新了：
 
 | 本目录 | 源头 | 是什么 |
@@ -82,6 +91,7 @@ G:\saki\
 | `RULES.md` | `.workbuddy-ai/memory/RULES.md` | 同一份笔记的**展开版**（完整来龙去脉 + 函数名），按需读 |
 | `YYYY-MM-DD.md` | `.workbuddy-ai/memory/YYYY-MM-DD.md` | 分段工作日志，**只追加** |
 | `SKILL.md` | `~/.workbuddy-ai/skills/verify-single-file-html-app/SKILL.md` | 「怎么验证单文件 HTML 应用」的技能原文 |
+| `SKILL-git-push.md` | `~/.workbuddy-ai/skills/git-push-existing-github-repo/SKILL.md` | 「把本地文件夹推进一个**已有**仓库」的技能原文（远端可能是在跑的线上站点、用 `reset --soft FETCH_HEAD` 代替 `--force`、转私有会让 Pages 变 404 等） |
 
 放一份在这里是为了**跟着项目走**（`.workbuddy-ai/` 不一定跟仓库一起备份）。
 代价是**会漂** —— 改完记忆或技能之后顺手同步一遍，**方向永远是「从源头拷过来」**：
@@ -90,7 +100,36 @@ G:\saki\
 cd /g/saki
 for f in .workbuddy-ai/memory/*.md; do cp "$f" "markdown/$(basename "$f")"; done
 cp "C:/Users/YanSaki/.workbuddy-ai/skills/verify-single-file-html-app/SKILL.md" markdown/SKILL.md
+cp "C:/Users/YanSaki/.workbuddy-ai/skills/git-push-existing-github-repo/SKILL.md" markdown/SKILL-git-push.md
 ```
+
+### 仓库与发布（2026-09-23 接入）
+
+`G:\saki`（工作副本）→ **push** → `github.com/MuyueJusan/YanSaki`（公开仓库，`main`）→ **GitHub Pages** → `https://yansaki.top/`
+
+| 项 | 值 |
+|---|---|
+| 远端 | `https://github.com/MuyueJusan/YanSaki` —— **必须公开**，免费版 Pages 不支持私有仓库 |
+| 部署 | `build_type = workflow` ⇒ 靠 **`.github/workflows/static.yml`** 把整个仓库根目录发出去 |
+| 域名 | 仓库根的 `CNAME` = `yansaki.top`；`https_enforced = true` |
+| 发布文件 | **`index.html`**（= `saki.html` 的逐字节副本，在 git 里是同一个 blob） |
+
+⚠⚠ **`CNAME` 和 `static.yml` 都不能删** —— 删了域名断、站点不再更新。
+⚠ 另外两条 workflow（`hugo.yml` / `jekyll-gh-pages.yml`）是 GitHub 建 Pages 时自动塞进来的**废件**：
+`hugo.yml` **0 成 9 败**、`jekyll-gh-pages.yml` 3 成 5 败，每次 push 都跑、都红，
+还跟 `static.yml` 抢同一个 concurrency group 互相取消。**留着纯噪声，删掉不影响部署。**
+
+**行尾**：`.gitattributes` 写死 `* -text`，**外加**本地 `core.autocrlf=false`，两道都要。
+本仓库**混行尾**（`saki.html` / `index.html` 纯 CRLF；`markdown/` / `_verify/` 纯 LF），
+而系统级 `core.autocrlf=true` 会把纯 LF 那批检出成 CRLF ⇒ 镜像 `cmp`、`sha1`、字节计数**全崩，
+而且症状离现场很远**。判据是 `git ls-files --eol`（该跟磁盘一致），**不是**「我设过 `core.autocrlf=false`」。
+
+**改完怎么发**：`cp saki.html index.html`（⚠ **别忘**，否则线上还是旧的）→ `git add -A` →
+`git commit` → `git push`。凭据存在 `.workbuddy-ai/git/credentials`（**已 gitignore，永不入库**）。
+
+⚠ **转私有是一次实测过的坑**：`PATCH {"private":false}` 改回来**不够** —— Pages 配置是被**删掉**的，
+得 `POST /pages {build_type:"workflow"}` 重建 + `PUT /pages {cname}` 补域名 + 手动 dispatch 一次
+`static.yml`，否则 `yansaki.top` 一直 404。细节见技能 `git-push-existing-github-repo`。
 
 `saki.html` 内部结构（按行号）：
 

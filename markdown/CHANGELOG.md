@@ -6,6 +6,51 @@
 
 ---
 
+## 2026-09-23（第三段）· 接上 Git 仓库并首次推送；站点随私有化停过一次又救回来
+
+**类型**：**工程基础设施**（`saki.html` **一个字节没改**）+ 文档同步。
+⚠ 本段**不动产品**，所以**没有跑套件** —— 但也没有任何理由跑。
+
+### ① 做了什么
+
+1. `G:\saki` 从「一个文件夹」变成 **git 仓库**，推到 `github.com/MuyueJusan/YanSaki`。
+2. **`index.html` = `saki.html` 的逐字节副本**（同一个 blob `b4ecc93c…`，1 487 774 字节）
+   —— 站点发的就是它。
+3. `.gitattributes` 写死 `* -text` + 本地 `core.autocrlf=false`：本仓库**混行尾**
+   （`saki.html` / `index.html` 纯 CRLF；`markdown/` / `_verify/` 纯 LF），不压住的话
+   纯 LF 那批会被检出成 CRLF，五份镜像的 `cmp` / `sha1` / 字节计数全崩。
+4. `.gitignore` 排除 `.workbuddy-ai/`（记忆 + 凭据）与 `_verify/shots/`（每次重生成的截图）。
+5. 新增第 5 份镜像 `markdown/SKILL-git-push.md`；README §1 补「仓库与发布」小节。
+6. 顺手修掉 README §1 一处**早就漂了的真品判据**（写着 `1 467 029 字节 / sha1 65df7b0b…`，
+   实际已是 **1 487 774 / `ecb46ca8de99…`**；那 1 467 029 字节现在是**远端上一版 `index.html`**）。
+
+### ② 远端不是空仓库，是一个在跑的线上站点
+
+`CNAME` = `yansaki.top`、`build_type = workflow`（靠 `static.yml` 部署）、
+远端 `index.html` 正是本地 git 索引里那条幽灵记录 `5888e194…`。
+⚠ 三条 workflow 里 `hugo.yml` **0 成 9 败**、`jekyll-gh-pages.yml` 3 成 5 败 —— 纯噪声，
+每次 push 都跑、都红，还跟 `static.yml` 抢同一个 concurrency group 互相取消。
+
+### ③ 没用 `--force`
+
+本地是全新历史，但走 `git fetch origin main` → `git reset --soft FETCH_HEAD`
+→ 补回远端独有文件 → commit → push ⇒ **真快进**，远端那 5 个 commit 的历史全留着。
+
+### ④ 私有 → 公开 的来回（踩过）
+
+用户先选私有 ⇒ `PATCH {"private":true}` 成功，**但 `GET /pages` 立刻 404**（配置是被**删掉**，不是暂停）。
+随后要求改回公开 ⇒ `PATCH {"private":false}` **不够**，还得
+`POST /pages {build_type:"workflow"}` 重建 + `PUT /pages {cname}` 补域名 + 手动 dispatch 一次
+`static.yml`。救回来后 `https_enforced` 反而变成 `true`（比之前更严）。
+
+### ⑤ 验证
+
+线上 `https://yansaki.top/index.html` = **1 487 774 字节，sha1 `ecb46ca8de994de8f967c5a5e6577d9ba0d779e0`，
+与本地 `saki.html` 逐字节相同** ✓
+⚠ 比字节要用 **GET**：HEAD 的 `content-length` 是**压缩后**的大小（首页 HEAD 报 377 634，字体报 1 737 401）。
+
+---
+
 ## 2026-09-23（第二段）· 把「🎭 人设生成器」选项卡挪到 Code 后面
 
 **类型**：位置调整（`saki.html` **+364 字节 / +3 行**，1 487 410 → 1 487 774）+ **三处过时注释** +
