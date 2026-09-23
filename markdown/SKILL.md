@@ -5090,24 +5090,45 @@ All three were hit on the same project in one afternoon. The shape is identical:
 *premise* stopped being true because of legitimate content, and the red looked like a product bug.**
 The rule: **before believing a red, go `grep` the product for the thing the gate names.**
 
-### 1. Counting tags? Strip comments first
+### 1. Counting tags? Count what the *parser* counts — not what comments suggest
 
-A static check asserted "exactly one `<style` … `</style>` pair outside `<script>`" — as a gate that the
-script-stripping regex had not mis-sliced. It went red: `2 open / 1 close`.
+A static check asserted "exactly one `<style` … `</style>` pair outside `<script>`" (a gate that the
+script-stripping regex had not mis-sliced). It went red: `2 open / 1 close`.
 
-Cause: a **CSS comment** inside the style block that *mentioned* the tag — `` /* this CSS sits at the end
-of `<style>` on purpose */ ``. The literal was counted as a second opening tag. Extraction was
-**completely correct** (1 block, braces balanced, every other check green).
+Cause: a **CSS comment** inside the style block that *mentioned* the opening tag —
+`` /* this CSS sits at the end of `<style>` on purpose */ ``. Extraction was **completely correct**
+(1 block, braces balanced, every other check green). So I "fixed" the gate to **strip comments before
+counting**.
 
-Fix the **gate**, not the product: strip `/* … */` and `<!-- … -->` before counting. Then pin it with a
-control group, because a gate you loosened is a gate you must re-prove:
+**That fix was wrong, and it hid a real bug the same afternoon.** `<style>` is a **raw-text element**:
+the HTML tokenizer looks only for `</style` inside it — **CSS comments do not shield it**. When I later
+wrote a literal **closing** tag into that same comment, the style block was **cut short right there**;
+every rule after it became body text, `.st-ask { position: fixed }` stopped applying, and the modal fell
+back to `position: static` in normal flow — while the comment-stripping gate still printed ✅.
 
-| input | expected |
-|---|---|
-| the real file | ✅ green |
-| one stray `<style>` (unclosed) | ❌ red (2 open / 1 close) |
-| one stray `</style>` (unopened) | ❌ red (1 open / 2 close) |
-| a comment that mentions `<style>` | ✅ green |
+The correct gate counts **the terminator only**, with no comment stripping:
+
+```js
+const closes = [...srcNoScript.matchAll(/<\/style/gi)];
+say(closes.length === 1 && cssBlocks.length === 1, ...);
+```
+
+| input | expected | observed |
+|---|---|---|
+| the real file | ✅ green | `close=1 blocks=1` |
+| a literal **closing** tag inside the style block (the real bug) | ❌ red | `close=2` |
+| a literal **opening** tag inside the style block (the original false positive) | ✅ green | `close=1` |
+| a genuinely extra style block | ❌ red | `close=2 blocks=2` |
+
+⚠⚠ **A false positive and a real bug look identical.** Loosening a gate until it stops crying wolf is
+how you also let the wolf in. Before relaxing one, ask: **is it counting the same thing the parser
+counts?** When the fix is asymmetric — opens harmless, closes fatal — say so in the gate.
+
+⚠ The bug was caught by a **hit test** ("the element at the viewport centre must be the dialog"), not by
+a rect measurement: the broken modal had a perfectly ordinary-looking rect
+(`{t:1070, w:1240, h:92}` in a 900px viewport) — it had simply dropped back into normal flow.
+Make the failure message report **what the check itself measured** (`computed position`, hit chain);
+that turned the hunt from guessing into reading.
 
 ### 2. "Appending at the end is zero-displacement" is usually false
 
@@ -5134,13 +5155,23 @@ and produced **38**. The extra ones were real: removing a `push` meant a downstr
 - **A control group is not automatically green.** Its premise is "the tested path was actually taken";
   when the fault changes which object is examined, a control can legitimately go red too.
 
-### 4. Verifying the deployed copy: check the **byte count** before the hash
+### 4. Verifying the deployed copy: make sure the download *wrote* before you hash it
 
-Polling a live URL until its sha1 matches the local file is the right check. But a **truncated
-download** produces a sha1 mismatch that looks exactly like "the CDN is still serving the old version".
-Here the "old version" was **98 304 bytes** — exactly 96 KiB, i.e. the transfer was cut, not stale.
+Polling a live URL until its sha1 matches the local file is the right check. The failure mode to watch
+for is not "the CDN is stale" — it is **hashing a file that was never written**.
 
-⇒ On mismatch, look at the size first. An absurdly round or clearly-too-small size means **re-download**;
-only a plausible full size means you are really looking at an older revision. (And keep polling — CDN lag
-is real: the previous round needed three tries.)
+Observed here: six consecutive polls reported a stable sha1 and **98 304 bytes** (exactly 96 KiB) — it
+looked like a deterministic "old version" still being served. The real cause: `curl -s -o /tmp/live.html …`
+could not write to that path (`-w '%{size_download}'` returned **0**, exit code **23**), so every poll
+re-hashed a **stale leftover file** that happened to sit there. Downloading to a path that *is* writable
+returned the full **1 515 017 bytes** and a sha1 matching the local file exactly.
+
+⇒ Two rules:
+- **Delete the target first**, and assert the write succeeded (`curl -w '%{http_code} %{size_download}'`;
+  treat non-zero exit codes as failure). A sha1 that stays **identical across repeated polls** while the
+  local file has changed is a strong hint that you are hashing something stale, not something served.
+- Compare the **byte count** against the local file before drawing any conclusion. A suspiciously round or
+  clearly-too-small size means the downloaded artefact is not what you think it is.
+
+(Still keep polling for genuine CDN lag — an earlier round needed three tries.)
 
