@@ -111,6 +111,200 @@
             margin-top: clamp(1rem, 3vh, 2rem);
         }
 
+        /* ===== 🔌 API 全局配置弹窗 =====
+           复用 .modal-overlay / .game-card 那套（含复古皮肤覆盖），只补表单自己的样式。
+           ⚠ 卡片是白底，而 .ai-btn / .ai-switch-track 是「白字 / 半透明白」——
+              直接搬进来会看不见，所以下面按弹窗作用域覆盖一遍 */
+        .api-global-card {
+            align-items: stretch;
+            max-width: 560px;
+            max-height: 86vh;
+            overflow-y: auto;
+        }
+
+        .apig-body {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .apig-grid {
+            display: flex;
+            gap: 8px;
+        }
+
+        .apig-grid > .ai-field { flex: 1; }
+
+        .api-global-card .ai-switch-track { background: #c9ced6; }
+
+        .apig-note {
+            font-size: 0.72rem;
+            line-height: 1.65;
+            color: #3d4753;
+            background: #eef1f5;
+            border-left: 3px solid #3a7bd5;
+            border-radius: 0 8px 8px 0;
+            padding: 8px 10px;
+        }
+
+        .apig-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            align-items: center;
+            margin-top: 2px;
+        }
+
+        .apig-hint {
+            font-size: 0.72rem;
+            line-height: 1.6;
+            color: #5a6472;
+        }
+
+        .apig-hint code {
+            background: #eef1f5;
+            border-radius: 4px;
+            padding: 0 3px;
+        }
+
+        .apig-status {
+            flex: 1;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            min-height: 1em;
+            text-align: left;
+        }
+
+        .apig-status.ok { color: #1a7f37; }
+        .apig-status.warn { color: #b54708; }
+
+        .apig-btn {
+            font-family: inherit;
+            font-size: 0.82rem;
+            color: #1a2b3c;
+            background: #e4e8ee;
+            border: 1px solid #c6ccd6;
+            border-radius: 8px;
+            padding: 7px 14px;
+            cursor: pointer;
+            transition: filter 0.15s ease;
+            text-shadow: none;
+        }
+
+        .apig-btn:hover { filter: brightness(0.95); }
+        .apig-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .apig-btn-primary {
+            background: #3a7bd5;
+            border-color: #3a7bd5;
+            color: #fff;
+        }
+
+        body.retro-mode .apig-btn,
+        body.retro-mode .api-global-card .ai-switch-track {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            color: #000;
+            font-weight: bold;
+        }
+
+        body.retro-mode .apig-btn-primary { background: #000080; color: #fff; }
+        body.retro-mode .apig-note {
+            background: #fff;
+            border-left: 3px solid #000080;
+            color: #000;
+        }
+        body.retro-mode .api-global-card .ai-field input,
+        body.retro-mode .api-global-card .ai-field select,
+        body.retro-mode .api-global-card .ai-field textarea {
+            background: #fff;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+        }
+
+        /* ===== 【ai对话】的「配置来源」开关 ===== */
+        .ai-cfg-src {
+            display: flex;
+            gap: 6px;
+        }
+
+        .ai-src-btn {
+            flex: 1;
+            font-family: inherit;
+            font-size: 0.78rem;
+            color: #1a2b3c;
+            background: rgba(255, 255, 255, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.75);
+            border-radius: 8px;
+            padding: 7px 6px;
+            cursor: pointer;
+            text-shadow: none;
+            transition: all 0.2s ease;
+        }
+
+        .ai-src-btn:hover { background: rgba(255, 255, 255, 0.8); }
+
+        /* 选中的那一侧用实心蓝，跟 .ai-switch 的选中色一致 */
+        .ai-src-btn.ai-src-on {
+            background: #3a7bd5;
+            border-color: #3a7bd5;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .ai-cfg-src-hint {
+            font-size: 0.72rem;
+            line-height: 1.6;
+            color: #1a2b3c;
+            background: rgba(255, 255, 255, 0.42);
+            border-left: 3px solid #3a7bd5;
+            border-radius: 0 8px 8px 0;
+            padding: 7px 9px;
+        }
+
+        .ai-src-open {
+            font-family: inherit;
+            font-size: 0.72rem;
+            color: #fff;
+            background: #3a7bd5;
+            border: none;
+            border-radius: 6px;
+            padding: 3px 8px;
+            margin-left: 4px;
+            cursor: pointer;
+            text-shadow: none;
+        }
+
+        /* 折叠状态下也能看见当前来源 */
+        .ai-src-badge {
+            font-size: 0.68rem;
+            font-weight: normal;
+            opacity: 0.9;
+            letter-spacing: 0;
+        }
+
+        body.retro-mode .ai-src-btn {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            color: #000;
+        }
+
+        body.retro-mode .ai-src-btn.ai-src-on { background: #000080; color: #fff; }
+        body.retro-mode .ai-cfg-src-hint { background: #fff; color: #000; }
+        body.retro-mode .ai-src-open {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            color: #000;
+            font-weight: bold;
+        }
+
         .switch-indicator {
             width: 8px;
             height: 8px;
@@ -5400,11 +5594,25 @@
                 <!-- 模型设置（子展开，位于对话上方） -->
                 <div class="ai-settings-panel">
                     <button class="ai-settings-toggle" type="button" onclick="toggleAiSettings()">
-                        ⚙ 模型设置 <span class="ai-adv-icon">▾</span>
+                        ⚙ 模型设置 <span class="ai-src-badge" id="ai-src-badge"></span> <span class="ai-adv-icon">▾</span>
                     </button>
                     <div class="ai-settings-collapse">
                         <div class="ai-settings-collapse-inner">
                             <div class="ai-settings">
+                                <!-- 配置来源：跟随时下面那批 API 字段是**只读镜像** -->
+                                <div class="ai-field">
+                                    <label>配置来源</label>
+                                    <div class="ai-cfg-src" id="ai-cfg-src">
+                                        <button class="ai-src-btn" type="button" data-follow="1"
+                                                onclick="setAiCfgSource(true)">🔗 跟随 API 全局配置</button>
+                                        <button class="ai-src-btn" type="button" data-follow="0"
+                                                onclick="setAiCfgSource(false)">🔑 独立配置</button>
+                                    </div>
+                                    <div class="ai-cfg-src-hint" id="ai-cfg-src-hint">
+                                        下面几格是<b>只读镜像</b> —— 它们跟着主页的【🔌 API 全局配置】走。
+                                        <button class="ai-src-open" type="button" onclick="openApiGlobalModal()">打开 API 全局配置</button>
+                                    </div>
+                                </div>
                                 <div class="ai-field">
                                     <label>服务商</label>
                                     <select id="ai-provider" onchange="syncAiProviderUI()"></select>
@@ -5686,8 +5894,15 @@
         </div>
     </div>
 
+    <!-- API 全局配置按钮（在小游戏按钮**上方**）。
+         ⚠ 跟下面那个共用 `.game-entry-btn`（就是那条 margin-top）—— 所以文档里的
+           `.game-entry-btn` 类锚点会指向**第一处**，要精确就认这两个 id -->
+    <button class="action-btn game-entry-btn" id="api-global-btn" onclick="openApiGlobalModal()">
+        <span>🔌 API 全局配置</span>
+    </button>
+
     <!-- 小游戏按钮 -->
-    <button class="action-btn game-entry-btn" onclick="openCatGame()">
+    <button class="action-btn game-entry-btn" id="game-entry-btn" onclick="openCatGame()">
         <span>🐱 小游戏</span>
     </button>
 
@@ -5766,6 +5981,89 @@
                 <div class="game-hint">
                     键盘 WASD / 方向键移动，J / 空格开火 ｜ 鼠标或手指按住画面 = 自动开火<br>
                     P 暂停 · ⚠ 先用鼠标点一下画面，键盘才会接管
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔌 API 全局配置 Modal 弹窗 -->
+    <div class="modal-overlay" id="apiGlobalModal">
+        <div class="game-card api-global-card">
+            <div class="game-card-header">
+                <div class="game-title-box">
+                    <span class="game-title">API Global Config</span>
+                </div>
+                <button class="close-game-btn" onclick="closeApiGlobalModal()">×</button>
+            </div>
+
+            <div class="apig-body">
+                <div class="apig-note">
+                    这里是<b>全站唯一真相源</b>：<b>【AI 对话】</b>默认跟随它，
+                    <b>【角色卡编写器】</b>的「跟随」也指向它 —— 在别处改都只是各自的副本。<br>
+                    ⚠ 只存在浏览器本地（<code>localStorage</code>），<b>不会写进角色卡</b>，
+                    草稿和导出的 JSON 里都不会出现 API Key。
+                </div>
+
+                <div class="apig-grid">
+                    <div class="ai-field">
+                        <label for="apig-provider">服务商</label>
+                        <select id="apig-provider" onchange="syncApigProviderUI()"></select>
+                    </div>
+                    <div class="ai-field">
+                        <label for="apig-base-url">Base URL（自定义时填写）</label>
+                        <input id="apig-base-url" type="text" placeholder="https://api.example.com/v1"
+                               oninput="apigBaseDraft=this.value">
+                    </div>
+                </div>
+
+                <div class="ai-field">
+                    <label for="apig-api-key">API Key</label>
+                    <input id="apig-api-key" type="password" placeholder="sk-..." autocomplete="off">
+                </div>
+
+                <div class="ai-field">
+                    <label for="apig-model">模型</label>
+                    <select id="apig-model"><option value="">先点击下面的「获取模型列表」</option></select>
+                </div>
+
+                <div class="apig-actions" style="justify-content:flex-start">
+                    <button class="apig-btn" id="apig-fetch-btn" type="button" onclick="apigFetchModels()">🔄 获取模型列表</button>
+                </div>
+
+                <div class="apig-grid">
+                    <label class="ai-switch" style="flex:1">
+                        <input type="checkbox" id="apig-stream" onchange="updateApigStreamLabel()">
+                        <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                        <span id="apig-stream-label">流式输出</span>
+                    </label>
+                </div>
+
+                <div class="apig-grid">
+                    <div class="ai-field">
+                        <label for="apig-temperature">温度：<span id="apig-temp-value">0.7</span></label>
+                        <input id="apig-temperature" type="range" min="0" max="2" step="0.1" value="0.7"
+                               oninput="updateApigTempLabel()">
+                    </div>
+                    <div class="ai-field">
+                        <label for="apig-max-tokens">回复长度（max_tokens）</label>
+                        <input id="apig-max-tokens" type="number" min="1" max="32768" value="1024">
+                    </div>
+                </div>
+
+                <div class="ai-field">
+                    <label for="apig-first-seg">第一段</label>
+                    <textarea id="apig-first-seg" rows="3"
+                              placeholder="比如：以下是一段角色扮演对话。请始终保持角色的语气，不要替用户做决定。"></textarea>
+                    <div class="apig-hint">
+                        留空 = 不发送。它永远原封不动排在发给模型的最前面，支持
+                        <code>{{char}}</code>（角色名）与 <code>{{user}}</code>（你的昵称）。
+                    </div>
+                </div>
+
+                <div class="apig-actions">
+                    <div class="apig-status" id="apig-status"></div>
+                    <button class="apig-btn" id="apig-test-btn" type="button" onclick="apigTestConnection()">测试连接</button>
+                    <button class="apig-btn apig-btn-primary" type="button" onclick="saveApiGlobal()">保存</button>
                 </div>
             </div>
         </div>
@@ -7170,6 +7468,144 @@
             }
         })();
 
+        // ==========================================================================
+        // API 全局配置（apiGlobal）
+        //
+        // 动机：【ai对话】与【角色卡编写器】原先各自存一份 API 配置，两边都要填一遍 Key。
+        // 现在抽出一份**全局**配置当唯一真相源：
+        //   · 主页的【🔌 API 全局配置】按钮改它（键 apiGlobalCfg）
+        //   · 【ai对话】默认「跟随全局」；想分开也能切「独立配置」（自己那份存在 aiConfig.own）
+        //   · 【角色卡编写器】的「跟随」一律指向它（**不再指向 AI 对话**）
+        //
+        // ⚠ 关键设计：`aiConfig` 顶层的 API 字段仍然是**生效值**。
+        //   全站 40 多个读点（aiConfig.apiKey / aiConfig.model …）一行都不用改 ——
+        //   只在「载入时」和「全局配置保存后」调一次 aiApplyEffective() 把生效值刷进去。
+        //   要是在每个读点都改成「按来源取」，漏一处就是一处静默的旧值。
+        //
+        // ⚠ 真相源与生效值必须分清，否则会出现「改了、刷新后又变回去」：
+        //   跟随全局 ⇒ 真相源 = apiGlobal；独立 ⇒ 真相源 = aiConfig.own。
+        //   aiConfig 顶层永远是**算出来的**，不是用户直接写的。
+        // ==========================================================================
+        const API_GLOBAL_KEY = 'apiGlobalCfg';
+
+        // 全局配置管的字段。**白名单** —— 加字段就要同时改这里，
+        // 免得 apiGlobalPick 静默漏抄（漏抄 = 切来源时那一格不跟着走）
+        const API_GLOBAL_FIELDS = [
+            'provider', 'baseUrl', 'apiKey', 'model',
+            'temperature', 'maxTokens', 'stream', 'firstSeg'
+        ];
+
+        const API_GLOBAL_DEFAULTS = {
+            provider: 'openai',
+            baseUrl: 'https://api.openai.com/v1',
+            apiKey: '',
+            model: '',
+            models: [],              // 「获取模型」拉到的列表（缓存，方便下次直接选）
+            temperature: 0.7,
+            maxTokens: 1024,
+            stream: true,
+            firstSeg: ''
+        };
+
+        let apiGlobal = Object.assign({}, API_GLOBAL_DEFAULTS);
+
+        // 把生效值里的那几个字段抄出来（用来播种 / 同步 own 快照）
+        function apiGlobalPick(src) {
+            const o = {};
+            API_GLOBAL_FIELDS.forEach(k => { o[k] = src[k]; });
+            return o;
+        }
+
+        // 归一化。坏数据一律退回默认值，绝不让它把渲染炸掉
+        function apiGlobalNormalize(raw) {
+            const o = Object.assign({}, API_GLOBAL_DEFAULTS, raw || {});
+            const known = AI_PROVIDERS.some(p => p.value === o.provider);
+            o.provider = known ? o.provider : 'openai';
+            o.baseUrl = String(o.baseUrl || '');
+            // 服务商预设里自带 baseUrl，缺了就补上（只有自定义服务商才是空的）
+            if (!o.baseUrl) {
+                o.baseUrl = (AI_PROVIDERS.find(p => p.value === o.provider) || {}).baseUrl || '';
+            }
+            o.baseUrl = o.baseUrl.replace(/\/+$/, '');
+            o.apiKey = String(o.apiKey || '');
+            o.model = String(o.model || '');
+            o.models = Array.isArray(o.models)
+                ? o.models.map(String).filter(Boolean).slice(0, 500) : [];
+            const t = Number(o.temperature);
+            o.temperature = Number.isFinite(t) ? Math.max(0, Math.min(2, t)) : 0.7;
+            const m = Number(o.maxTokens);
+            o.maxTokens = Number.isFinite(m)
+                ? Math.max(64, Math.min(32000, Math.trunc(m))) : 1024;
+            o.stream = o.stream !== false;
+            o.firstSeg = String(o.firstSeg || '');
+            return o;
+        }
+
+        // 载入。返回 true = 是**第一次**（没有 apiGlobalCfg，刚从现有 aiChatConfig 播种）
+        function apiGlobalLoad() {
+            let raw = null;
+            try { raw = JSON.parse(localStorage.getItem(API_GLOBAL_KEY) || 'null'); } catch (e) {}
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                apiGlobal = apiGlobalNormalize(raw);
+                return false;
+            }
+            // 播种：把用户现在这份配置的 API 字段 + 第一段直接搬进全局 ——
+            // 外观和效果跟升级前一模一样，只是从此全局成了唯一可改的地方
+            apiGlobal = apiGlobalNormalize(apiGlobalPick(aiConfig));
+            return true;
+        }
+
+        function apiGlobalPersist() {
+            try { localStorage.setItem(API_GLOBAL_KEY, JSON.stringify(apiGlobal)); return true; }
+            catch (e) { return false; }
+        }
+
+        // 把「真相源」刷进 aiConfig 顶层的生效值。
+        // ⚠ 只有这几个字段会被覆盖 —— systemPrompt / 酒馆模式那一大堆仍归 aiConfig 自己管
+        function aiApplyEffective() {
+            const src = (aiConfig.followGlobal === false) ? (aiConfig.own || {}) : apiGlobal;
+            API_GLOBAL_FIELDS.forEach(k => { if (src[k] !== undefined) aiConfig[k] = src[k]; });
+        }
+
+        // 用户**真的在【ai对话】里改了**这几个字段 ⇒ 独立模式下同步进 own 快照。
+        // ⚠ 不能放进 aiPersist 无条件跑：切来源时会把用户先前那份独立配置悄悄冲掉
+        function aiSyncOwnFromEffective() {
+            if (aiConfig.followGlobal === false) aiConfig.own = apiGlobalPick(aiConfig);
+        }
+
+        // 保存 aiConfig 的唯一入口。原先 5 处直接写 'aiChatConfig' 的地方都走这里
+        function aiPersist() {
+            try { localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig)); } catch (e) {}
+        }
+
+        // 点「保存 / 应用」：把输入框读出来的对象接回 aiConfig。
+        // ⚠ 跟随模式下输入框是**只读镜像**，镜像值不该反灌成真相源 —— 刷一次生效值盖掉；
+        //   独立模式下才把用户真正填的东西写进 own 快照
+        function aiCommitInputs(cfg) {
+            aiConfig = cfg;
+            if (aiConfig.followGlobal !== false) aiApplyEffective();
+            aiSyncOwnFromEffective();
+            aiPersist();
+        }
+
+        // —— 迁移与载入 ——
+        (function initApiGlobal() {
+            const firstTime = apiGlobalLoad();
+            // 老配置里没有这两个字段：独立配置默认播种成「当前这份」，
+            // 免得用户一切到独立就面对一片空白
+            if (!aiConfig.own || typeof aiConfig.own !== 'object' || Array.isArray(aiConfig.own)) {
+                aiConfig.own = apiGlobalPick(aiConfig);
+            } else {
+                aiConfig.own = apiGlobalNormalize(aiConfig.own);
+            }
+            // 默认跟随全局（用户指定）。只有明确写了 false 才算独立
+            aiConfig.followGlobal = aiConfig.followGlobal !== false;
+            aiApplyEffective();
+            // 第一次播种要落盘，不然下次刷新又「第一次」一遍（每次都会把
+            // 用户后来在全局面板改的东西当成播种源，那就白改了）
+            if (firstTime) { apiGlobalPersist(); aiPersist(); }
+        })();
+
         let customBaseUrlDraft = (aiConfig.provider === 'custom') ? aiConfig.baseUrl : '';
         let chatHistory = [];
         let aiBusy = false;
@@ -7216,6 +7652,9 @@
             fillUserMacroInputs();
             syncUserMacroUI();
             setAiModelOption(aiConfig.model);
+            // 最后收口「配置来源」：跟随时它会把上面那批 API 控件改成只读镜像
+            // ⚠ 必须排在所有回填之后 —— 它才是 API 字段的最终来源
+            syncAiCfgSourceUI();
         }
 
         function setAiModelOption(modelId) {
@@ -7261,6 +7700,10 @@
                 // 这两个没有对应的输入控件，直接沿用当前值，
                 // 否则点「保存 / 应用」会把预设选择丢掉
                 promptPreset: aiConfig.promptPreset,
+                // ⚠⚠ 配置来源与独立快照也必须原样带回去 —— 这个函数返回的是**新对象**，
+                //   漏掉这两个字段就等于「点一次保存，配置来源被打回默认 + 独立那份没了」
+                followGlobal: aiConfig.followGlobal,
+                own: aiConfig.own,
                 customPrompt: aiConfig.customPrompt,
                 // 原系统提示词开关（读 DOM，和酒馆开关一样）
                 promptEnabled: document.getElementById('ai-prompt-enabled').checked,
@@ -7334,7 +7777,7 @@
         // 只回写宏相关字段，避免顺手把未保存的 API Key / 模型一起落盘
         function persistUserMacro() {
             Object.assign(aiConfig, readUserMacroInputs());
-            try { localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig)); } catch (e) {}
+            aiPersist();
         }
 
         // 把 aiConfig 里的宏字段回填到控件上。
@@ -7554,7 +7997,10 @@
 
         // 只回写提示词相关字段（aiConfig 里的 apiKey 仍是上次载入的值，不会误存未保存的输入）
         function persistSystemPrompt() {
-            try { localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig)); } catch (e) {}
+            // ⚠ 「第一段」现在属于 API 配置（能跟随全局），独立模式下改它也要同步进 own，
+            //   所以这里得走 own 同步 —— 提示词本身的改动同步是无副作用的（值没变）
+            aiSyncOwnFromEffective();
+            aiPersist();
         }
 
         // —— 「第一段」——
@@ -7783,7 +8229,7 @@
 
         function persistTavern() {
             try {
-                localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig));
+                aiPersist();
                 return true;
             } catch (e) {
                 // 卡太大时 localStorage 会爆配额
@@ -15909,10 +16355,12 @@
         // ==========================================================================
         // 编写器 · AI 助手
         //
-        // 跟「AI 对话」选项卡是**两套配置**，靠 stAi.mode 二选一：
-        //   · follow（默认）—— 直接借【AI 对话】那套 provider / key / model，
-        //     用户在那边改一次，这边跟着变，不用重复填
-        //   · own —— 自己存一套（localStorage 键 stAiCfg），跟对话那套互不干扰
+        // 跟【AI 对话】的配置是**两套东西**，靠 stAi.mode 二选一：
+        //   · follow（默认）—— 直接借 **API 全局配置**（apiGlobal）那套
+        //     provider / key / model，用户在全局面板改一次这边跟着变，不用重复填。
+        //     ⚠ 借的是 apiGlobal，**不是【AI 对话】那套** —— 后者能切成「独立配置」，
+        //       指向它的话编写器就会莫名其妙跟着对话跑
+        //   · own —— 自己存一套（localStorage 键 stAiCfg），跟全局那套互不干扰
         //
         // ⚠ 配置**一律不进角色卡**。stAi 存在自己的 localStorage 键里，
         // 草稿（stCardDraft）和导出的 JSON 里都不会出现 API Key 的影子。
@@ -15944,7 +16392,7 @@
         const ST_AI_PROTO_LABEL = { openai: 'OpenAI 兼容', anthropic: 'Anthropic' };
 
         const ST_AI_DEFAULTS = {
-            mode: 'follow',          // 'follow' = 借 AI 对话那套；'own' = 自己一套
+            mode: 'follow',          // 'follow' = 借 API 全局配置那套；'own' = 自己一套
             provider: 'openai',
             proto: '',               // '' = 跟着服务商预设走
             baseUrl: '',             // 只有 provider = custom 时才用
@@ -15955,7 +16403,7 @@
             maxTokens: 4096,
             stream: true,
             // 「第一段」：用户自己写、**一定排在发给模型最前面**的那一段。
-            // 跟随模式下这一格不生效（现读 aiConfig.firstSeg），只有独立配置才用它
+            // 跟随模式下这一格不生效（现读 apiGlobal.firstSeg），只有独立配置才用它
             firstSeg: ''
         };
 
@@ -16100,22 +16548,25 @@
             } catch (e) {}
         }
 
-        // 跟随模式：现读 AI 对话那套。**不复制** —— 用户在那边改完，
-        // 这边下次点生成就是新的，不需要「同步一下」这种按钮
+        // 跟随模式：现读 **API 全局配置**（不是【ai对话】）。
+        // **不复制** —— 用户在全局面板改完，这边下次点生成就是新的，
+        // 不需要「同步一下」这种按钮。
+        // ⚠ 指向 apiGlobal 而不是 aiConfig：后者是「生效值」，会跟着【ai对话】的
+        //   「独立配置」一起变 —— 那就等于编写器又悄悄跟回了对话
         function stAiFollowCfg() {
-            const base = String(aiConfig.baseUrl || '').replace(/\/+$/, '');
+            const base = String(apiGlobal.baseUrl || '').replace(/\/+$/, '');
             return {
                 mode: 'follow',
-                provider: aiConfig.provider || 'custom',
-                providerLabel: (AI_PROVIDERS.find(p => p.value === aiConfig.provider) || {}).label || 'AI 对话',
+                provider: apiGlobal.provider || 'custom',
+                providerLabel: (AI_PROVIDERS.find(p => p.value === apiGlobal.provider) || {}).label || 'API 全局配置',
                 baseUrl: base,
-                apiKey: String(aiConfig.apiKey || ''),
-                model: String(aiConfig.model || ''),
-                temperature: stAiNum(aiConfig.temperature, 0.7, 0, 2),
-                maxTokens: Math.trunc(stAiNum(aiConfig.maxTokens, 4096, 64, 32000)),
-                stream: aiConfig.stream !== false,
-                proto: stAiGuessProto(base, aiConfig.provider),
-                firstSeg: String(aiConfig.firstSeg || '')
+                apiKey: String(apiGlobal.apiKey || ''),
+                model: String(apiGlobal.model || ''),
+                temperature: stAiNum(apiGlobal.temperature, 0.7, 0, 2),
+                maxTokens: Math.trunc(stAiNum(apiGlobal.maxTokens, 4096, 64, 32000)),
+                stream: apiGlobal.stream !== false,
+                proto: stAiGuessProto(base, apiGlobal.provider),
+                firstSeg: String(apiGlobal.firstSeg || '')
             };
         }
 
@@ -16251,7 +16702,7 @@
         // 那一步本来就是为了挑模型，要求先有模型就成了死循环
         function stAiReady(cfg, opts) {
             const needModel = !(opts && opts.needModel === false);
-            const where = cfg.mode === 'own' ? '去「AI 助手」页' : '去「AI 对话」页';
+            const where = cfg.mode === 'own' ? '去「AI 助手」页' : '点主页的【🔌 API 全局配置】按钮';
             if (!cfg.baseUrl) {
                 return { ok: false, why: '还没配 Base URL。' + where + '选一个服务商' +
                     (cfg.mode === 'own' ? '' : '，或者在本页切到「独立配置」自己填一套') + '。' };
@@ -16268,7 +16719,7 @@
 
         function stAiModeLabel(cfg) {
             const c = cfg || stAiCfg();
-            const who = c.mode === 'own' ? '独立配置' : '跟随 AI 对话';
+            const who = c.mode === 'own' ? '独立配置' : '跟随 API 全局配置';
             return who + ' · ' + (c.providerLabel || c.provider || '?') + ' · ' + (c.model || '（未选模型）');
         }
 
@@ -17042,15 +17493,15 @@
             const protoNow = stAi.proto || p.proto || 'openai';
             return stPaneHead('🤖 AI 助手',
                 '给编写器用的 AI：<b>世界书条目扩写</b>与<b>开场白生成</b>（那两个面板分别在世界书页和开场白页）。' +
-                '配置有两种模式 —— <b>跟随 AI 对话</b>直接复用【AI 对话】选项卡里的服务商 / Key / 模型，' +
-                '在那边改一次这边就跟着变；<b>独立配置</b>在这里另存一套，两边互不干扰。' +
+                '配置有两种模式 —— <b>跟随 API 全局配置</b>直接复用主页【🔌 API 全局配置】里的服务商 / Key / 模型，' +
+                '在那里改一次这边就跟着变；<b>独立配置</b>在这里另存一套，两边互不干扰。' +
                 '<br>⚠ 这套配置<b>只存在浏览器本地</b>（<code>localStorage</code>），' +
                 '<b>不会写进角色卡</b> —— 草稿和导出的 JSON 里都不会出现 API Key。') +
                 '<div class="st-sub">配置来源</div>' +
                 '<div class="st-ai-chips">' +
                     stAiChips([
-                        { id: 'follow', label: '🔗 跟随 AI 对话', text: '复用 AI 对话选项卡里的服务商 / Key / 模型' },
-                        { id: 'own', label: '🔑 独立配置', text: '在这里另存一套，跟 AI 对话互不干扰' }
+                        { id: 'follow', label: '🔗 跟随 API 全局配置', text: '复用主页【API 全局配置】里的服务商 / Key / 模型' },
+                        { id: 'own', label: '🔑 独立配置', text: '在这里另存一套，跟全局配置互不干扰' }
                     ], stAi.mode, 'stAiModePick') +
                 '</div>' +
                 (stAi.mode === 'own' ? stAiOwnFields(p, isCustom, protoNow) : stAiFollowFields(cfg)) +
@@ -17072,7 +17523,7 @@
                 '<div class="st-grid"><div class="st-field st-wide">' +
                     '<label for="st-ai-firstseg">第一段 <span class="st-hint-inline">' +
                         '留空 = 不发。它永远排在发给模型的最前面</span></label>' +
-                    // 跟随模式下这一格是只读的 —— 它显示的是 AI 对话那边那段，
+                    // 跟随模式下这一格是只读的 —— 它显示的是 API 全局配置里那段，
                     // 在这里能改就变成了「改了但下次刷新又变回去」的假输入框
                     '<textarea id="st-ai-firstseg" rows="4"' +
                         (stAi.mode === 'follow' ? ' readonly class="st-ai-ro"' : '') +
@@ -17081,8 +17532,8 @@
                         escapeHtml(String(cfg.firstSeg || '')) + '</textarea>' +
                 '</div></div>' +
                 (stAi.mode === 'follow'
-                    ? '<div class="st-note">这一格是<b>只读镜像</b> —— 跟随模式下它跟着【AI 对话】里那段走。' +
-                      '要改就去那边改，或者把上面的配置来源切成「独立配置」。</div>'
+                    ? '<div class="st-note">这一格是<b>只读镜像</b> —— 跟随模式下它跟着【🔌 API 全局配置】里那段走。' +
+                      '要改就点主页那个按钮，或者把上面的配置来源切成「独立配置」。</div>'
                     : '') +
                 '<div class="st-note">' +
                     '它跟各功能面板自己拼的 system / user 是两回事：那两个是程序按你的参数生成的，' +
@@ -17102,15 +17553,17 @@
                 ((stAi.models || []).length
                     ? '<div class="st-note">' + escapeHtml((stAi.models || []).join('、')) + '</div>'
                     : '<div class="st-empty">还没拉取过。点上面的「获取模型列表」。</div>') +
-                '<div class="st-sub">AI 对话那边的配置（只读）</div>' +
+                '<div class="st-sub">API 全局配置（只读）</div>' +
                 '<div class="st-grid">' +
-                    stAiReadonly('服务商', (AI_PROVIDERS.find(x => x.value === aiConfig.provider) || {}).label || aiConfig.provider || '') +
-                    stAiReadonly('Base URL', aiConfig.baseUrl || '（空）') +
-                    stAiReadonly('模型', aiConfig.model || '（未选）') +
-                    stAiReadonly('API Key', aiConfig.apiKey ? '已填写（' + aiConfig.apiKey.length + ' 字符）' : '（空）') +
+                    // ⚠ 必须读 apiGlobal，不能读 aiConfig —— 后者是「生效值」，
+                    //   【ai对话】一切到独立配置它就跟着变，这张表就会指错地方
+                    stAiReadonly('服务商', (AI_PROVIDERS.find(x => x.value === apiGlobal.provider) || {}).label || apiGlobal.provider || '') +
+                    stAiReadonly('Base URL', apiGlobal.baseUrl || '（空）') +
+                    stAiReadonly('模型', apiGlobal.model || '（未选）') +
+                    stAiReadonly('API Key', apiGlobal.apiKey ? '已填写（' + apiGlobal.apiKey.length + ' 字符）' : '（空）') +
                 '</div>' +
                 '<div class="st-note">这张表只是为了让你看清「跟随」到底跟随到了什么。' +
-                    '要改就去【AI 对话】选项卡改。</div>';
+                    '要改就点主页的【🔌 API 全局配置】按钮。</div>';
         }
 
         function stAiFollowFields(cfg) {
@@ -17124,7 +17577,7 @@
                     stAiReadonly('温度 / 上限', String(cfg.temperature) + ' / ' + cfg.maxTokens) +
                     stAiReadonly('第一段', cfg.firstSeg
                         ? String(cfg.firstSeg).slice(0, 60) + (String(cfg.firstSeg).length > 60 ? '…' : '')
-                        : '（没填，不发送）', '在【AI 对话】页的「第一段」里改') +
+                        : '（没填，不发送）', '在主页【API 全局配置】的「第一段」里改') +
                 '</div>';
         }
 
@@ -17302,7 +17755,7 @@
                 ' ontoggle="stAiUiSet(\'exOpen\',this.open)">' +
                 '<summary>✨ AI 扩写条目' +
                     '<span class="st-chip">' + (stEditor.card.bookEntries || []).length + ' 条现有</span>' +
-                    '<span class="st-chip">' + escapeHtml(stAi.mode === 'own' ? '独立配置' : '跟随对话') + '</span>' +
+                    '<span class="st-chip">' + escapeHtml(stAi.mode === 'own' ? '独立配置' : '跟随全局') + '</span>' +
                 '</summary>' +
                 '<div class="st-ai-box-body">' + body + '</div>' +
                 '</details>';
@@ -17407,7 +17860,7 @@
                 ' ontoggle="stAiUiSet(\'grOpen\',this.open)">' +
                 '<summary>✨ AI 生成开场白' +
                     '<span class="st-chip">世界书 ' + rows.length + ' 条参与</span>' +
-                    '<span class="st-chip">' + escapeHtml(stAi.mode === 'own' ? '独立配置' : '跟随对话') + '</span>' +
+                    '<span class="st-chip">' + escapeHtml(stAi.mode === 'own' ? '独立配置' : '跟随全局') + '</span>' +
                 '</summary>' +
                 '<div class="st-ai-box-body">' + body + '</div>' +
                 '</details>';
@@ -17492,7 +17945,7 @@
                 if (!stAi.model && ids.length) stAi.model = ids[0];
                 stAiSave();
                 stAiSetStatus('✅ 拿到 ' + ids.length + ' 个模型' +
-                    (cfg.mode === 'own' ? '，模型输入框旁边可以挑' : '。跟随模式下请去【AI 对话】选项卡选模型。'), 'st-ok');
+                    (cfg.mode === 'own' ? '，模型输入框旁边可以挑' : '。跟随模式下请点主页的【🔌 API 全局配置】按钮选模型。'), 'st-ok');
                 stAiRepaint();
             } catch (e) {
                 stAiSetStatus('❌ 获取模型失败：' + stAiErrText(e), 'st-bad');
@@ -26855,21 +27308,283 @@
             if (!mobileNavIsPhone()) closeMobileNav();
         });
 
+        // ==========================================================================
+        // 🔌 API 全局配置弹窗
+        //
+        // 主页那个按钮开的就是这里。面板里的字段与【ai对话】的模型设置**刻意长得一样**，
+        // 因为两者管的本来就是同一批东西 —— 只是这里那份是真相源。
+        // ==========================================================================
+        let apigBaseDraft = '';      // 自定义服务商的 Base URL 草稿（切服务商时不被冲掉）
+
+        function openApiGlobalModal() {
+            apigLoadToUI();
+            document.getElementById('apiGlobalModal').classList.add('active');
+        }
+
+        function closeApiGlobalModal() {
+            document.getElementById('apiGlobalModal').classList.remove('active');
+            // 关掉时清掉状态行 —— 免得下次打开还挂着上一次的「已保存」
+            apigStatus('');
+        }
+
+        // 把 apiGlobal 回填到弹窗控件
+        function apigLoadToUI() {
+            const sel = document.getElementById('apig-provider');
+            sel.innerHTML = '';
+            AI_PROVIDERS.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.value;
+                opt.textContent = p.label;
+                sel.appendChild(opt);
+            });
+            sel.value = apiGlobal.provider;
+            apigBaseDraft = (apiGlobal.provider === 'custom') ? apiGlobal.baseUrl : '';
+            syncApigProviderUI();
+            document.getElementById('apig-api-key').value = apiGlobal.apiKey || '';
+            // 模型下拉：把缓存里拉过的列表整个装回去，当前选中的那个补进选项里
+            const msel = document.getElementById('apig-model');
+            msel.innerHTML = '';
+            const models = (apiGlobal.models || []).slice();
+            if (apiGlobal.model && models.indexOf(apiGlobal.model) < 0) models.unshift(apiGlobal.model);
+            if (!models.length) {
+                const opt = document.createElement('option');
+                opt.value = ''; opt.textContent = '先点击下面的「获取模型列表」';
+                msel.appendChild(opt);
+            } else {
+                models.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m; opt.textContent = m;
+                    msel.appendChild(opt);
+                });
+            }
+            msel.value = apiGlobal.model || '';
+            document.getElementById('apig-stream').checked = !!apiGlobal.stream;
+            updateApigStreamLabel();
+            document.getElementById('apig-temperature').value = apiGlobal.temperature;
+            document.getElementById('apig-temp-value').textContent = Number(apiGlobal.temperature).toFixed(1);
+            document.getElementById('apig-max-tokens').value = apiGlobal.maxTokens;
+            document.getElementById('apig-first-seg').value = apiGlobal.firstSeg || '';
+            apigStatus('');
+        }
+
+        function syncApigProviderUI() {
+            const v = document.getElementById('apig-provider').value;
+            const p = AI_PROVIDERS.find(x => x.value === v) || AI_PROVIDERS[0];
+            const urlInput = document.getElementById('apig-base-url');
+            if (p.custom) {
+                urlInput.disabled = false;
+                urlInput.value = apigBaseDraft || '';
+            } else {
+                urlInput.disabled = true;
+                urlInput.value = p.baseUrl || '';
+            }
+        }
+
+        function updateApigStreamLabel() {
+            const on = document.getElementById('apig-stream').checked;
+            document.getElementById('apig-stream-label').textContent = on ? '流式输出' : '非流式（一次性返回）';
+        }
+
+        function updateApigTempLabel() {
+            document.getElementById('apig-temp-value').textContent =
+                Number(document.getElementById('apig-temperature').value).toFixed(1);
+        }
+
+        function apigStatus(msg, kind) {
+            const el = document.getElementById('apig-status');
+            if (!el) return;
+            el.className = 'apig-status' + (kind ? ' ' + kind : '');
+            el.textContent = msg || '';
+        }
+
+        // 从控件里读出一份全局配置（不落盘）
+        function apigGather() {
+            const p = AI_PROVIDERS.find(x => x.value === document.getElementById('apig-provider').value) || AI_PROVIDERS[0];
+            const baseUrl = (p.custom
+                ? (document.getElementById('apig-base-url').value || '')
+                : (p.baseUrl || '')).replace(/\/+$/, '');
+            return apiGlobalNormalize({
+                provider: p.value,
+                baseUrl: baseUrl,
+                apiKey: document.getElementById('apig-api-key').value.trim(),
+                model: document.getElementById('apig-model').value.trim(),
+                models: (apiGlobal.models || []).slice(),
+                stream: document.getElementById('apig-stream').checked,
+                temperature: parseFloat(document.getElementById('apig-temperature').value),
+                maxTokens: parseInt(document.getElementById('apig-max-tokens').value, 10),
+                firstSeg: document.getElementById('apig-first-seg').value
+            });
+        }
+
+        // 保存：写 apiGlobalCfg ⇒ 刷生效值 ⇒ 重画【ai对话】的镜像与编写器
+        function saveApiGlobal() {
+            apiGlobal = apigGather();
+            if (apiGlobal.provider === 'custom') apigBaseDraft = apiGlobal.baseUrl;
+            const ok = apiGlobalPersist();
+            aiApplyEffective();
+            // ⚠ 独立模式下不能顺手 aiSyncOwnFromEffective()：那会把用户自己那份冲成全局的
+            aiPersist();
+            syncAiCfgSourceUI();
+            refreshStAiCfgViews();
+            apigStatus(ok ? '✅ 已保存，全站立即生效' : '⚠️ 存不进 localStorage（隐私模式？），本次会话内有效',
+                ok ? 'ok' : 'warn');
+        }
+
+        async function apigFetchModels() {
+            const cfg = apigGather();
+            if (!cfg.apiKey) { apigStatus('⚠️ 请先填写 API Key', 'warn'); return; }
+            if (!cfg.baseUrl) { apigStatus('⚠️ 请填写服务商或 Base URL', 'warn'); return; }
+            const btn = document.getElementById('apig-fetch-btn');
+            btn.disabled = true;
+            btn.textContent = '获取中…';
+            apigStatus('⏳ 正在获取模型列表…');
+            try {
+                // 协议按 Base URL 猜（跟编写器同一套规则）：Anthropic 那个域名要换头
+                const proto = stAiGuessProto(cfg.baseUrl, cfg.provider);
+                const headers = proto === 'anthropic'
+                    ? {
+                        'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01',
+                        'anthropic-dangerous-direct-browser-access': 'true'
+                    }
+                    : { 'Authorization': 'Bearer ' + cfg.apiKey };
+                const resp = await fetch(cfg.baseUrl + '/models', { headers: headers });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                // ⚠ 复用编写器那份 stAiModelIds：它管三种返回形状 + **去重 + 排序** +
+                //   剥掉 `models/` 前缀。自己再写一遍 `data.data.map(m => m.id)` 就会漏掉
+                //   去重 —— 实测同一份响应里出现两次 `gpt-4o`，下拉里就真的有两个一样的项
+                const list = stAiModelIds(data);
+                if (!list.length) throw new Error('返回里没有模型');
+                apiGlobal.models = list;
+                // 落盘一份，免得刷新后又得重拉（模型列表是缓存，不是配置本体）
+                apiGlobalPersist();
+                const msel = document.getElementById('apig-model');
+                const keep = msel.value;
+                msel.innerHTML = '';
+                list.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m; opt.textContent = m;
+                    msel.appendChild(opt);
+                });
+                if (list.indexOf(keep) >= 0) msel.value = keep;
+                apigStatus('✅ 拉到 ' + list.length + ' 个模型，选一个再保存', 'ok');
+            } catch (e) {
+                apigStatus('❌ 获取失败：' + ((e && e.message) ? e.message : String(e)), 'warn');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔄 获取模型列表';
+            }
+        }
+
+        // 测试连接：拉一次 /models 只验证「能不能通」，不改配置、不落盘
+        async function apigTestConnection() {
+            const cfg = apigGather();
+            if (!cfg.apiKey) { apigStatus('⚠️ 请先填写 API Key', 'warn'); return; }
+            if (!cfg.baseUrl) { apigStatus('⚠️ 请填写服务商或 Base URL', 'warn'); return; }
+            const btn = document.getElementById('apig-test-btn');
+            btn.disabled = true;
+            apigStatus('⏳ 正在测试…');
+            try {
+                const resp = await fetch(cfg.baseUrl + '/models', {
+                    headers: { 'Authorization': 'Bearer ' + cfg.apiKey }
+                });
+                if (resp.ok) apigStatus('✅ 连接正常（HTTP ' + resp.status + '）', 'ok');
+                else apigStatus('❌ 服务端返回 HTTP ' + resp.status + '，检查 Key / Base URL', 'warn');
+            } catch (e) {
+                // 发不出去最常见的三个原因，和编写器那边的提示保持一致
+                apigStatus('❌ 请求发不出去：' + ((e && e.message) ? e.message : String(e)) +
+                    '（Base URL 写错 / 该服务不允许浏览器直连 CORS / 网络不通）', 'warn');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // ==========================================================================
+        // 【ai对话】的「配置来源」开关
+        //
+        // 跟随 = 下面那批 API 字段是 apiGlobal 的**只读镜像**（改不了，只能去全局面板改）；
+        // 独立 = 自己一套，真相源是 aiConfig.own。
+        //
+        // ⚠ 跟随时**绝不留「能改、但下次刷新又变回去」的假输入框** ——
+        //   所以这里是真 disabled，不是一个只挡样子的 readonly。
+        // ⚠ 切来源只动那几个 API 字段 + 第一段；系统提示词 / 酒馆模式那一大堆
+        //   仍然归【ai对话】自己管，跟着全局走的是「钥匙」，不是「人格」。
+        // ==========================================================================
+        function setAiCfgSource(follow) {
+            aiConfig.followGlobal = !!follow;
+            aiApplyEffective();
+            aiPersist();
+            syncAiCfgSourceUI();
+            updateAiStatus(aiConfig.followGlobal
+                ? '🔗 已改为跟随 API 全局配置'
+                : '🔑 已改为独立配置（自己一套，跟全局互不干扰）');
+        }
+
+        function syncAiCfgSourceUI() {
+            const follow = aiConfig.followGlobal !== false;
+            const src = follow ? apiGlobal : (aiConfig.own || {});
+
+            // 高亮 + 折叠状态下的角标
+            document.querySelectorAll('#ai-cfg-src .ai-src-btn').forEach(b => {
+                b.classList.toggle('ai-src-on', (b.dataset.follow === '1') === follow);
+            });
+            const badge = document.getElementById('ai-src-badge');
+            if (badge) badge.textContent = follow ? '· 🔗 跟随全局' : '· 🔑 独立';
+
+            // 把镜像值刷成真相源那份（⚠ 先写值再上锁，顺序反了 disabled 也不影响赋值，
+            //   但「自定义服务商」那格的可编辑性由 syncAiProviderUI 决定，必须排在它后面收口）
+            const psel = document.getElementById('ai-provider');
+            if (psel) {
+                psel.value = src.provider || 'openai';
+                customBaseUrlDraft = (src.provider === 'custom') ? (src.baseUrl || '') : '';
+                syncAiProviderUI();
+                const urlInput = document.getElementById('ai-base-url');
+                if (urlInput && src.provider !== 'custom') urlInput.value = src.baseUrl || '';
+            }
+            const key = document.getElementById('ai-api-key');
+            if (key) key.value = src.apiKey || '';
+            setAiModelOption(src.model || '');
+            const st = document.getElementById('ai-stream');
+            if (st) { st.checked = src.stream !== false; updateAiStreamLabel(); }
+            const tp = document.getElementById('ai-temperature');
+            if (tp) { tp.value = src.temperature; updateAiTempLabel(); }
+            const mt = document.getElementById('ai-max-tokens');
+            if (mt) mt.value = src.maxTokens;
+            const fs = document.getElementById('ai-first-seg');
+            if (fs) fs.value = src.firstSeg || '';
+
+            ['ai-provider', 'ai-base-url', 'ai-api-key', 'ai-model', 'ai-stream',
+                'ai-temperature', 'ai-max-tokens', 'ai-first-seg'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = follow;
+            });
+            const fb = document.getElementById('ai-fetch-btn');
+            if (fb) fb.disabled = follow;
+
+            const hint = document.getElementById('ai-cfg-src-hint');
+            if (hint) hint.style.display = follow ? '' : 'none';
+        }
+
+        // 全局配置变了 ⇒ 编写器开着就重画一次（跟随模式下它整页显示的都是全局的镜像）
+        function refreshStAiCfgViews() {
+            if (typeof stEditor === 'object' && stEditor && stEditor.open) stRerender();
+        }
+
         function saveAiSettings() {
-            aiConfig = getAiConfigFromInputs();
+            aiCommitInputs(getAiConfigFromInputs());
             if (aiConfig.provider === 'custom') customBaseUrlDraft = aiConfig.baseUrl;
-            try { localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig)); } catch (e) {}
             updateAiStatus('✅ 设置已保存');
         }
 
         function applyAiSettings() {
             const cfg = getAiConfigFromInputs();
-            if (!cfg.apiKey) { updateAiStatus('⚠️ 请先填写 API Key'); return; }
-            if (!cfg.baseUrl) { updateAiStatus('⚠️ 请填写服务商或 Base URL'); return; }
-            if (!cfg.model) { updateAiStatus('⚠️ 请先获取并选择模型'); return; }
-            aiConfig = cfg;
+            // 跟随模式下这几格是只读镜像，缺了也只能去全局配置里补 —— 别让用户在这儿干瞪眼
+            const where = (cfg.followGlobal !== false) ? '【API 全局配置】' : '这里';
+            if (!cfg.apiKey) { updateAiStatus('⚠️ 请先在' + where + '填写 API Key'); return; }
+            if (!cfg.baseUrl) { updateAiStatus('⚠️ 请先在' + where + '填写服务商或 Base URL'); return; }
+            if (!cfg.model) { updateAiStatus('⚠️ 请先在' + where + '获取并选择模型'); return; }
+            aiCommitInputs(cfg);
             if (cfg.provider === 'custom') customBaseUrlDraft = cfg.baseUrl;
-            try { localStorage.setItem('aiChatConfig', JSON.stringify(aiConfig)); } catch (e) {}
             // 折叠模型设置（保留在对话上方作为子展开），聊天保持展开
             document.getElementById('ai-card').classList.add('ai-settings-collapsed');
             updateAiStatus('');

@@ -270,13 +270,19 @@ window.fetch = async function (url, init) {
   // ⚠ 刷新之后 aiConfig 会回到 localStorage 里那份（我在内存里改的没存过），
   //   所以每次 reload 之后都得重配一遍 —— 否则后面那条 gen 会红在
   //   「还没配 Base URL」上，看着像功能坏了
+  //
+  // ⚠⚠ 第十七轮起，编写器（人设生成器也走它）的「跟随」目标从【AI 对话】改成了
+  //   **API 全局配置**（`apiGlobal`）。所以这里必须配 `apiGlobal` 并刷一次生效值 ——
+  //   只写 `aiConfig` 的话请求压根不会发出去（19 条断言会一起红，症状是
+  //   「确实发了 1 次请求」失败，看着像功能坏了，其实是套件在配错地方）
   const configAi = () => ev(`(function(){
-    aiConfig.provider = 'deepseek';
-    aiConfig.baseUrl = 'https://api.deepseek.com/v1';
-    aiConfig.apiKey = 'sk-test-KKK';
-    aiConfig.model = 'deepseek-chat';
-    aiConfig.temperature = 0.7;
-    aiConfig.maxTokens = 2048;
+    apiGlobal.provider = 'deepseek';
+    apiGlobal.baseUrl = 'https://api.deepseek.com/v1';
+    apiGlobal.apiKey = 'sk-test-KKK';
+    apiGlobal.model = 'deepseek-chat';
+    apiGlobal.temperature = 0.7;
+    apiGlobal.maxTokens = 2048;
+    apiGlobalPersist(); aiApplyEffective();
     return true; })()`);
 
   try {
@@ -674,7 +680,12 @@ window.fetch = async function (url, init) {
 
     // ============ G. 未配 AI ============
     section('G. 未配 AI：不发请求、只给提示');
-    await ev(`(function(){ aiConfig.baseUrl = ''; aiConfig.apiKey = ''; aiConfig.model = ''; return true; })()`);
+    // ⚠ 清的是**编写器真正读的那一份**（apiGlobal，见上面 configAi 的注释）；
+    //   aiConfig 顺手也清一下，免得留着上一段的值让人以为「没配」是假的
+    await ev(`(function(){
+      apiGlobal.baseUrl = ''; apiGlobal.apiKey = ''; apiGlobal.model = '';
+      aiConfig.baseUrl = ''; aiConfig.apiKey = ''; aiConfig.model = '';
+      return true; })()`);
     check('就绪判定先确认一下是「没配」', (await ev(`stAiReady(stAiCfg())`)).ok, false);
     // ⚠ 状态行是**建面板时**算出来的，改了配置得重绘才看得见 —— 不重绘就检查它，
     //   检查到的是上一次渲染的旧值（第一版就这么红了一条）

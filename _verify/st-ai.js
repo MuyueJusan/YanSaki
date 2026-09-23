@@ -310,42 +310,59 @@ const MOCK_SRC = `
     check('假 fetch 装上了', await ev(`typeof window.fetch === 'function' && Array.isArray(window.__aiCalls)`), true);
 
     // ================= A. 配置层 =================
-    section('A. 配置层：跟随 / 独立两种模式');
+    section('A. 配置层：跟随（API 全局配置）/ 独立 两种模式');
     await ev('openStEditor()');
     await sleep(200);
 
-    check('默认是「跟随 AI 对话」', await ev(`stAi.mode`), 'follow');
+    check('默认是「跟随」', await ev(`stAi.mode`), 'follow');
 
+    // ⚠⚠ 跟随目标从【AI 对话】改成【API 全局配置】之后，这两边必须**故意设成不同的值**：
+    //   要是 aiConfig 与 apiGlobal 写着同一串，那「读全局」和「读对话」读出来一模一样，
+    //   把实现改回 aiConfig 照样全绿 —— 下面那 6 条就等于没写（六之二十六）
     await ev(`(function(){
-      aiConfig.provider = 'deepseek';
-      aiConfig.baseUrl = 'https://api.deepseek.com/v1';
-      aiConfig.apiKey = 'sk-follow-KKK';
-      aiConfig.model = 'deepseek-chat';
-      aiConfig.temperature = 0.5; aiConfig.maxTokens = 2048;
+      apiGlobal.provider = 'deepseek';
+      apiGlobal.baseUrl = 'https://api.deepseek.com/v1';
+      apiGlobal.apiKey = 'sk-global-KKK';
+      apiGlobal.model = 'deepseek-chat';
+      apiGlobal.temperature = 0.5; apiGlobal.maxTokens = 2048;
+      // 【ai对话】那边故意写另一套 —— 编写器跟不跟随都**不该**受它影响
+      aiConfig.provider = 'openai';
+      aiConfig.baseUrl = 'https://api.openai.com/v1';
+      aiConfig.apiKey = 'sk-chat-XXX';
+      aiConfig.model = 'gpt-4o';
+      aiConfig.temperature = 1.9; aiConfig.maxTokens = 111;
       return true; })()`);
     let cfg = await ev(`stAiCfg()`);
-    check('跟随：provider 跟着对话走', cfg.provider, 'deepseek');
-    check('跟随：baseUrl 跟着对话走', cfg.baseUrl, 'https://api.deepseek.com/v1');
-    check('跟随：apiKey 跟着对话走', cfg.apiKey, 'sk-follow-KKK');
-    check('跟随：model 跟着对话走', cfg.model, 'deepseek-chat');
-    check('跟随：温度也跟着', cfg.temperature, 0.5);
+    check('跟随：provider 取的是全局配置', cfg.provider, 'deepseek');
+    check('跟随：baseUrl 取的是全局配置', cfg.baseUrl, 'https://api.deepseek.com/v1');
+    check('跟随：apiKey 取的是全局配置', cfg.apiKey, 'sk-global-KKK');
+    check('跟随：model 取的是全局配置', cfg.model, 'deepseek-chat');
+    check('跟随：温度取的是全局配置', cfg.temperature, 0.5);
+    check('跟随：上限取的是全局配置', cfg.maxTokens, 2048);
     check('跟随：DeepSeek 判成 OpenAI 协议', cfg.proto, 'openai');
+    // ⚠ providerLabel 是**服务商**的名字（DeepSeek），「跟随谁」要看 stAiModeLabel
+    check('跟随：来源标签写的是「API 全局配置」',
+      /跟随 API 全局配置/.test(await ev(`stAiModeLabel(stAiCfg())`)), true);
+    // 对照：对话那套确实不同 —— 上面 6 条才证明得了「读的是全局」
+    check('（对照）对话那套是另一组值', await ev(`aiConfig.apiKey + '/' + aiConfig.model`), 'sk-chat-XXX/gpt-4o');
 
     await ev(`(function(){
-      aiConfig.baseUrl = 'https://api.anthropic.com/v1';
-      aiConfig.provider = 'custom'; return true; })()`);
+      apiGlobal.baseUrl = 'https://api.anthropic.com/v1';
+      apiGlobal.provider = 'custom'; return true; })()`);
     check('跟随：Anthropic 的 Base URL 自动判成 anthropic 协议',
       (await ev(`stAiCfg()`)).proto, 'anthropic');
     await ev(`(function(){
-      aiConfig.baseUrl = 'https://api.deepseek.com/v1';
-      aiConfig.provider = 'deepseek'; return true; })()`);
+      apiGlobal.baseUrl = 'https://api.deepseek.com/v1';
+      apiGlobal.provider = 'deepseek'; return true; })()`);
 
     check('跟随：就绪判定通过', (await ev(`stAiReady(stAiCfg())`)).ok, true);
 
-    await ev(`(function(){ aiConfig.apiKey = ''; return true; })()`);
+    await ev(`(function(){ apiGlobal.apiKey = ''; return true; })()`);
     let rdy = await ev(`stAiReady(stAiCfg())`);
     check('跟随：缺 Key 会被拦住', rdy.ok, false);
-    check('跟随：缺 Key 的话里提到「AI 对话」', /AI 对话/.test(rdy.why), true);
+    check('跟随：缺 Key 的话里提到「API 全局配置」', /API 全局配置/.test(rdy.why), true);
+    // 对照：提示里**不该**再让人去【AI 对话】页 —— 那是旧指向，留着就是把用户支错地方
+    check('跟随：缺 Key 的话里不再提「AI 对话」', /AI 对话/.test(rdy.why), false);
 
     await ev(`(function(){ stAi.mode = 'own'; stAi.provider = 'openai';
       stAi.model = ''; stAi.apiKey = 'sk-own-AAA'; stAiSave(); return true; })()`);
@@ -1258,21 +1275,24 @@ const MOCK_SRC = `
       await ev(`firstSegText()`), '你是 小雨，正在跟 小夜 说话。');
     await ev(`(function(){ aiConfig.firstSeg = ${JSON.stringify(SEG)}; return true; })()`);
 
-    // —— N5. follow 现读 / own 自己一套 ——
+    // —— N5. follow 现读全局配置 / own 自己一套 ——
+    // ⚠ 同样把两份设成**不同**的字符串，否则分不出读的是哪一份
     await ev(`(function(){
       stAi.mode = 'follow'; stAiSave();
+      apiGlobal.firstSeg = '来自全局配置的第一段';
       aiConfig.firstSeg = '来自 AI 对话的第一段';
       return true; })()`);
-    check('跟随模式现读 AI 对话那段', await ev(`stAiCfg().firstSeg`), '来自 AI 对话的第一段');
+    check('跟随模式现读全局配置那段', await ev(`stAiCfg().firstSeg`), '来自全局配置的第一段');
     await ev(`stAiSetFirstSeg('想偷偷写进去')`);
     check('跟随模式下写不进 stAi（它是只读镜像）',
       await ev(`stAi.firstSeg`), '请用 {{char}} 的口吻说话。');
     await ev(`(function(){ stAi.mode = 'own'; stAiSave(); return true; })()`);
     check('切回独立配置读的是自己那份',
       await ev(`stAiCfg().firstSeg`), '请用 {{char}} 的口吻说话。');
-    // 后面几段都要看哨兵串，这里把两份都掰回来
+    // 后面几段都要看哨兵串，这里把两份都掰回来（⚠ 全局那份也要 —— 跟随模式现读它）
     await ev(`(function(){
       stAi.firstSeg = ${JSON.stringify(SEG)}; stAiSave();
+      apiGlobal.firstSeg = ${JSON.stringify(SEG)};
       aiConfig.firstSeg = ${JSON.stringify(SEG)}; persistSystemPrompt();
       return true; })()`);
 
