@@ -1085,13 +1085,27 @@ window.fetch = async function (url, init) {
       JSON.stringify(['原有条目', '艾莉丝']));
     // ⚠ 量 rect 量不出「被别的层盖住」⇒ 用**命中测试**：屏幕正中必须点到弹窗自己。
     //   这条同时盯着「position:fixed 的包含块还对不对」（#st-overlay 带 backdrop-filter）
+    //   ⚠⚠ 它还真的抓到过一次**产品级**的坏：那轮往 `<style>` 块的注释里写了一个
+    //     结束标签的字面量，HTML 的 raw-text 状态里它就是**终止符**（CSS 注释挡不住）
+    //     ⇒ 样式块当场截断、`.st-ask` 整条规则失效 ⇒ 弹窗掉回 `position: static`，
+    //     落到了文档流里（rect 的 top 1070、视口才 900）。**rect 量不出来，命中测试一枪就中。**
+    //   ⚠ 所以失败时要把它**自己量出来的东西**报出来（下面那段），否则「OTHER:div.xxx」
+    //     只能告诉你「点到了别的元素」，说不出为什么。
     check('弹窗真的盖在屏幕正中（命中测试）',
       await ev(`(function(){
         const el = document.getElementById('st-persona-book-ask');
         if (!el) return 'NO-MODAL';
         const hit = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
         if (!hit) return 'NOTHING';
-        return el.contains(hit) ? 'OK' : ('OTHER:' + hit.tagName + '.' + hit.className);
+        if (el.contains(hit)) return 'OK';
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        const chain = (function (n) { const a = []; while (n && a.length < 5) { a.push(n.tagName + '.' + String(n.className || '')); n = n.parentElement; } return a.join(' < '); })(hit);
+        return 'OTHER:' + hit.tagName + '.' + hit.className
+          + ' || modal.pos=' + cs.position + ' z=' + cs.zIndex
+          + ' rect=' + JSON.stringify({ t: Math.round(r.top), l: Math.round(r.left), w: Math.round(r.width), h: Math.round(r.height) })
+          + ' || vp=' + window.innerWidth + 'x' + window.innerHeight
+          + ' || hitChain=' + chain;
       })()`), 'OK');
 
     // —— ③ 取消：什么都不做 ——
