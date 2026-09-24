@@ -793,8 +793,127 @@ const MOCK_SRC = `
     check('⚠ 退出复古：掩码条也复原（底色不再纯白）', s2.maskedBg, v => v !== 'rgb(255, 255, 255)', '≠ #fff');
     check('⚠ 退出复古：验证结果区也复原', s2.voutBg, v => v !== 'rgb(255, 255, 255)', '≠ #fff');
 
+    // ================= G3. Vertex 两种模式的字段显隐 =================
+    // ⚠⚠ 这一段是**用户报的那个 bug 的回归测试**：
+    //   `syncApigAuthUI` 里写了 `keyF.hidden = (mode === 'sa')`，逻辑一直是对的 ——
+    //   但 `.ai-field { display: flex }` 会**盖掉** hidden 属性自带的 `display:none`
+    //   （同权重时后者输），于是完整模式下「API Key」那一格**照样看得见**。
+    //   ⇒ 只断言 `el.hidden === true` 是**看不出这个 bug 的**（属性确实设上了），
+    //     必须断言 computed `display === 'none'`（真的没渲染）。
+    section('G3. Vertex 两种模式：字段真的藏住了吗（断言 computed display，不是 hidden 属性）');
+
+    await ev(`openApiGlobalModal()`);
+    await sleep(300);
+    const vis = () => ev(`(function(){
+      const g = id => {
+        const el = document.getElementById(id);
+        if (!el) return '(没有这个元素)';
+        return getComputedStyle(el).display;
+      };
+      return {
+        authMode: document.getElementById('apig-auth-mode').value,
+        key: g('apig-key-field'),
+        proj: g('apig-project-field'),
+        loc: g('apig-location-field'),
+        sa: g('apig-sa-field'),
+        box: g('apig-vertex-box')
+      };
+    })()`);
+
+    // —— 完整模式（sa）：Key 那一格必须**真的**不渲染
+    await ev(`(function(){
+      document.getElementById('apig-provider').value = 'vertex';
+      syncApigProviderUI();
+      document.getElementById('apig-auth-mode').value = 'sa';
+      syncApigAuthUI();
+      return true; })()`);
+    await sleep(200);
+    const vs = await vis();
+    check('⚠⚠ 完整模式：API Key 那一格**真的**藏住了（computed display = none）', vs.key, 'none');
+    check('完整模式：project 那格显示出来', vs.proj, v => v !== 'none', '≠ none');
+    check('完整模式：location 那格显示出来', vs.loc, v => v !== 'none', '≠ none');
+    check('完整模式：Service Account 那格显示出来', vs.sa, v => v !== 'none', '≠ none');
+
+    // —— 快速模式（key）：反过来，Key 必须显示、project/sa 必须藏住
+    await ev(`(function(){
+      document.getElementById('apig-auth-mode').value = 'key';
+      syncApigAuthUI();
+      return true; })()`);
+    await sleep(200);
+    const vk = await vis();
+    check('（对照）快速模式：API Key 那一格**显示**（证明上一条不是「永远 none」）', vk.key, v => v !== 'none', '≠ none');
+    check('快速模式：project 那格藏住（只有完整模式才要项目 ID）', vk.proj, 'none');
+    check('快速模式：Service Account 那格藏住', vk.sa, 'none');
+    check('⚠ 两种模式：location 都显示（快速模式下它也真的生效，不是摆设）', vk.loc, v => v !== 'none', '≠ none');
+
+    // —— 非 Vertex 服务商：整块 Vertex 区域都不该占地方
+    await ev(`(function(){
+      document.getElementById('apig-provider').value = 'openai';
+      syncApigProviderUI();
+      return true; })()`);
+    await sleep(200);
+    const vo = await vis();
+    check('非 Vertex：整块 Vertex 区域藏住', vo.box, 'none');
+    check('（对照）非 Vertex：API Key 那一格显示', vo.key, v => v !== 'none', '≠ none');
+
     await ev(`closeApiGlobalModal()`);
     await sleep(250);
+
+    // ================= G4. 列不出来也要能用 =================
+    // ⚠⚠ 两件事一起测：
+    //   ① **拉模型不该要求先有模型** —— 这一步本来就是为了挑模型（`needModel:false`）。
+    //      全局面板原来漏了这个开关 ⇒ Vertex 下必须先手打一个模型名才能点
+    //      「获取模型列表」，等于把这个按钮废掉（编写器那边一直带着这个开关）。
+    //   ② 列不出来时**退回内置候选 + 明说原因**，绝不能把失败伪装成成功
+    //      —— 用户报的正是「我已经开放代理，却还是显示【列模型失败】」，
+    //      而那种一句「失败」的文案让他不知道该改什么。
+    section('G4. 列不出来也要能用：不要求先有模型 + 退回内置候选 + 说出原因');
+
+    await ev(`openApiGlobalModal()`);
+    await sleep(300);
+    // Vertex + 快速模式 + 有 Key + 有项目（这样候选是 3 条）+ **模型名故意留空**
+    await ev(`(function(){
+      document.getElementById('apig-provider').value = 'vertex';
+      syncApigProviderUI();
+      document.getElementById('apig-auth-mode').value = 'key';
+      syncApigAuthUI();
+      document.getElementById('apig-api-key').value = 'K';
+      document.getElementById('apig-project').value = 'demo-proj';
+      document.getElementById('apig-model').value = '';
+      document.getElementById('apig-model-list').innerHTML = '';
+      return true; })()`);
+    await sleep(200);
+
+    // 桩：所有请求都 401（模拟「这个接口不给列」/ 账号没那个权限）
+    await setScript({ fail: 'http401', models: 'openai', chat: '' });
+    await ev(`(window.__aiCalls = [], true)`);
+    await ev(`document.querySelector('#apiGlobalModal #apig-fetch-btn').click()`);
+    await sleep(1000);
+
+    const g4 = await ev(`(function(){
+      const st = document.getElementById('apig-status');
+      return {
+        status: st.textContent,
+        cls: st.className,
+        opts: [...document.getElementById('apig-model-list').options].map(o => o.value),
+        tried: window.__aiCalls.filter(c => /\\/models$/.test(c.url)).length
+      };
+    })()`);
+    check('⚠ 模型名留空也能点「获取模型列表」（不该被「请填模型名」拦下）',
+      g4.tried, v => v >= 1, '至少发了 1 次请求');
+    check('⚠ Vertex 列模型逐条试候选路径（这里 3 条全 401）', g4.tried, 3);
+    check('⚠ 列不出来时退回内置候选（datalist 里真的有东西可选）',
+      g4.opts.length, v => v >= 3, '>=3');
+    check('⚠ 状态里**明说**是「列不出来」，不是装作成功',
+      g4.status, v => v.indexOf('列不出来') >= 0, '含「列不出来」');
+    check('⚠⚠ 还要说清「不影响对话」（否则用户会一直以为自己配错了）',
+      g4.status, v => v.indexOf('不影响对话') >= 0, '含「不影响对话」');
+    check('⚠ 状态是 warn 而不是 ok（失败不许伪装成成功）',
+      g4.cls, v => v.indexOf('warn') >= 0, '含 warn');
+
+    await ev(`closeApiGlobalModal()`);
+    await sleep(250);
+    await setScript({ fail: '', models: 'openai' });
 
     // ================= H. 收尾 =================
     section('H. 收尾');

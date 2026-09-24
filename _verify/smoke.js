@@ -1,4 +1,4 @@
-// 全应用冒烟：改过 stSet 之后，确认 15 个选项卡都还能渲染、零 console 报错
+// 全应用冒烟：改过 stSet 之后，确认 16 个选项卡都还能渲染、零 console 报错
 const fs = require('fs'); const os = require('os'); const path = require('path');
 const http = require('http'); const { spawn } = require('child_process');
 const PAGE_FILE = 'G:/saki/saki.html';
@@ -153,13 +153,29 @@ function check(name, actual, pred, expect) {
   await ev('toggleStArea()');
   await sleep(600);
 
-  console.log('== 编写器：15 个选项卡逐个切 ==');
+  console.log('== 编写器：16 个选项卡逐个切 ==');
   await ev('openStEditor()');
   const tabs = await ev(`(function(){ const out = [];
     document.querySelectorAll('[onclick*="stSwitchTab"]').forEach(el => {
       const m = /stSwitchTab\\('([^']+)'\\)/.exec(el.getAttribute('onclick')); if (m) out.push(m[1]); });
     return out; })()`);
-  check('选项卡数量 15', tabs.length, 15);
+  // ⚠⚠ 加 / 删选项卡必须同步改**六处**写死的数字（第二十一轮实测，别只改前三处）：
+  //   ① 这里  ② `persona-verify.js`  ③ `st-code.js`
+  //   ④ **`st-ai.js` 里那条 `选项卡数量 16`**（断言名同此处，别抄行号 —— 行号每轮都漂）
+  //      —— 第二十一轮**漏了这一处**，是靠**整跑**才抓出来的（单跑该套件时它红，但
+  //         当时只按「已知三处」的清单去改，没回头看这份清单本身就是漏的）
+  //   ⑤ 外部 harness `…\2026-09-17-00-10-39\_verify\verify_steditor.js`
+  //      —— `B6` / `C1` / `C12` / `C2`·`C3`（标签与 id 清单）/ `C4`（默认选中）/ `P69`
+  //   ⑥ 外部 harness `…\verify_tavern_visual.js`
+  //      —— `左侧有 N 个选项卡` / `选项卡文案齐全` / `默认选中` / `展开后 N 个标签` /
+  //         `折叠后 N 个标签` / `移动端折叠后 N 个图标` / `tabWalk` 那两处清单
+  //   ⚠⚠ 这份清单**改过三次：三处 → 五处 → 六处**，每一次都是「按上一版清单改完之后
+  //      整跑又红」。结论不是「这次数对了」，而是：**清单本身是推导式的反面** ——
+  //      它是手写枚举，手写枚举就一定会漏。真正可靠的做法是**整跑**（`run-all.js`
+  //      把每一套的断言数打出来，对不上 README §7 表就是少走 / 有红）。
+  //   ⚠ 下一轮再动选项卡，请**先 grep 出所有候选**（`grep -rn "个选项卡\|st-tab').length" _verify/`
+  //      + 外部两处），别信这份清单的条数。
+  check('选项卡数量 16', tabs.length, 16);
   for (const t of tabs) {
     let r;
     try { r = await ev(`(function(){ stSwitchTab(${JSON.stringify(t)});

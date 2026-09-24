@@ -33,7 +33,11 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+// ⚠⚠ 必须用**异步** `spawn`：这个环境里 `spawnSync` / `execFileSync` / `execSync`
+//   一律返回 `EBUSY`（连 `where.exe` / `git` 也一样），只有异步 `spawn` 正常。
+//   这一套原来写的是 `spawnSync` ⇒ 在现在这台机器上**根本跑不起来**，
+//   而它的表现是「基线拿不到汇总行」，看着像套件坏了（见 `RULES.md` 六之四十六）。
+const { spawn } = require('child_process');
 
 const DIR = __dirname;
 const PAGE = path.join(DIR, '..', 'saki.html');
@@ -59,11 +63,35 @@ const expect = (name, cond, extra) => {
 };
 const nm = s => String(s).trim();
 
+// 跑一遍套件。**异步** —— 见文件头那条（`spawnSync` 在这个环境里必 `EBUSY`）。
+// ⚠ timeout 给到 **15 min**，跟 `run-all.js` 一致：被截断的套件跟「通过了」长得一模一样
+//   （汇总行照样打得出来），所以宁可等，不许切。
 function runSuite() {
-    const r = spawnSync(process.execPath, [SUITE], {
-        cwd: DIR, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 600000
+    return new Promise(resolve => {
+        let out = '';
+        let done = false;
+        const c = spawn(process.execPath, [SUITE], { cwd: DIR });
+        const timer = setTimeout(() => {
+            if (done) return;
+            done = true;
+            try { c.kill(); } catch (e) {}
+            resolve({ code: null, out: out + '\n[超时被掐]' });
+        }, 15 * 60 * 1000);
+        c.stdout.on('data', d => { out += d; });
+        c.stderr.on('data', d => { out += d; });
+        c.on('close', code => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve({ code, out });
+        });
+        c.on('error', e => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve({ code: null, out: out + '\n[起不了子进程: ' + (e && e.code) + ']' });
+        });
     });
-    return { code: r.status, out: String(r.stdout || '') + String(r.stderr || '') };
 }
 // 汇总行用来确认「确实跑完了」—— 提前退出的话它会缺
 function summaryOf(out) {
@@ -188,11 +216,23 @@ const PROBES = [
         //   ⇒ 旧的注入点（`apigFetchModels` 里的 `const list = stAiModelIds(data);`）
         //   在产品里**已经 0 命中**。注入点找不到时这一针会被闸门拦下（报「命中 0 次」），
         //   不会静默变成「没注入也全绿」—— 那个闸门就是为这种漂移准备的
+        // ⚠⚠ **注入点又挪过一次**（第二十一轮发现）：产品在第十四段（第 20 轮）把
+        //   `stAiFetchModels` 拆出 `stAiFetchModelsOnce` 时，顺手把这句报错文案从
+        //   「这个接口没返回任何模型」改成了「返回里没有模型（字段名对不上？）」。
+        //   ⇒ 老的 `from`（连**文案**一起写死的那串）在产品里**又一次 0 命中**，
+        //     这一针**静默变成空操作**。
+        //   ⚠⚠ 两件事要分开看：
+        //     ① 闸门是好的 —— 跑起来它会报「命中 0 次」，**不会**伪装成「没注入也全绿」；
+        //     ② 但闸门**只在有人跑它的时候**才起作用，而这一套用的是 `spawnSync`，
+        //        在本环境里**必 `EBUSY`**（见 `RULES.md` 六之四十六）⇒ 实际上跑不起来，
+        //        于是这一针漂了整整一轮没人知道。
+        //   ⇒ 教训：**「注入点唯一」这道闸门挡不住「没人跑」**。写死产品文案的探针
+        //     尤其脆 —— 产品改一句人话，探针就死了，而产品那边看不出任何异常。
         from: "            const ids = stAiModelIds(data);\r\n" +
-              "            if (!ids.length) throw new Error('这个接口没返回任何模型');",
+              "            if (!ids.length) throw new Error('返回里没有模型（字段名对不上？）');",
         to:   "            const ids = (data && Array.isArray(data.data) ? data.data : [])\r\n" +
               "                .map(m => m && m.id).filter(Boolean);   // 注入：不去重不排序、只认一种形状\r\n" +
-              "            if (!ids.length) throw new Error('这个接口没返回任何模型');",
+              "            if (!ids.length) throw new Error('返回里没有模型（字段名对不上？）');",
         red: [
             // ⚠ 这条名字在第十八轮改过（下拉 ⇒ 候选（datalist），模型控件从
             //   <select> 变成 input+datalist）—— **断言名漂了这里就会永远红**，
@@ -383,69 +423,72 @@ const PROBES = [
     }
 ];
 
-// 先跑一遍**没注入**的，拿到基线（也顺便确认套件本身现在是绿的）
-console.log('== 基线（未注入）==');
-const base = runSuite();
-const bs = summaryOf(base.out);
-const basePass = passesOf(base.out);
-expect('套件能跑完（有汇总行）', !!bs, JSON.stringify(bs));
-expect('基线是绿的（0 失败）', !!bs && bs.fail === 0, JSON.stringify(bs));
-console.log('     基线 ' + (bs ? bs.pass : '?') + ' 条绿（这一套的断言总数）');
+// ⚠ 整段主流程包在 async IIFE 里 —— `runSuite()` 现在是**异步**的（见文件头）。
+(async () => {
+  // 先跑一遍**没注入**的，拿到基线（也顺便确认套件本身现在是绿的）
+  console.log('== 基线（未注入）==');
+  const base = await runSuite();
+  const bs = summaryOf(base.out);
+  const basePass = passesOf(base.out);
+  expect('套件能跑完（有汇总行）', !!bs, JSON.stringify(bs));
+  expect('基线是绿的（0 失败）', !!bs && bs.fail === 0, JSON.stringify(bs));
+  console.log('     基线 ' + (bs ? bs.pass : '?') + ' 条绿（这一套的断言总数）');
 
-// ⚠ 基线里一条 ✅ 都没有 ⇒ 下面的「名字还在不在」全部无从谈起，
-//   而且 `red` 会一条都匹配不上还打 ✅。直接拦掉
-expect('基线里能抽到断言名（否则后面的存在性检查是空转）', basePass.length > 0, basePass.length);
+  // ⚠ 基线里一条 ✅ 都没有 ⇒ 下面的「名字还在不在」全部无从谈起，
+  //   而且 `red` 会一条都匹配不上还打 ✅。直接拦掉
+  expect('基线里能抽到断言名（否则后面的存在性检查是空转）', basePass.length > 0, basePass.length);
 
-// 先把所有探针点名的断言核一遍存在性 —— 这步**不需要跑套件**，纯离线。
-console.log('\n== 探针点名的断言，在基线里都在吗 ==');
-let stale = 0;
-for (const p of PROBES) {
-    const miss = p.red.concat(p.green).filter(x => !hit(basePass, x));
-    expect(p.id + ' 点名的 ' + (p.red.length + p.green.length) + ' 条断言都在基线里',
-        miss.length === 0, miss.length ? '找不到：' + miss.join(' / ') : '');
-    stale += miss.length;
-}
-if (stale) {
-    console.log('\n⚠ 有 ' + stale + ' 条探针期望对不上基线 —— 后面的整跑没有意义，先修期望。');
-    process.exit(1);
-}
+  // 先把所有探针点名的断言核一遍存在性 —— 这步**不需要跑套件**，纯离线。
+  console.log('\n== 探针点名的断言，在基线里都在吗 ==');
+  let stale = 0;
+  for (const p of PROBES) {
+      const miss = p.red.concat(p.green).filter(x => !hit(basePass, x));
+      expect(p.id + ' 点名的 ' + (p.red.length + p.green.length) + ' 条断言都在基线里',
+          miss.length === 0, miss.length ? '找不到：' + miss.join(' / ') : '');
+      stale += miss.length;
+  }
+  if (stale) {
+      console.log('\n⚠ 有 ' + stale + ' 条探针期望对不上基线 —— 后面的整跑没有意义，先修期望。');
+      process.exit(1);
+  }
 
-for (const p of PROBES) {
-    console.log('\n== ' + p.id + '：' + p.why + ' ==');
-    const cnt = ORIG.split(p.from).length - 1;
-    expect('注入点在产品里唯一（命中 ' + cnt + ' 次）', cnt === 1, cnt);
-    if (cnt !== 1) { bad++; continue; }
+  for (const p of PROBES) {
+      console.log('\n== ' + p.id + '：' + p.why + ' ==');
+      const cnt = ORIG.split(p.from).length - 1;
+      expect('注入点在产品里唯一（命中 ' + cnt + ' 次）', cnt === 1, cnt);
+      if (cnt !== 1) { bad++; continue; }
 
-    fs.writeFileSync(BAK, ORIG, 'utf8');
-    fs.writeFileSync(PAGE, ORIG.replace(p.from, p.to), 'utf8');
-    let r;
-    try {
-        r = runSuite();
-    } finally {
-        fs.writeFileSync(PAGE, ORIG, 'utf8');   // 无论跑成什么样都先还原
-    }
-    const s = summaryOf(r.out);
-    const got = failsOf(r.out);
+      fs.writeFileSync(BAK, ORIG, 'utf8');
+      fs.writeFileSync(PAGE, ORIG.replace(p.from, p.to), 'utf8');
+      let r;
+      try {
+          r = await runSuite();
+      } finally {
+          fs.writeFileSync(PAGE, ORIG, 'utf8');   // 无论跑成什么样都先还原
+      }
+      const s = summaryOf(r.out);
+      const got = failsOf(r.out);
 
-    expect('注入后套件跑完了（有汇总行）', !!s, JSON.stringify(s));
-    expect('  退出码是 1', r.code === 1, r.code);
-    expect('  确实红了（失败数 > 0）', !!s && s.fail > 0, s && s.fail);
+      expect('注入后套件跑完了（有汇总行）', !!s, JSON.stringify(s));
+      expect('  退出码是 1', r.code === 1, r.code);
+      expect('  确实红了（失败数 > 0）', !!s && s.fail > 0, s && s.fail);
 
-    const missRed = p.red.filter(x => !hit(got, x));
-    expect('预期该红的都红了（' + p.red.length + ' 条）', missRed.length === 0, missRed);
-    const badGreen = p.green.filter(x => hit(got, x));
-    expect('对照组一条都没红（' + p.green.length + ' 条）', badGreen.length === 0, badGreen);
-    expect('没有预期之外的红（恰好这几条）', got.length === p.red.length,
-        '实际 ' + got.length + ' 条' + (got.length === p.red.length ? '' : '：' + got.join(' / ')));
+      const missRed = p.red.filter(x => !hit(got, x));
+      expect('预期该红的都红了（' + p.red.length + ' 条）', missRed.length === 0, missRed);
+      const badGreen = p.green.filter(x => hit(got, x));
+      expect('对照组一条都没红（' + p.green.length + ' 条）', badGreen.length === 0, badGreen);
+      expect('没有预期之外的红（恰好这几条）', got.length === p.red.length,
+          '实际 ' + got.length + ' 条' + (got.length === p.red.length ? '' : '：' + got.join(' / ')));
 
-    expect('还原后产品与基线逐字节一致', sha1(fs.readFileSync(PAGE, 'utf8')) === H0);
-}
+      expect('还原后产品与基线逐字节一致', sha1(fs.readFileSync(PAGE, 'utf8')) === H0);
+  }
 
-// 收尾：备份文件必须删掉，且产品没被动过
-if (fs.existsSync(BAK)) fs.unlinkSync(BAK);
-console.log('\n== 收尾 ==');
-expect('没留下 .bak', !fs.existsSync(BAK));
-expect('saki.html 与基线逐字节一致', sha1(fs.readFileSync(PAGE, 'utf8')) === H0);
+  // 收尾：备份文件必须删掉，且产品没被动过
+  if (fs.existsSync(BAK)) fs.unlinkSync(BAK);
+  console.log('\n== 收尾 ==');
+  expect('没留下 .bak', !fs.existsSync(BAK));
+  expect('saki.html 与基线逐字节一致', sha1(fs.readFileSync(PAGE, 'utf8')) === H0);
 
-console.log('\n===== 反向测试（API 全局配置）：' + (bad ? bad + ' 项不达标' : '全部达标') + ' =====');
-process.exit(bad ? 1 : 0);
+  console.log('\n===== 反向测试（API 全局配置）：' + (bad ? bad + ' 项不达标' : '全部达标') + ' =====');
+  process.exit(bad ? 1 : 0);
+})();

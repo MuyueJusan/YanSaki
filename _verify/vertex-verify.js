@@ -18,6 +18,8 @@
 //   C. 协议判定（⚠ 必须测 **resolver** `stAiProtoOf`，只测 `stAiGuessProto` 会漏）
 //   C2. 半成品 cfg（全局面板 apigGather 不给 proto ⇒ 兜底那一步必须存在）
 //   D. gemini URL 三条路（快速模式**不带** projects/，完整模式带）
+//      + **列模型候选表**（⚠ v1 的 projects.locations.publishers.models **没有 list 方法**，
+//        候选第一条必须是 v1beta1）+ `publisherModels` 字段的解析（第二十轮补的）
 //   E. gemini 请求体 + 取文 + **safetySettings** + **空响应为什么**（第二轮补的）
 //   F. Service Account 解析与换 token（假私钥必须抛错，不能静默成功）
 //   G. 弹窗 UI：Vertex 显隐 + 手输模型名
@@ -97,7 +99,23 @@ class CDP {
   await new Promise(r => srv.listen(PORT, '127.0.0.1', r));
   console.log(`静态服务 http://127.0.0.1:${PORT}`);
 
-  const cdpPort = 9711;
+  // ⚠⚠ 端口**不能写死**。这一套原来是 `const cdpPort = 9711;` —— 全 `_verify/` 里
+  //   **只剩它一个**还写死（其余 16 套都走下面这段「先真绑一下」）。连跑整套时上一轮
+  //   Chrome 还没退干净就会占着 9711，症状是「连不上 CDP」，**跟被测页面一点关系都没有**。
+  //   2026-09-24 整跑实测：它紧跟 `apig-verify.js`，报 `1 通过 / 1 失败`。
+  const cdpPort = await (async () => {
+    for (let i = 0; i < 80; i++) {
+      const p = 9500 + Math.floor(Math.random() * 900);
+      const free = await new Promise(res => {
+        const probe = http.createServer();
+        probe.on('error', () => { try { probe.close(); } catch (e) {} res(false); });
+        probe.listen(p, '127.0.0.1', () => probe.close(() => res(true)));
+      });
+      if (free) return p;
+      await sleep(40);
+    }
+    return 9500 + Math.floor(Math.random() * 900);
+  })();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-smoke-'));
   const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', '--disable-gpu',
     '--no-first-run', '--hide-scrollbars',
@@ -137,8 +155,20 @@ class CDP {
     cdp.on('Runtime.exceptionThrown', p => {
       errs.push(String(p.exceptionDetails.exception ? p.exceptionDetails.exception.description : p.exceptionDetails.text));
     });
+    // ⚠⚠ 这里原来是**盲等** `await sleep(2500)` —— 全 `_verify/` 里只剩它一个不等真实事件。
+    //   连跑整套时（本套前面已经起了十几轮 Chrome、主页还要 `@import` 拉 Google Fonts）
+    //   2500 ms **不够**：页面还没跑完内联脚本 ⇒ 紧接着的 `ev('AI_PROVIDERS…')` 抛
+    //   `ReferenceError` ⇒ `ev()` 直接 throw ⇒ 整套只剩 **`1 通过 / 1 失败`**。
+    //   ⚠ 而那条**通过**的恰恰是 `加载后没有未捕获异常` —— 因为**什么都还没跑**，自然零异常。
+    //     这就是「跑不了」和「坏了」长得一模一样的又一例：**汇总行完全看不出是加载没完成**。
+    //   ⇒ 一律等**真实事件**（`Page.loadEventFired` + `document.fonts.ready`），别赌时间。
+    //   ⚠ 故意**不留超时回落**：回落会把「加载卡住」伪装成「跑过去了」（那种失败更难查）。
+    //     真卡住的话 `ev()` 自己的 40 s 超时会抛出来，是**响的**失败。
+    const loaded = new Promise(res => cdp.on('Page.loadEventFired', res));
     await cdp.send('Page.navigate', { url: `http://127.0.0.1:${PORT}/${base}` }, SID);
-    await sleep(2500);
+    await loaded;
+    await ev(`document.fonts.ready.then(() => true)`, true);
+    await sleep(300);
 
     section('A. 页面加载零报错');
     check('加载后没有未捕获异常', errs.length, 0, 0);
@@ -308,7 +338,14 @@ class CDP {
         vxSa: stAiGeminiUrl(mk({ authMode:'sa', project:'my-proj', location:'us-central1' }), 'gemini-2.5-flash', false),
         vxSaGlobal: stAiGeminiUrl(mk({ authMode:'sa', project:'my-proj', location:'global' }), 'gemini-2.5-flash', false),
         models: stAiGeminiModelsUrl(mk({})),
-        modelsSa: stAiGeminiModelsUrl(mk({ authMode:'sa', project:'p', location:'europe-west4' })),
+        modelUrls: stAiGeminiModelsUrls(mk({})),
+        modelUrlsSa: stAiGeminiModelsUrls(mk({ authMode:'sa', project:'p', location:'europe-west4' })),
+        modelUrlsStudio: stAiGeminiModelsUrls({ provider:'gemini-native', proto:'gemini' }),
+        modelIdsPublisher: stAiModelIds({ publisherModels: [
+          { name: 'publishers/google/models/gemini-2.5-pro' },
+          { name: 'publishers/google/models/gemini-2.5-flash' },
+          { name: 'publishers/google/models/gemini-2.5-pro' } ] }),
+        hints: ST_GEMINI_MODEL_HINTS.slice(0, 3),
         stripModels: stAiGeminiModel('models/gemini-2.5-pro'),
         stripGoogle: stAiGeminiModel('google/gemini-2.5-pro'),
         stripBoth: stAiGeminiModel('publishers/google/models/gemini-2.5-pro')
@@ -327,10 +364,29 @@ class CDP {
       'https://us-central1-aiplatform.googleapis.com/v1/projects/my-proj/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent');
     check('⚠ location=global 时端点**不带地区前缀**', urls.vxSaGlobal,
       'https://aiplatform.googleapis.com/v1/projects/my-proj/locations/global/publishers/google/models/gemini-2.5-flash:generateContent');
-    check('列模型 URL（快速模式）', urls.models,
-      'https://aiplatform.googleapis.com/v1/publishers/google/models');
-    check('列模型 URL（完整模式）', urls.modelsSa,
+    // ⚠⚠ 列模型：**v1 的 `projects.locations.publishers.models` 没有 `list` 方法**
+    //   （官方 REST 目录里那条资源只有 computeTokens / countTokens / embedContent /
+    //     generateContent / predict / rawPredict / stream*），v1 的 `publishers.models`
+    //   也只有 `get`。真正有 `list` 的是 **v1beta1 的 `publishers.models`**。
+    //   ⇒ 断言写成「顺序 + 条数」，不然「只留一条错的」也能过
+    check('（兼容壳）stAiGeminiModelsUrl 就是候选表的第一条', urls.models, urls.modelUrls[0]);
+    check('⚠ 列模型候选：第一条是 v1beta1（v1 那条没有 list 方法）',
+      urls.modelUrls[0], 'https://aiplatform.googleapis.com/v1beta1/publishers/google/models');
+    check('⚠ 列模型候选：快速模式只有 1 条（没有 project 就拼不出带 project 的路径）',
+      urls.modelUrls.length, 1);
+    check('⚠ 列模型候选：完整模式 3 条（v1beta1 无 project / v1beta1 带 project / v1 垫底）',
+      urls.modelUrlsSa.length, 3);
+    check('⚠ 列模型候选：v1 那条只能垫底',
+      urls.modelUrlsSa[2],
       'https://europe-west4-aiplatform.googleapis.com/v1/projects/p/locations/europe-west4/publishers/google/models');
+    check('⚠ 列模型候选：AI Studio 只有一条（不做多路径尝试）',
+      urls.modelUrlsStudio.join('|'), 'https://generativelanguage.googleapis.com/v1beta/models');
+    // ⚠⚠ Vertex 回的字段叫 `publisherModels` —— 少了这一支，URL 蒙对了也得到空列表，
+    //   报出来是「返回里没有模型」，看着像「这个账号没权限」。去重 + 剥前缀也要一起对
+    check('⚠⚠ 列模型解析：认 publisherModels，剥掉 publishers/google/models/ 前缀并去重',
+      urls.modelIdsPublisher.join(','), 'gemini-2.5-flash,gemini-2.5-pro');
+    check('⚠ 列不出来时有内置候选兜底（不是白名单，只是起点）',
+      urls.hints.length, v => v >= 3, '>=3');
     check('剥 models/ 前缀', urls.stripModels, 'gemini-2.5-pro');
     check('剥 google/ 前缀', urls.stripGoogle, 'gemini-2.5-pro');
     check('剥 publishers/google/models/ 前缀', urls.stripBoth, 'gemini-2.5-pro');

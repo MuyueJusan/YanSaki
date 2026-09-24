@@ -13,7 +13,7 @@
 > 后者把名字同步给手机菜单里那个标注（`#mobile-nav-name`，在面板内、「角色卡编写器」下面），
 > 见 02 的「手机比例下的入口菜单」。
 >
-> 功能：新建 / 编辑 / 改写角色卡，导出 PNG 或 JSON。左侧 **15 个选项卡**，可折叠。
+> 功能：新建 / 编辑 / 改写角色卡，导出 PNG 或 JSON。左侧 **16 个选项卡**，可折叠。
 
 ---
 
@@ -82,25 +82,48 @@
 
 ---
 
-## 二、十五个选项卡（`ST_TABS`）
+## 二、十六个选项卡（`ST_TABS`）
 
 | 顺序 | id | 图标 | 标签 | 管什么 |
 |---|---|---|---|---|
-| 1 | `name` | 📛 | 名字 | `name` + V3 的 `nickname` |
-| 2 | `spec` | 🏷 | 类型 | V1 / V2 / V3 三选一 + 结构预览 |
-| 3 | `desc` | 📝 | 角色描述 | `description` / `personality` / `scenario` / `mes_example` |
-| 4 | `sys` | ⚙ | 系统提示词 | `system_prompt` / `post_history_instructions` / `depth_prompt` |
-| 5 | `meta` | ℹ | 元信息 | 作者 / 版本 / 标签 / 备注 / 来源 |
-| 6 | `ai` | 🤖 | AI 助手 | 给编写器用的 AI 配置（世界书扩写 / 开场白生成共用） |
-| 7 | `book` | 📖 | 世界书 | 世界书名字 + 描述 + 条目（页顶挂 AI 扩写面板） |
-| 8 | `greet` | 💬 | 开场白 | 主开场白 + 备选 + 群聊专用（页顶挂 AI 生成面板） |
-| 9 | `regex` | 🔧 | 正则 | `regex_scripts`，五种生效范围 |
-| 10 | `th` | 🧩 | 酒馆助手 | `tavern_helper` 脚本库 |
-| 11 | `mvu` | 🧮 | MVU | 变量框架：检测 / 一键添加 / 可视化变量树 |
-| 12 | `sb` | 🎨 | 状态栏 | 状态栏外观：图层 / 画布 / 属性，像编辑 PPT |
-| 13 | `code` | ⌨ | Code | **Agent 会话**：模型调工具直接改卡，左边实时看 JSON |
-| 14 | `persona` | 🎭 | 人设生成器 | 写一句设定，AI 按一份**可自定义的模板**逐项填好，生成一整份人设（见 §十六） |
-| 15 | `export` | 💾 | 导出 | PNG / JSON + JSON 预览 + 自检 |
+| 1 | `home` | 🏠 | 首页 | **概览**（这张卡现在长什么样）+ 新建 / 导入 / 读取酒馆当前卡 + **从别的角色卡或世界书提取条目**（见本章最后那一节） |
+| 2 | `name` | 📛 | 名字 | `name` + V3 的 `nickname` |
+| 3 | `spec` | 🏷 | 类型 | V1 / V2 / V3 三选一 + 结构预览 |
+| 4 | `desc` | 📝 | 角色描述 | `description` / `personality` / `scenario` / `mes_example` |
+| 5 | `sys` | ⚙ | 系统提示词 | `system_prompt` / `post_history_instructions` / `depth_prompt` |
+| 6 | `meta` | ℹ | 元信息 | 作者 / 版本 / 标签 / 备注 / 来源 |
+| 7 | `ai` | 🤖 | AI 助手 | 给编写器用的 AI 配置（世界书扩写 / 开场白生成共用） |
+| 8 | `book` | 📖 | 世界书 | 世界书名字 + 描述 + 条目（页顶挂 AI 扩写面板） |
+| 9 | `greet` | 💬 | 开场白 | 主开场白 + 备选 + 群聊专用（页顶挂 AI 生成面板） |
+| 10 | `regex` | 🔧 | 正则 | `regex_scripts`，五种生效范围 |
+| 11 | `th` | 🧩 | 酒馆助手 | `tavern_helper` 脚本库 |
+| 12 | `mvu` | 🧮 | MVU | 变量框架：检测 / 一键添加 / 可视化变量树 |
+| 13 | `sb` | 🎨 | 状态栏 | 状态栏外观：图层 / 画布 / 属性，像编辑 PPT |
+| 14 | `code` | ⌨ | Code | **Agent 会话**：模型调工具直接改卡，左边实时看 JSON |
+| 15 | `persona` | 🎭 | 人设生成器 | 写一句设定，AI 按一份**可自定义的模板**逐项填好，生成一整份人设（见 §十六） |
+| 16 | `export` | 💾 | 导出 | PNG / JSON + JSON 预览 + 自检 |
+
+⚠ **`home` 排在最前**（用户指定），而且**默认落点就是它** —— 打开编辑器第一眼该看到
+「这张卡现在什么样」，而不是一个空的名字输入框。⚠ 这件事写在**三处**：`stEditor.tab`
+的初值、`stLoadDraft()` 里的回落值、`stNewCard()` 里的重置 —— 漏一处就会出现
+「新建之后莫名跳到名字页」。
+
+⚠⚠ **加 / 删选项卡要同步改六处写死的数字**（第二十一轮实测，别再按「三处」或「五处」找）：
+本地 `persona-verify.js` / `smoke.js` / `st-code.js` / **`st-ai.js`** 各有一条
+`check('选项卡… N', …)`（⚠ `st-ai.js` 那一条是**整跑**才抓出来的 —— 手工扫的时候漏了它，
+所以「五处」这个数字**本身就已经是错的**）；
+外加**外部 harness** `C:\Users\YanSaki\WorkBuddy AI\2026-09-17-00-10-39\_verify\` 里的
+`verify_steditor.js`（`B6` / `C1` / `C12` 的条数 + `C2`·`C3` 的标签与 id 清单 +
+`C4` 默认选中 + `P69` 的 id 清单）和 `verify_tavern_visual.js`
+（`左侧有 N 个选项卡` / `选项卡文案齐全` / `默认选中` / `展开后 N 个标签` /
+`折叠后 N 个标签` / `移动端折叠后 N 个图标` / `tabWalk` 那两处清单）。
+漏改的症状是「选项卡坏了」，其实是**断言过期**。
+
+⚠⚠ **这份清单本身已经错过两次：先写「三处」、再写「五处」，两次都是整跑才红。**
+⇒ 结论不是「这次数对了」，而是：**这份清单是「手写枚举」，而手写枚举一定会漏。**
+真正可靠的判据是**整跑**（`run-all.js` 把每套的断言数打出来，对不上 `README` §7 表就是少走或有红）。
+⇒ 下一轮再动选项卡：**别信这里写的条数**，先
+`grep -rn "个选项卡\|选项卡" _verify/ "…外部_verify/"` 把候选全捞出来。
 
 ⚠ **`persona` 排在 `code` 后面**（用户指定），别按「它产出的东西是角色描述」顺手挪回
 `desc` 旁边 —— 那是个看起来更合理的错位。⚠ 另外**本章的节号顺序跟这张表不一致**
@@ -327,13 +350,19 @@ tEXt 块：keyword\0base64(UTF-8 JSON)
 
 ## 八、导入
 
-### 三种入口
+### 四种入口
 
 | 入口 | 处理器 | 接受 |
 |---|---|---|
 | 顶栏「📥 导入」 | `stOnImportPicked(ev)` | 角色卡 PNG / JSON |
+| **首页「📚 选择来源文件」** | **同一个 `stOnImportPicked(ev)`** | 角色卡 PNG / JSON **或**世界书 JSON —— ⚠ 只取里面的世界书条目，**不碰草稿** |
 | 酒馆助手页「📥 导入脚本」 | `stOnThImportPicked(ev)` | 裸 Script / `{scripts:[…]}` / 整张卡 |
 | 导出页「📁 选择图片」 | `stOnAvatarPicked(ev)` | 头像图片 |
+
+⚠⚠ **顶栏和首页共用同一个 `<input>`**（`#st-import-file`），靠 `el.dataset.mode` 分流：
+`'card'`（默认，换整张卡）/ `'extract'`（只提取条目）。
+两个入口**每次都必须显式写** `dataset.mode` —— 用户在文件框里点取消时 `change` **不触发**，
+模式会留着（详见 §十八）。
 
 ### 「这是不是一张卡」的判断（`stLooksLikeCard`）
 
@@ -1492,11 +1521,15 @@ Gemini 那边**也有同样的两条**（`contents` 非空 + 首条必须是 `us
 
 ### 模型列表
 
-`stAiFetchModels(cfg)` 认四种形状：`{data:[{id}]}` / `{data:[{id,display_name}]}` /
-裸数组 / `{models:[{name}]}`；顺手剥掉 Gemini 兼容层的 `models/` 前缀，去重后排序。
+`stAiFetchModels(cfg)` 认**五种**形状：`{data:[{id}]}` / `{data:[{id,display_name}]}` /
+裸数组 / `{models:[{name}]}` / **`{publisherModels:[{name}]}`**（最后这个是 Vertex 的，
+第二十轮补 —— 不认它的话 URL 修对了也拿回**空列表**，报「没返回任何模型」，
+看着像 URL 错、其实是解析错）；顺手剥掉 Gemini 兼容层的 `models/` 前缀，去重后排序。
 **三种协议共用这一份**（第十八轮并的）：anthropic 换 `x-api-key` 那套头，
-gemini 走 `stAiGeminiModelsUrl()`（AI Studio 是 `/v1beta/models`，Vertex 快速模式是
-`/v1/publishers/google/models`，完整模式带 `projects/{p}/locations/{l}`）。
+gemini 走 `stAiGeminiModelsUrls()` —— ⚠ 返回的是**一串候选 URL**（第二十轮改的）：
+AI Studio 是 `/v1beta/models`；Vertex 按顺序试 ① `v1beta1/publishers/google/models`
+（**不需要 project**，也是唯一确认有 `list` 的）→ ② `v1beta1/projects/{p}/locations/{l}/…`
+→ ③ `v1/…`（兜底）。⚠ 原来只有 ③ 那条 —— 而 **v1 那条资源根本没有 `list` 方法**，注定 404。
 
 ⚠ 调用方给进来的 `cfg` 常是**半成品**（`apigGather()` / `getAiConfigFromInputs()` 返回的对象里
 没有 `proto`）⇒ 函数内第一步就是 `stAiEnsureProto(cfg)`。少了这步，gemini / vertex 会被
@@ -1677,7 +1710,7 @@ gemini 走 `stAiGeminiModelsUrl()`（AI Studio 是 `/v1beta/models`，Vertex 快
    浮层**最上面**那条常驻条 `#st-status` 里写 —— 眼睛盯着按钮时它在视野外，**点了没反应，
    看着像坏了**。做法是给 `stExportMsg(text, kind, scope)` 加第三个参数：`scope: 'persona'`
    ⇒ 这条消息归人设页、进页内格，常驻条同时让位（**一条消息只出现在一个地方** —— 两边都写
-   的话用户会看到同一句话两遍）。人设页没开着时自动退回常驻条，**消息不丢**。机制见 §十八。
+   的话用户会看到同一句话两遍）。人设页没开着时自动退回常驻条，**消息不丢**。机制见 §十九。
    ⚠⚠ **别跟上面第 4 条那个「配置行」搞混**：`#st-persona-ai-status` 是「当前生效：跟随全局…」，
    建面板时算出来的静态行；`#st-persona-msg` 才是**工作状态**。**两个元素、两种语义**，
    面板上它们也确实挨在一起（配置行在模板折叠块下面、工作状态格在按钮上面，中间只隔几行）。
@@ -1763,6 +1796,9 @@ gemini 走 `stAiGeminiModelsUrl()`（AI Studio 是 `/v1beta/models`，Vertex 快
 | `personaNameUse` | 要不要把角色卡名字当人物姓名。**默认 `true`**，**不落盘**（见上面第 7 条） |
 | `personaBookRef` | 「追加到世界书」上一次写出的**条目 `id`**。**默认 `null`**，**不落盘**（见上面第 8 条）。存 id 不存下标 |
 | `personaBookAsk` | 非 `null` = 正弹着三选一，值是 `{ name }`。**不落盘**、**从状态渲染**（见上面第 8 条） |
+| `extractSrc` | 从别的角色卡 / 世界书里读出来的条目，等用户挑。`null` = 还没选过文件。**不落盘**（见 §十八） |
+| `extractSel` | 提取面板的勾选状态，按**索引**记 —— 这批条目的 `id` 要到「导入」那一下才生成。**不落盘** |
+| `extractMsg` | 提取区自己的一条提示 `{text, kind}`。⚠ **不跟 `stEditor.msg` 合并** —— 那条会被 `stPaintMsg` 分给常驻条 |
 
 ⚠ **模板清空 = 回到默认**（面板上就是这么写的），所以有两条容易写错的规矩：
 
@@ -2461,7 +2497,75 @@ toggle 回来 —— 会打转。`stCodeMenuToggle` 是幂等的，所以真转�
 
 ---
 
-## 十八、状态提示（`stPaintMsg`）
+## 十八、首页（`stPaneHome`）
+
+**第二十一轮加的**，**排在选项卡最前**、也是**默认落点**（见 §二）。三块：概览 → 快捷动作 → 从别处搬条目。
+
+### 概览
+
+一张 `st-kv` 表，数字全部**从 `stEditor.card` 现算**：
+
+| 项 | 取自 |
+|---|---|
+| 名字 / 规格 / 来源 | `card.name` · `ST_SPEC_LABEL[card.spec]` · `stEditor.srcName` |
+| 正文字段 | `ST_HOME_BODY_FIELDS` 里**非空白**的个数 / 8 |
+| 开场白 | `firstMes` 非空算 1 + `alternateGreetings` 非空个数 |
+| 世界书 | `card.bookEntries.length`（括号里是启用数） |
+| 正则 | `card.regex.length` |
+| 酒馆助手 | `stThCountScripts(card.thScripts)` 个脚本（含文件夹里的） |
+| 本编辑器接管 | `stEditor.mvuOwn` / `stEditor.sbOwn` |
+| 创建时间 | `card.creationDate` 经 `stHomeTime()`；**0 / 无效一律「—」**，不显示 1970 |
+
+⚠ `ST_HOME_BODY_FIELDS` **必须跟 `renderStCard()` 里那份逐字一致** ——
+否则会出现「首页说 5/8、卡片摘要说 6/8」这种谁都不信的数字。
+有头像时另给一个 `.st-avatar-box` 缩略图（复用头像页那两个类）。
+
+### 快捷动作
+
+`stNewCard(true)` / `stImportPick()` / `stLoadFromTavern()` —— 跟顶栏那几个按钮**是同一批动作**，
+这里只是收在一处。
+
+### 从别处搬条目
+
+选一份**别的角色卡**（PNG / JSON）或**世界书 JSON** → 解析出世界书条目 → 列出来勾选
+（**默认全选**）→ **追加**到当前卡的世界书。来源文件不动，当前卡的正文一个字段都不碰。
+
+**① 复用「📥 导入」那个 `<input>`，没有新增节点。** 靠 `el.dataset.mode`
+（`'card'` / `'extract'`）分流 —— 新增一个 `<input>` 会让 README 那张 HTML 锚点表整体后移，
+而这件事零收益。
+
+⚠⚠ **模式不能放在 `stEditor` 上。** 用户点了「提取条目」之后**在文件框里点取消**时，
+`change` 事件**根本不触发** ⇒ 放在 `stEditor` 上的模式**没有机会被清掉**，会留到下一次
+正常导入上（症状：导入一张卡，结果弹出一堆条目让你挑）。⇒ 放 `dataset.mode`，
+由 `stImportPick` / `stExtractPick` **每次都显式覆盖**，残留无害。
+
+**② 两种来源形状都要认**（`stExtractAccept`）：
+
+```js
+const cand = (json && json.spec && json.data && typeof json.data === 'object')
+    ? json.data : json;          // V2 / V3 卡：世界书在 data.character_book 里
+const book = parseWorldBook(cand, fileName);
+```
+
+`parseWorldBook()` 本来就同时吃 `character_book` 和顶层 `entries`（数组 / 对象都行），
+但**它只认顶层** —— 解包那一步不能省。
+
+**③ 导入是「追加」不是「替换」，而且逐条 clone**（`stExtractImport`）：
+`Object.assign({}, e, { id: stUuid() })`。不 clone 的话，卡里那条和
+`stEditor.extractSrc.entries` 里那条是**同一个对象**，之后改条目会两边一起变。
+书级字段（`bookName`）**只在当前卡还没写名字时**补上，不覆盖用户自己起的。
+
+**状态**：`stEditor.extractSrc`（`null` = 还没选文件）/ `extractSel`（按**索引**记）/
+`extractMsg`（`{text, kind}`，**不跟 `stEditor.msg` 合并** —— 那条会被 `stPaintMsg` 分给
+常驻条，而这条要贴在提取区里）。三个都是**会话级**、不落盘。
+
+⚠ 回退用的 `tab = 'home'` 写在**三处**（初值 / `stLoadDraft` 回落 / `stNewCard`）；
+`stNewCard` 里还要顺手把 `extractSrc` / `extractSel` / `extractMsg` 清干净 ——
+上一张卡没走完的提取不该跟到新卡上。
+
+---
+
+## 十九、状态提示（`stPaintMsg`）
 
 `stEditor.msg = { text, kind, scope }` 是**唯一真相**，`stExportMsg(text, kind, scope)` 写它，
 `stPaintMsg()` 负责画。**两个去处**：
@@ -2494,7 +2598,7 @@ toggle 回来 —— 会打转。`stCodeMenuToggle` 是幂等的，所以真转�
 
 ---
 
-## 十九、持久化
+## 二十、持久化
 
 | 键 | 内容 |
 |---|---|
@@ -2516,7 +2620,7 @@ toggle 回来 —— 会打转。`stCodeMenuToggle` 是幂等的，所以真转�
 
 ---
 
-## 二十、历史上修过的真 bug
+## 二十一、历史上修过的真 bug
 
 | # | 症状 | 根因 |
 |---|---|---|
@@ -2626,7 +2730,7 @@ toggle 回来 —— 会打转。`stCodeMenuToggle` 是幂等的，所以真转�
 
 ---
 
-## 二十一、测试
+## 二十二、测试
 
 > ⚠ **本节原先是「二十」，与上一节撞号**（两节都叫 `## 二十`）。2026-09-23 把本节改成二十一 ——
 > 顺序上它是**最后**一节，改它只影响引用它的人，不动前一节的号。
@@ -2655,7 +2759,7 @@ toggle 回来 —— 会打转。`stCodeMenuToggle` 是幂等的，所以真转�
 | O | 酒馆助手脚本（105 条） |
 | P | MVU 变量框架（104 条：检测 / 一键添加 / 生成器 / 树操作 / 接管规则 / 持久化） |
 
-真实 Chrome 里另有 `verify_tavern_visual.js` 的第 12 / 12b / 12c / 12d 段（浮层几何、十五个页签切换、移动端触控、复古皮肤、MVU 页）。
+真实 Chrome 里另有 `verify_tavern_visual.js` 的第 12 / 12b / 12c / 12d 段（浮层几何、十六个页签切换、移动端触控、复古皮肤、MVU 页）。
 
 ⚠ **这两个套件里的「选项卡数量 / 顺序」断言会跟着 `ST_TABS` 一起过时。** 加 `sb` / `ai` / `code`
 三个选项卡时一共红了 **9 条**，都不是回归。但**不能只改数字**，因为过时有三种长相：
@@ -2768,7 +2872,7 @@ awk '/const ST_TABS = \[/,/^        \];/' saki.html | grep -o "id: '[a-z]*'" | c
 | I | 移除 MVU 后状态栏页不装死（识别为 `none`、画布给出口、`stSbSync` 返回 `false`） |
 | J | 收尾零报错 |
 
-**`_verify/smoke.js`** —— 全应用冒烟，**90 条**：15 个选项卡逐个切换都能渲染、
+**`_verify/smoke.js`** —— 全应用冒烟，**90 条**：16 个选项卡逐个切换都能渲染、
 **两处「展开键」**（① 浮层顶栏 `≡ 选项卡`：箭头会转 + 与左侧栏时长一致 + 折叠态挂在 `.st-shell`
 + 重画后仍在；② **主页卡片的箭头**：箭头会转 + 与日历时长一致 + 折叠区自己有过渡 + 折叠态转 180°；
 两组各带一个**展开态对照组**）、装 MVU →
@@ -2961,7 +3065,7 @@ iframe），只要有一边把 `width` 写错了地方 —— 比如写到了 `.
 | F | 扩写：提示词里有没有条数·要求·氛围·格式·素材；结果解析（关键词字符串被拆开、位置深度顺序夹紧、空条目丢掉）；套用进世界书；模型回一堆废话也照样解析 |
 | G | 开场白：注入顺序（**停用跳过、Outlet 跳过、`@D` 按 depth 从大到小**）；提示词带上注入预览；覆盖主开场白 / 追加备选 |
 | H | **隐私**：API Key 不进卡、不进草稿、不进导出，但确实存在 `stAiCfg` 里 |
-| I | 面板：15 个选项卡、AI 页渲染、两个面板挂得上、复古皮肤下方角 |
+| I | 面板：16 个选项卡、AI 页渲染、两个面板挂得上、复古皮肤下方角 |
 | J | 失败路径：401 / 500 / 网络不通 / 坏 JSON / 没有 `entries` / 配置不全时**不发请求** |
 | K | 草稿往返：配置与面板参数都还在，预览不会残留、`running` 不会卡住 |
 | L | **单条改写**：面板只渲染展开的那一条、参考范围三层过滤（排除自己 / 排除空壳 / 仅启用·全部·同分组）、没有分组时「同分组」退回「仅启用」、提示词里带原条目与参考条目、只改正文 / 全套字段两种套用、空值不覆盖、追加为新条目、生成期间条目被删的兜底、三种包装形状、错误只挂在所属条目上 |
@@ -2980,7 +3084,7 @@ C 段和 J 段暴露过一个**真问题**：`stAiPullModels` 原本复用 `stAi
 
 | 段 | 内容 |
 |---|---|
-| A | 接线与布局：15 个选项卡里有 `code`、左右两栏、工具条的折叠菜单与动作按钮、窄屏分段控件 |
+| A | 接线与布局：16 个选项卡里有 `code`、左右两栏、工具条的折叠菜单与动作按钮、窄屏分段控件 |
 | B | 协议层：`stCodeRequest` 两套形状（`tools[].function` vs `tools[].input_schema`）、URL / 头 / 体；工具数量**从 `ST_CODE_TOOLS` 枚举**而不是写死 |
 | F2 | **Gemini / Vertex 协议下明说「工具调用不支持」**：报的错里点名协议、**一个请求都没发**、给了两条出路、没卡在 `running` 上；对照 = 同一步换成 openai 协议**就会**发（证明那个 0 是「被拦住」而不是「本来就不发」） |
 | C | 消息转换：工具消息怎么进两套协议（`tool_calls` / `tool_result`）、连续 `tool_result` 并进同一条 user、`note` 两处都过滤 |

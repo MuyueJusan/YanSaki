@@ -340,7 +340,12 @@ window.fetch = async function (url, init) {
     // ============ B. 选项卡 ============
     section('B. 选项卡：在不在、位置对不对、真按钮能不能切');
     const tabs = await ev(`ST_TABS.map(t => ({ id: t.id, ico: t.ico, label: t.label }))`);
-    check('选项卡总数 15（加了这个之后）', tabs.length, 15);
+    // ⚠⚠ 加 / 删选项卡要同步改**六处**（完整清单与踩坑史见 `smoke.js` 文件头）：
+    //   本地 `persona-verify.js` / `smoke.js` / `st-code.js` / `st-ai.js`，
+    //   外加外部 harness 的 `verify_steditor.js` 与 `verify_tavern_visual.js`。
+    //   第二十一轮加「首页」时 15 → 16，`st-ai.js` 那处就是这么漏掉的。
+    //   ⚠ 这份清单本身已经错过两次（三处 → 五处 → 六处）⇒ 别信条数，先 `grep`。
+    check('选项卡总数 16（加了这个之后）', tabs.length, 16);
     const pi = tabs.findIndex(t => t.id === 'persona');
     const ci = tabs.findIndex(t => t.id === 'code');
     const di = tabs.findIndex(t => t.id === 'desc');

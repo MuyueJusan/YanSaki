@@ -327,7 +327,11 @@ const MOCK_SRC = `
     //   从覆盖里静默漏掉。改成显式列出整段，多一个选项卡就当场红。
     check('code 排在 sb 和 export 之间、persona 紧跟其后',
       await ev(`ST_TABS.map(t => t.id).join(',')`), v => /sb,code,persona,export/.test(v), 'sb,code,persona,export');
-    check('选项卡总数 15', await ev(`ST_TABS.length`), 15);
+    // ⚠⚠ 加 / 删选项卡要同步改**六处**（完整清单与踩坑史见 `smoke.js` 文件头）：
+    //   本地 `persona-verify.js` / `smoke.js` / `st-code.js` / `st-ai.js`，
+    //   外加外部 harness 的 `verify_steditor.js` 与 `verify_tavern_visual.js`。
+    //   ⚠ 这份清单本身已经错过两次（三处 → 五处 → 六处）⇒ 别信条数，先 `grep`。
+    check('选项卡总数 16', await ev(`ST_TABS.length`), 16);
 
     await ev('openStEditor()');
     await sleep(200);

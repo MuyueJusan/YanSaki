@@ -488,7 +488,18 @@ const MOCK_SRC = `
 
     await setScript({ models: 'empty' });
     let err = await ev(`stAiFetchModels(stAiCfg()).then(() => '', e => e.message)`, true);
-    check('空列表会报错', /没返回任何模型/.test(err), true);
+    // ⚠⚠ 这里原来断言的是 `/没返回任何模型/` —— 那是**旧文案**。产品现在抛的是
+    //   `返回里没有模型（字段名对不上？）`（`stAiFetchModelsOnce` 里那句）。
+    //   旧串**在产品里只剩一处注释**了 ⇒ `grep -c` 会骗人（注释让「这个串还在」看着成立），
+    //   所以**光 grep 产品查不出来**，只能靠「跑一遍看它红」。
+    //   ⚠ 断言**过时**的后果跟「断言永真」正好相反：产品没问题、套件**一直红**，
+    //     而红久了就没人看 —— 第二十一轮整跑才把它翻出来（`st-ai.js` 341 通过 / 2 失败）。
+    //   ⚠ 判据故意**不写死整句** —— 写死整句的话下次纯文案微调又要来改一遍，
+    //     而那种「永远在报的检查」最后会被无视。要守住的是两件事：
+    //     ① 它**拒绝**（不静默返回空数组）；② 报的错说的是「**没有模型**」这件事，
+    //     不是别的什么解析错 / 网络错。
+    check('空列表会拒绝（不静默返回空数组）', err !== '', true);
+    check('空列表的报错说的是「没有模型」', err, e => /模型/.test(String(e)), '含「模型」');
 
     await useOwn('openai', '', '');
     await setScript({ models: 'openai' });
@@ -794,7 +805,9 @@ const MOCK_SRC = `
 
     // ================= I. 面板 =================
     section('I. 面板渲染');
-    check('选项卡数量变成 15', await ev(`document.querySelectorAll('#st-tabs .st-tab').length`), 15);
+    // ⚠ 这里是**写死的 16**，加 / 删选项卡必须同步改（完整清单见 smoke.js 文件头）。
+    //   第二十一轮加 `home` 时漏了这一处，整跑才把它抓出来（341 通过 / 2 失败）。
+    check('选项卡数量 16', await ev(`document.querySelectorAll('#st-tabs .st-tab').length`), 16);
     check('选项卡里有「AI 助手」', await ev(`!!Array.from(document.querySelectorAll('#st-tabs .st-tab'))
       .find(b => /AI 助手/.test(b.textContent))`), true);
 

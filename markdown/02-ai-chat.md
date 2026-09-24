@@ -437,7 +437,7 @@ const retryable = (opts.retryable !== undefined) ? opts.retryable : !isUser;
 | `stAiGeminiHost(cfg)` | `global` ⇒ `https://aiplatform.googleapis.com`；其他 location ⇒ `https://{loc}-aiplatform.googleapis.com` |
 | `stAiGeminiPath(cfg, model, action)` | 三条路的路径（见下） |
 | `stAiGeminiUrl(cfg, model, stream)` | 拼上面两个 + `?alt=sse`（流式） |
-| `stAiGeminiModelsUrl(cfg)` | 列模型的 URL |
+| `stAiGeminiModelsUrls(cfg)` | 列模型的**候选 URL 列表**（⚠ 是**一串**，不是一个 —— 见第十二节） |
 | `stAiGeminiBody(cfg, messages, opts)` | OpenAI 形状的 `messages` → `contents` + `systemInstruction` + `generationConfig` |
 | `stAiGeminiAuthHeaders(cfg)` | **可能是异步的**（完整模式要现换 token） |
 | `stAiGeminiText(data)` | 取文：`candidates[0].content.parts[].text` |
@@ -525,3 +525,56 @@ const retryable = (opts.retryable !== undefined) ? opts.retryable : !isUser;
 ⚠ **一条做不到的事**：想在本地实测三个 Google 端点的 CORS，但沙箱代理只放行 GitHub
 （`oauth2.googleapis.com` / `aiplatform` / `generativelanguage` **全部超时**）⇒ 端到端实测做不了。
 方案因此改成「**让产品自己把卡在哪一步说出来**」，而不是替用户猜能不能直连。
+
+---
+
+## 十二、Vertex 的第二次收口（第二十轮）
+
+用户实测报了两句：「我已经开放代理，却还是显示【列模型失败】」和「在 Vertex 的完整模式下，
+key 已经用不到了吧」。两句都对，各自对应一个真 bug，**而且第二句底下还压着第三个**。
+
+### ① 「完整模式下 Key 用不到」—— 根因在 CSS，不在逻辑
+
+`syncApigAuthUI()` 里 `keyF.hidden = (mode === 'sa')` **一直在执行**，但
+`#apig-key-field` 是 `<div class="ai-field">`，而 `.ai-field { display: flex }` ——
+**同权重时 `display:flex` 盖掉 `hidden` 属性自带的 `display:none`** ⇒ 属性设对了、
+**画面上照样看得见**，而且**不报任何错**。
+
+页面里原来给 `.apig-vertex-box` / `.apig-sa-masked` / `.apig-verify-out` **逐条**写了
+`[hidden] { display: none }` —— 漏了 `.ai-field`。**「逐条补」就是会漏**，所以现在收敛成一条：
+
+```css
+[hidden] { display: none !important; }
+```
+
+⚠ **同族教训**：给元素设了 `display`（flex / grid）的地方，`hidden` 属性就**失效**了。
+判据要读 **computed `display`**，不能读 `hidden` 属性 —— 读属性的话这个 bug 照样全绿
+（`apig-verify.js` 的 G3 段现在就是这么断言的，配「快速模式 ⇒ 真的显示」作对照）。
+
+### ② 「列模型失败」—— 两处叠加，各自都会让这条路必失败
+
+| # | 原来 | 问题 | 改成 |
+|---|---|---|---|
+| 1 | 只有一条 URL：`…/v1/projects/{p}/locations/{l}/publishers/google/models` | ⚠ **v1 那条资源根本没有 `list` 方法**（官方 REST 目录里只有 `computeTokens` / `countTokens` / `embedContent` / `generateContent` / `predict` / `rawPredict` / `stream*`）⇒ 注定 404 | 改成**一串候选**按顺序试：① `v1beta1/publishers/google/models`（**不需要 project**，也是唯一确认有 `list` 的）→ ② `v1beta1/projects/{p}/locations/{l}/publishers/google/models` → ③ `v1/…`（老形状兜底） |
+| 2 | `stAiModelIds` 认 `data` / `models` / 裸数组 | **不认 `publisherModels`** ⇒ 就算 URL 修对了也是**空列表** ⇒ 报「这个接口没返回任何模型」，看着像 URL 错、其实是**解析错** | 加上 `publisherModels` 这一支（与另三种并列） |
+
+⚠ 顺带确认一件事：**酒馆根本没有「列模型」这条路由**（`src/endpoints/google.js` 里只有
+caption / voice / tts / image / video）—— 它**不列模型**，模型名靠手填或静态列表。
+所以这条路是**我们自己加的**，不能指望从酒馆抄。
+
+### ③ 「获取模型列表」在 Vertex 下必然点不动
+
+`apigReadyCheck` 的 Vertex 分支要求 `model` 非空，而 `apigFetchModels` 调它时
+**没带 `needModel:false`** ⇒ 必须先手打一个模型名才能点「获取」—— 而这一步**本来就是为了挑模型**，
+等于把这个功能废掉。改成 `apigReadyCheck(cfg, { needModel: false })`。
+
+⚠ 编写器那边**早就有这个参数**（`stAiReady(cfg, {needModel:false})`，见 04 的「就绪判定」），
+全局面板这份漏了 —— **同一件事两份实现，只有一份带参数**，是典型的漏改形状。
+
+### ④ 列不出来时**退回内置候选，但必须把失败原因说出来**
+
+`stAiFetchModels` 现在把「试过哪几条、各报什么」一并带上；全局面板据此
+**退回内置候选**（`gemini-2.5-flash` 那几个）让用户至少能选一个，同时把失败原因显示出来。
+「验证 JSON」第 ⑥ 步的文案也改成**明说「列模型失败 ≠ 配置坏了」**——
+token 已经拿到了（①~⑤ 都过了），所以问题在**项目 ID / 区域 / 该账号的权限 / 这个 API 允不允许
+浏览器直连**。⚠ 回落**不能把失败伪装成成功**（六之二十七）。

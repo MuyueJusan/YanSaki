@@ -135,9 +135,20 @@
 
         .apig-grid > .ai-field { flex: 1; }
 
-        /* Google Vertex AI 那一块。`hidden` 属性负责显隐，这里只管长相 ——
-           ⚠ 必须写 `[hidden] { display: none }`：这条 CSS 里给了 display:flex，
-             而 flex 会**盖掉** hidden 属性自带的 display:none（同权重时后者输） */
+        /* ⚠⚠ 全局兜底：本页给很多元素设了 `display`（flex / grid），而**同权重时
+           `display:flex` 会盖掉 `hidden` 属性自带的 `display:none`** ⇒ 于是
+           `el.hidden = true` 完全没效果，而且**不报任何错**。
+
+           踩过两次：先是 `.apig-vertex-box`（当时逐条补了 `[hidden]`），
+           然后是 `.ai-field` —— **「逐条补」就是会漏**：全局面板的「API Key」那一格
+           在「完整模式」下明明执行了 `keyF.hidden = true`，却照样显示在屏幕上
+           （用户一眼就看出「完整模式下 key 已经用不到了吧」）。
+
+           ⇒ 只留这一条全局规则，**别再逐条补**。任何用 `hidden` 属性做显隐的地方
+             都自动受它保护。 */
+        [hidden] { display: none !important; }
+
+        /* Google Vertex AI 那一块。显隐由上面的 `[hidden]` 兜底管，这里只管长相 */
         .apig-vertex-box {
             display: flex;
             flex-direction: column;
@@ -147,7 +158,6 @@
             background: #f5f7fa;
             border: 1px solid #dfe4ea;
         }
-        .apig-vertex-box[hidden] { display: none; }
 
         .api-global-card .ai-switch-track { background: #c9ced6; }
 
@@ -196,8 +206,6 @@
             padding: 7px 10px;
         }
 
-        .apig-sa-masked[hidden] { display: none; }
-
         .apig-sa-who {
             flex: 1;
             word-break: break-all;
@@ -221,8 +229,6 @@
             padding: 8px 10px;
             word-break: break-all;
         }
-
-        .apig-verify-out[hidden] { display: none; }
 
         .apig-status {
             flex: 1;
@@ -16146,13 +16152,18 @@
 
         // ==========================================================================
         // 角色卡编写器：UI
-        //   左侧十五个选项卡（可以折叠成一条图标栏），右侧是当前选项卡的内容。
+        //   左侧十六个选项卡（可以折叠成一条图标栏），右侧是当前选项卡的内容。
         //   文本输入走 stSet() 只改状态、不重画 —— 否则每敲一个字都会丢焦点；
         //   只有结构变化（换规格、换位置、增删条目）才整块重画，重画前把焦点和
         //   光标位置记下来，画完还回去。
         // ==========================================================================
 
         const ST_TABS = [
+            // ⚠ 「首页」**排在最前**（用户指定）。别的页回答「往里填什么」，
+            //   只有它回答「这张卡现在长什么样 / 从哪儿开始」——
+            //   所以它既不能按「产出的是角色描述」塞到 desc 旁边，
+            //   也不能按「导入导出」塞到 export 旁边。
+            { id: 'home', ico: '🏠', label: '首页' },
             { id: 'name', ico: '📛', label: '名字' },
             { id: 'spec', ico: '🏷', label: '类型' },
             { id: 'desc', ico: '📝', label: '角色描述' },
@@ -16174,7 +16185,9 @@
 
         let stEditor = {
             open: false,
-            tab: 'name',
+            // ⚠ 默认落在「首页」：打开编辑器第一眼该看到「这张卡现在什么样」，
+            //   而不是一个空的名字输入框
+            tab: 'home',
             tabsCollapsed: false,
             card: null,
             raw: null,          // 导入的原始 JSON，只在本次会话里留着
@@ -16243,6 +16256,23 @@
             // 状态栏存在 sbShow 那条正则的 replaceString 里，接管了才会回写 ——
             // 否则一打开别人手写的状态栏就会把人家的 HTML 换掉
             sbOwn: false,
+            // —— 首页：从别处搬条目 ——
+            // 从别的角色卡 / 世界书里读出来的条目，等用户挑。
+            // null = 还没选过文件（面板显示「选文件」那一屏）
+            // 形状：{ srcName, kind, bookName, entries: [...] }
+            extractSrc: null,
+            // 勾选状态按**索引**记 —— 这批条目的 id 要到「导入」那一下才生成
+            // （跟 stEditor.personaBookRef 存 id 的理由正好相反：那边是导入之后要认人，
+            //   这边是导入之前还没有 id）
+            extractSel: {},
+            // 提取区自己的一条提示。**不跟 stEditor.msg 合并** ——
+            // 那条会被 stPaintMsg 分给常驻条 / 人设页，而这条要贴在提取区里
+            extractMsg: { text: '', kind: '' },
+            // ⚠ **「这一次点导入是干嘛的」故意不放在这里**，放在 `<input>` 的
+            //   `dataset.mode` 上。理由：用户点了「提取条目」又**在文件框里点取消**时，
+            //   `change` 事件**根本不触发** ⇒ 存在 stEditor 上的模式**没有机会被清掉**，
+            //   会留到下一次正常导入上（症状：导入一张卡，结果弹出一堆条目让你挑）。
+            //   放 dataset 则由 stImportPick / stExtractPick **每次都显式覆盖**，残留无害。
             // 最近一条提示。导入 / 导出的反馈不能只往导出页里塞 ——
             // 顶栏那几个按钮在任何选项卡下都能点，而导出页没渲染时那个节点根本不存在
             msg: { text: '', kind: '' }
@@ -16261,7 +16291,7 @@
             try { saved = JSON.parse(localStorage.getItem(ST_DRAFT_KEY) || 'null'); } catch (e) {}
             if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
                 stEditor.card = stNormalizeDraft(saved.card);
-                stEditor.tab = ST_TABS.some(t => t.id === saved.tab) ? saved.tab : 'name';
+                stEditor.tab = ST_TABS.some(t => t.id === saved.tab) ? saved.tab : 'home';
                 stEditor.tabsCollapsed = saved.tabsCollapsed === true;
                 stEditor.srcName = stStr(saved.srcName);
                 stEditor.mvuOwn = saved.mvuOwn === true;
@@ -16536,6 +16566,7 @@
 
         function stPaneHtml(tab) {
             switch (tab) {
+                case 'home': return stPaneHome();
                 case 'spec': return stPaneSpec();
                 case 'desc': return stPaneDesc();
                 case 'persona': return stPanePersona();
@@ -17245,16 +17276,50 @@
             return stAiGeminiHost(cfg) + stAiGeminiPath(cfg, model, action) + q;
         }
 
-        // 列模型的路径（AI Studio 与 Vertex 都是 GET models）
-        function stAiGeminiModelsUrl(cfg) {
-            if (!stAiIsVertex(cfg)) return 'https://generativelanguage.googleapis.com/v1beta/models';
+        // 列模型的候选路径 —— **按顺序试，谁先给出非空列表就用谁**。
+        //
+        // ⚠⚠ 为什么是「一串」而不是「一个」：Google 这条 API 的形状改过，而且
+        //   **v1 的 `projects.locations.publishers.models` 根本没有 `list` 方法**
+        //   （官方 REST 目录里那条资源只有 computeTokens / countTokens / embedContent /
+        //     generateContent / predict / rawPredict / stream*），
+        //   v1 的 `publishers.models` 也只有 `get`。
+        //   真正有 `list` 的是 **v1beta1 的 `publishers.models`**，回的是 `publisherModels`。
+        //   ⇒ 与其赌一条，不如两条都试；Express 与完整模式的 host 本来也不同。
+        //
+        // ⚠ 而且**列不出来不该挡路**：酒馆（SillyTavern）压根没有列模型的路由，
+        //   模型名全靠手填。所以调用方拿不到列表时要退回内置候选，而不是把用户堵死。
+        function stAiGeminiModelsUrls(cfg) {
+            if (!stAiIsVertex(cfg)) return ['https://generativelanguage.googleapis.com/v1beta/models'];
+            const host = stAiGeminiHost(cfg);
             const loc = stAiGeminiLoc(cfg);
             const proj = stAiVertexProject(cfg);
+            const out = [];
+            // ① v1beta1 · publisher models（不需要 project，也是唯一确认有 list 的那条）
+            out.push(host + '/v1beta1/publishers/google/models');
             if (proj) {
-                return stAiGeminiHost(cfg) + '/v1/projects/' + proj + '/locations/' + loc + '/publishers/google/models';
+                // ② v1beta1 · 带 project（有些项目/区域只认这条）
+                out.push(host + '/v1beta1/projects/' + proj + '/locations/' + loc +
+                    '/publishers/google/models');
+                // ③ v1 · 带 project（老形状，留着兜底）
+                out.push(host + '/v1/projects/' + proj + '/locations/' + loc +
+                    '/publishers/google/models');
             }
-            return stAiGeminiHost(cfg) + '/v1/publishers/google/models';
+            return out;
         }
+
+        // 兼容旧调用：给「第一条候选」（要精确断言全部候选请用 stAiGeminiModelsUrls）
+        function stAiGeminiModelsUrl(cfg) {
+            return stAiGeminiModelsUrls(cfg)[0];
+        }
+
+        // 列不出来时的**内置候选**（不是白名单 —— 模型框本来就能手输任意名字）。
+        // 用途：Google 那边列模型经常不可用（没 list 方法 / 账号没该权限 / 形状变了），
+        // 这时给用户一个能直接点的起点，而不是只丢一句「失败」。
+        const ST_GEMINI_MODEL_HINTS = [
+            'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
+            'gemini-2.0-flash', 'gemini-2.0-flash-lite',
+            'gemini-1.5-pro', 'gemini-1.5-flash'
+        ];
 
         // 安全阈值 —— **照抄酒馆**（`src/constants.js` 的 GEMINI_SAFETY / VERTEX_SAFETY）。
         //
@@ -17656,10 +17721,24 @@
 
         // 模型列表的形状：OpenAI 系给 {data:[{id}]}，Anthropic 给 {data:[{id,display_name}]}，
         // 少数反代直接给数组或 {models:[{name}]}。三种都兜住
+        // 从各种「列模型」响应里把模型 id 抠出来。
+        // 认的形状（都是实测/文档见过的）：
+        //   · OpenAI 系      `{ data: [{ id }] }`
+        //   · 裸数组          `[{ id | name | model }]`
+        //   · `{ models: [] }`（Anthropic 风格）
+        //   · Vertex         `{ publisherModels: [{ name: 'publishers/google/models/x' }] }`
+        //     ⚠⚠ 这一支是**后补的**：`projects.locations.publishers.models` 那条资源
+        //        根本没有 `list` 方法（官方 REST 目录里只有 computeTokens / countTokens /
+        //        embedContent / generateContent / predict / rawPredict / stream*），
+        //        能列的是 **v1beta1 的 `publishers.models`**，而它回的字段就叫
+        //        `publisherModels`。少了这一支，就算 URL 蒙对了也照样得到空列表 ⇒
+        //        报「这个接口没返回任何模型」，看着像「这个 Key 没有权限」。
         function stAiModelIds(data) {
             const out = [];
             const push = v => {
-                const s = String(v == null ? '' : v).trim().replace(/^models\//, '');
+                const s = String(v == null ? '' : v).trim()
+                    .replace(/^models\//, '')
+                    .replace(/^publishers\/google\/models\//, '');
                 if (s) out.push(s);
             };
             if (Array.isArray(data)) {
@@ -17668,27 +17747,17 @@
                 data.data.forEach(m => push(m && (m.id || m.name || m.model)));
             } else if (data && Array.isArray(data.models)) {
                 data.models.forEach(m => push(m && (m.name || m.id || m.model)));
+            } else if (data && Array.isArray(data.publisherModels)) {
+                data.publisherModels.forEach(m => push(m && (m.name || m.id)));
             }
             const uniq = [];
             out.forEach(s => { if (uniq.indexOf(s) < 0) uniq.push(s); });
             return uniq.sort();
         }
 
-        async function stAiFetchModels(cfg) {
-            const c = stAiEnsureProto(cfg || stAiCfg());
-            let url, headers;
-            if (c.proto === 'gemini') {
-                // Google 的列模型是 GET {host}/.../models，鉴权头跟对话请求同一套
-                url = stAiGeminiModelsUrl(c);
-                headers = Object.assign({}, await stAiGeminiAuthHeaders(c));
-            } else {
-                const proto = c.proto === 'anthropic' ? 'anthropic' : 'openai';
-                headers = proto === 'anthropic'
-                    ? { 'x-api-key': c.apiKey, 'anthropic-version': '2023-06-01',
-                        'anthropic-dangerous-direct-browser-access': 'true' }
-                    : { 'Authorization': 'Bearer ' + c.apiKey };
-                url = stAiJoin(c.baseUrl, '/models');
-            }
+        // 打一次「列模型」的 GET。失败一律 throw（原因写成人话）——
+        // 「要不要再试别的路径 / 退回内置候选」是调用方的决定，这里不管
+        async function stAiFetchModelsOnce(url, headers) {
             let resp;
             try {
                 resp = await fetch(url, { headers: headers });
@@ -17696,9 +17765,8 @@
                 // ⚠ 「连不出去」和「服务端拒绝」是两件事，文案要分开 ——
                 //   否则用户会去改 Key，而真正的问题是 CORS
                 if (stAiIsFetchBlocked(e)) {
-                    throw new Error('列模型的请求发不出去（' + ((e && e.message) || e) + '）—— ' +
-                        '这一步要浏览器直连 ' + url.split('/v1')[0] +
-                        '，被 CORS / 网络挡了');
+                    throw new Error('请求发不出去（' + ((e && e.message) || e) + '）—— ' +
+                        '要浏览器直连 ' + url.split('/v1')[0] + '，被 CORS / 网络挡了');
                 }
                 throw e;
             }
@@ -17709,8 +17777,41 @@
             }
             const data = await resp.json();
             const ids = stAiModelIds(data);
-            if (!ids.length) throw new Error('这个接口没返回任何模型');
+            if (!ids.length) throw new Error('返回里没有模型（字段名对不上？）');
             return ids;
+        }
+
+        async function stAiFetchModels(cfg) {
+            const c = stAiEnsureProto(cfg || stAiCfg());
+            if (c.proto === 'gemini') {
+                // Google：候选路径**逐条试**（v1 那条资源没有 list，见 stAiGeminiModelsUrls）。
+                // 鉴权头跟对话请求同一套（完整模式会先换 access token）
+                const headers = Object.assign({}, await stAiGeminiAuthHeaders(c));
+                const urls = stAiGeminiModelsUrls(c);
+                const errs = [];
+                for (let i = 0; i < urls.length; i++) {
+                    try {
+                        return await stAiFetchModelsOnce(urls[i], headers);
+                    } catch (e) {
+                        const msg = (e && e.message) || String(e);
+                        errs.push(msg);
+                        // ⚠ 「发不出去」（CORS / 网络）对同一台 host 的**每条路径**都一样，
+                        //   再试只是白等，还会把真正的原因埋到最后一串里 ⇒ 直接抛
+                        if (msg.indexOf('发不出去') >= 0) throw new Error('列模型失败：' + msg);
+                    }
+                }
+                // 全试完了：**把「试过哪几条、各报什么」都带上**。
+                // 只丢一句「列模型失败」，用户完全不知道该去改什么 —— 这一轮用户报的
+                // 就是这个症状（「我已经开放代理，却还是显示列模型失败」）。
+                throw new Error('列模型失败（' + urls.length + ' 条路径都不行）：' +
+                    urls.map((u, i) => u.replace(/^https:\/\//, '') + ' → ' + (errs[i] || '?')).join('；'));
+            }
+            const proto = c.proto === 'anthropic' ? 'anthropic' : 'openai';
+            const headers = proto === 'anthropic'
+                ? { 'x-api-key': c.apiKey, 'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-direct-browser-access': 'true' }
+                : { 'Authorization': 'Bearer ' + c.apiKey };
+            return await stAiFetchModelsOnce(stAiJoin(c.baseUrl, '/models'), headers);
         }
 
         // 发一次对话。messages 里可以带 system，两种协议各自安排位置。
@@ -23286,6 +23387,238 @@
 
         // ===== 各选项卡 =====
 
+        // ==========================================================================
+        // 角色卡编写器：首页
+        //   别的页回答「往里填什么」，这一页回答「这张卡现在长什么样 / 从哪儿开始」。
+        //   三块：① 概览 ② 快捷动作（新建 / 导入 / 读酒馆当前卡）
+        //        ③ 从别的角色卡或世界书里把条目搬过来
+        // ==========================================================================
+
+        // 秒级时间戳 → 本地时间。0 / 无效值一律「—」，**不显示 1970**
+        // （卡里 creation_date 缺失是常态，显示 1970 看着像数据坏了）
+        function stHomeTime(ts) {
+            const n = Number(ts);
+            if (!Number.isFinite(n) || n <= 0) return '—';
+            try {
+                const d = new Date(n * 1000);
+                const p = x => String(x).padStart(2, '0');
+                return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+                    ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+            } catch (e) { return '—'; }
+        }
+
+        // 首页「正文字段完成度」用的清单。
+        // ⚠ 必须跟 renderStCard() 里那份**逐字一致** —— 否则会出现
+        //   「首页说 5/8、卡片摘要说 6/8」这种谁都不信的数字
+        const ST_HOME_BODY_FIELDS = ['name', 'description', 'personality', 'scenario',
+            'mesExample', 'systemPrompt', 'postHistoryInstructions', 'firstMes'];
+
+        function stPaneHome() {
+            const c = stEditor.card;
+            const nm = String(c.name || '').trim();
+            const filled = ST_HOME_BODY_FIELDS.filter(k => String(c[k] || '').trim()).length;
+            const greet = (String(c.firstMes || '').trim() ? 1 : 0) +
+                c.alternateGreetings.filter(g => String(g).trim()).length;
+            const thN = stThCountScripts(c.thScripts);
+            const onEntries = c.bookEntries.filter(e => e.enabled).length;
+            const own = [];
+            if (stEditor.mvuOwn) own.push('MVU');
+            if (stEditor.sbOwn) own.push('状态栏');
+
+            const kv = '<div class="st-kv">' +
+                '<b>名字</b><span>' + (nm ? escapeHtml(nm) : '<i>（还没起名字）</i>') + '</span>' +
+                '<b>规格</b><span>' + escapeHtml(ST_SPEC_LABEL[c.spec]) + '</span>' +
+                '<b>来源</b><span>' + (stEditor.srcName
+                    ? escapeHtml(stEditor.srcName) : '<i>新建的空卡</i>') + '</span>' +
+                '<b>正文字段</b><span>' + filled + ' / ' + ST_HOME_BODY_FIELDS.length + '</span>' +
+                '<b>开场白</b><span>' + greet + ' 条</span>' +
+                '<b>世界书</b><span>' + c.bookEntries.length + ' 条' +
+                    (c.bookEntries.length ? '（启用 ' + onEntries + '）' : '') + '</span>' +
+                '<b>正则</b><span>' + c.regex.length + ' 条</span>' +
+                '<b>酒馆助手</b><span>' + thN + ' 个脚本</span>' +
+                '<b>本编辑器接管</b><span>' + (own.length
+                    ? escapeHtml(own.join(' / ')) : '<i>无</i>') + '</span>' +
+                '<b>创建时间</b><span>' + escapeHtml(stHomeTime(c.creationDate)) + '</span>' +
+            '</div>';
+
+            return stPaneHead('🏠 首页',
+                '当前草稿长什么样，以及从哪儿开始。这里的新建 / 导入跟顶栏那几个按钮是同一批动作。') +
+                (stEditor.avatar
+                    ? '<div class="st-avatar-box">' +
+                      '<img class="st-avatar-prev" src="' + escapeHtml(stEditor.avatar) + '" alt="">' +
+                      '<div class="st-avatar-meta">头像：' +
+                        escapeHtml(stEditor.avatarName || '已选') + '</div></div>'
+                    : '') +
+                kv +
+                '<div class="st-sub">快捷动作</div>' +
+                '<div class="st-actions">' +
+                    '<button class="st-big" type="button" onclick="stNewCard(true)">✚ 新建角色卡</button>' +
+                    '<button class="st-big" type="button" onclick="stImportPick()">' +
+                        '📥 导入角色卡（PNG / JSON）</button>' +
+                    '<button class="st-big st-plain" type="button" onclick="stLoadFromTavern()">' +
+                        '📇 读取酒馆当前卡</button>' +
+                '</div>' +
+                stHomeExtractBlock();
+        }
+
+        // 「从别处搬条目」这一块。两种形态：
+        //   还没选文件 → 一个按钮 + 说明；选好了 → 来源信息 + 勾选清单 + 导入
+        function stHomeExtractBlock() {
+            const src = stEditor.extractSrc;
+            const msg = stEditor.extractMsg || { text: '', kind: '' };
+            const msgHtml = msg.text
+                ? '<div class="st-ai-status' + (msg.kind === 'bad' ? ' st-bad'
+                    : (msg.kind === 'warn' ? ' st-warn' : ' st-ok')) + '">' +
+                  escapeHtml(msg.text) + '</div>'
+                : '';
+            const head = '<div class="st-sub">从其他角色卡 / 世界书提取条目</div>';
+
+            if (!src) {
+                return head +
+                    '<div class="st-note">' +
+                        '选一张<b>别的角色卡</b>（PNG / JSON）或一份<b>世界书 JSON</b>，' +
+                        '把里面的条目挑出来、并进当前这张卡的世界书。' +
+                        '来源文件<b>不会被改动</b>，当前卡的正文一个字段都不动。' +
+                    '</div>' +
+                    '<div class="st-actions">' +
+                        '<button class="st-big" type="button" onclick="stExtractPick()">' +
+                            '📚 选择来源文件…</button>' +
+                    '</div>' + msgHtml;
+            }
+
+            const entries = src.entries || [];
+            const selN = entries.filter((e, i) => stEditor.extractSel[i]).length;
+            const rows = entries.map((e, i) => {
+                const on = !!stEditor.extractSel[i];
+                const keys = (e.keys || []).join('、');
+                const chip = e.constant ? '<span class="st-chip st-const">常驻</span>' : '';
+                // title 里放正文前 200 字，鼠标悬停能先看一眼写了什么
+                return '<label class="st-check" title="' +
+                        escapeHtml(String(e.content || '').slice(0, 200)) + '">' +
+                    '<input type="checkbox" id="st-ex-' + i + '"' + (on ? ' checked' : '') +
+                        ' onchange="stExtractToggle(' + i + ',this.checked)">' +
+                    '<span>' + chip +
+                        (e.comment ? escapeHtml(e.comment) : '<i>（没写备注）</i>') +
+                        (keys ? ' · ' + escapeHtml(keys.slice(0, 40)) : '') +
+                    '</span></label>';
+            }).join('');
+
+            return head +
+                '<div class="st-note">来源：<b>' + escapeHtml(src.srcName) + '</b>（' +
+                    escapeHtml(src.kind) + '）· 世界书名 ' + escapeHtml(src.bookName || '未命名') +
+                    ' · 共 ' + entries.length + ' 条</div>' +
+                '<div class="st-actions">' +
+                    '<button class="st-mini" type="button" onclick="stExtractSetAll(true)">全选</button>' +
+                    '<button class="st-mini" type="button" onclick="stExtractSetAll(false)">全不选</button>' +
+                '</div>' +
+                (entries.length
+                    ? rows
+                    : '<div class="st-empty">这份来源里没有能导入的条目。</div>') +
+                '<div class="st-actions">' +
+                    '<button class="st-big" type="button"' + (selN ? '' : ' disabled') +
+                        ' onclick="stExtractImport()">📥 导入选中的 ' + selN + ' 条</button>' +
+                    '<button class="st-big st-plain" type="button" onclick="stExtractClear()">取消</button>' +
+                '</div>' + msgHtml;
+        }
+
+        // 把一份「角色卡」或「世界书」JSON 解析成待导入的条目。
+        // 只认世界书那部分 —— 卡的正文 / 正则 / 开场白一律不碰。
+        function stExtractAccept(json, fileName) {
+            try {
+                // V2 / V3 卡把 character_book 装在 data 里；世界书文件则是顶层 entries。
+                // ⚠ 先按 spec+data 解一层，`parseWorldBook` 自己会去找 character_book / entries
+                const cand = (json && json.spec && json.data && typeof json.data === 'object')
+                    ? json.data : json;
+                const book = parseWorldBook(cand, fileName);
+                // 跟 stDraftFromStJson 里那段**保持同一套处理**：
+                // 装饰器贴回正文（编辑器要让用户看得见、改得动），并给每个条目发一个新 id
+                const entries = book.entries.map(e => {
+                    const x = Object.assign({}, e);
+                    x.id = stUuid();
+                    const dec = Array.isArray(x.decorators) ? x.decorators : [];
+                    if (dec.length) {
+                        x.content = dec.join('\n') + '\n' + x.content;
+                        x.decorators = [];
+                    }
+                    return x;
+                });
+                const isCard = !!(json && json.spec);
+                stEditor.extractSrc = {
+                    srcName: fileName || '（未命名来源）',
+                    kind: isCard ? '角色卡' : '世界书',
+                    bookName: book.name || '',
+                    entries: entries
+                };
+                // 默认**全选**：用户多半就是想把这份书整个搬过来，逐条点掉比逐条点上省事
+                const sel = {};
+                entries.forEach((e, i) => { sel[i] = true; });
+                stEditor.extractSel = sel;
+                stEditor.extractMsg = entries.length
+                    ? { text: '', kind: '' }
+                    : { text: '这份来源里没有条目（entries 是空的）。', kind: 'warn' };
+                stRerender();
+            } catch (e) {
+                stEditor.extractSrc = null;
+                stEditor.extractSel = {};
+                stEditor.extractMsg = {
+                    text: '读不出来：' + (e && e.message ? e.message : e),
+                    kind: 'bad'
+                };
+                stRerender();
+            }
+        }
+
+        function stExtractToggle(i, on) {
+            if (!stEditor.extractSrc) return;
+            if (on) stEditor.extractSel[i] = true;
+            else delete stEditor.extractSel[i];
+            stRerender();
+        }
+
+        function stExtractSetAll(on) {
+            if (!stEditor.extractSrc) return;
+            const sel = {};
+            if (on) stEditor.extractSrc.entries.forEach((e, i) => { sel[i] = true; });
+            stEditor.extractSel = sel;
+            stRerender();
+        }
+
+        // 把勾上的条目**追加**到当前卡的世界书。
+        // ⚠ 追加而不是替换 —— 用户点的是「导入条目」，不是「用这份书换掉我的书」
+        function stExtractImport() {
+            const src = stEditor.extractSrc;
+            if (!src) return;
+            const picked = src.entries.filter((e, i) => stEditor.extractSel[i]);
+            if (!picked.length) {
+                stEditor.extractMsg = { text: '一条都没勾，没东西可导入。', kind: 'warn' };
+                stRerender();
+                return;
+            }
+            // 逐条 clone 再进书：这几个对象还挂在 extractSrc 上，
+            // 直接塞进去会让两处指向同一个对象，之后再改条目会互相影响
+            const added = picked.map(e => Object.assign({}, e, { id: stUuid() }));
+            stEditor.card.bookEntries.push(...added);
+            // 书级字段：只在当前卡还没写名字时补上，**不覆盖**用户自己起的名字
+            const tookBookName = !String(stEditor.card.bookName || '').trim() && !!src.bookName;
+            if (tookBookName) stEditor.card.bookName = src.bookName;
+            stSaveDraft();
+            stEditor.extractSrc = null;
+            stEditor.extractSel = {};
+            stEditor.extractMsg = {
+                text: '✅ 已从「' + src.srcName + '」导入 ' + added.length + ' 条到世界书' +
+                    (tookBookName ? '，世界书名也一并补上了' : ''),
+                kind: ''
+            };
+            stRerender();
+        }
+
+        function stExtractClear() {
+            stEditor.extractSrc = null;
+            stEditor.extractSel = {};
+            stEditor.extractMsg = { text: '', kind: '' };
+            stRerender();
+        }
+
         function stPaneName() {
             const c = stEditor.card;
             return stPaneHead('📛 名字',
@@ -27807,7 +28140,12 @@
             stEditor.avatar = null;
             stEditor.avatarName = '';
             stEditor.lastExport = '';
-            stEditor.tab = 'name';
+            // 新建之后落在「首页」—— 刚清空的卡第一眼该是概览 +「接下来干什么」
+            stEditor.tab = 'home';
+            // 上一张卡没走完的「提取条目」不该跟到新卡上
+            stEditor.extractSrc = null;
+            stEditor.extractSel = {};
+            stEditor.extractMsg = '';
             stMvuAfterLoad();     // 新卡没有 MVU / 状态栏，顺手把接管标记清干净
             stSaveDraft();
             if (stIsOpen()) renderStEditor();
@@ -27816,13 +28154,32 @@
 
         function stImportPick() {
             const el = document.getElementById('st-import-file');
-            if (el) el.click();
+            if (!el) return;
+            // ⚠ 每次**显式**写 mode，不靠「上次留下的」—— 见 stEditor 里那段注释：
+            //   用户点「提取条目」之后在文件框点取消，change 根本不触发，mode 会留着
+            el.dataset.mode = 'card';
+            el.click();
+        }
+
+        // 同一个 <input>，这一次是「只把条目挑出来」。**复用而不新增节点**：
+        // 往 HTML 里插一个 <input> 会让 README 那张锚点表整体后移，而这件事零收益
+        function stExtractPick() {
+            const el = document.getElementById('st-import-file');
+            if (!el) return;
+            el.dataset.mode = 'extract';
+            stEditor.extractMsg = { text: '', kind: '' };
+            el.click();
         }
 
         // 从 PNG / JSON 读一张卡进编辑器
         async function stOnImportPicked(ev) {
             const file = ev.target.files && ev.target.files[0];
             ev.target.value = '';
+            // 这个 <input> 有两条用途：导入整张卡 / 只把条目挑出来。
+            // ⚠ 模式读 `dataset.mode` 而**不是** stEditor 上的字段 ——
+            //   用户点「提取条目」之后在文件框里点取消时 `change` 根本不触发，
+            //   放在 stEditor 上就没人清它了。放 dataset 由两个入口每次显式覆盖，残留无害。
+            const mode = (ev.target.dataset && ev.target.dataset.mode) || 'card';
             if (!file) return;
             stExportMsg('正在读取 ' + file.name + ' …');
             try {
@@ -27838,6 +28195,11 @@
                     json = await decodePngCardChunk(rec);
                 } else {
                     json = JSON.parse(new TextDecoder('utf-8').decode(u8));
+                }
+                // 只提取条目：走另一条路，**完全不碰当前草稿**
+                if (mode === 'extract') {
+                    stExtractAccept(json, file.name);
+                    return;
                 }
                 const card = stDraftFromStJson(json, file.name);
                 stEditor.card = card;
@@ -28233,6 +28595,11 @@
             mInput.value = apiGlobal.model || '';
             const dl = document.getElementById('apig-model-list');
             const models = (apiGlobal.models || []).slice();
+            // ⚠ Vertex 没有缓存列表时**直接摆内置候选** —— Google 那边列模型经常
+            //   不可用（见 stAiGeminiModelsUrls 的注释），不能让用户面对一个空候选框
+            if (!models.length && (AI_PROVIDERS.find(x => x.value === apiGlobal.provider) || {}).vertex) {
+                ST_GEMINI_MODEL_HINTS.forEach(m => models.push(m));
+            }
             if (apiGlobal.model && models.indexOf(apiGlobal.model) < 0) models.unshift(apiGlobal.model);
             dl.innerHTML = models.map(m => '<option value="' + escapeHtml(m) + '"></option>').join('');
             document.getElementById('apig-stream').checked = !!apiGlobal.stream;
@@ -28246,7 +28613,10 @@
 
         // 服务商变了：Base URL 那一格 + Vertex 那一整块跟着显示/隐藏。
         // ⚠ 隐藏用 `hidden` 而不是只加 class —— 只加 class 的话控件还在 DOM 里可聚焦，
-        //   键盘 Tab 会跳进一块「看不见但能改」的表单
+        //   键盘 Tab 会跳进一块「看不见但能改」的表单。
+        // ⚠⚠ 但 `hidden` **只有在有 `[hidden] { display: none }` 兜底时才有效** ——
+        //   本页给这些元素设了 `display: flex`，同权重下它**盖掉** hidden 自带的
+        //   display:none，于是 `el.hidden = true` 静默失效（见样式块里那条全局兜底）。
         function syncApigProviderUI() {
             const v = document.getElementById('apig-provider').value;
             const p = AI_PROVIDERS.find(x => x.value === v) || AI_PROVIDERS[0];
@@ -28360,7 +28730,12 @@
 
         // 全局面板的「能不能发请求」检查。跟 stAiReady 的区别：这里还要管 Vertex
         // 两条路**各自**的必填项 —— 快速模式要 Key，完整模式要 SA JSON + project
-        function apigReadyCheck(cfg) {
+        // ⚠ `opts.needModel === false` 时**不要求模型名** —— 「获取模型列表」那一步
+        //   本来就是为了挑模型，要求先有就成了死循环。编写器那边（`stAiReady`）
+        //   一直带着这个开关，全局面板这边**漏了** ⇒ Vertex 下必须先手打一个模型名
+        //   才能点「获取模型列表」，等于把这个按钮废掉了
+        function apigReadyCheck(cfg, opts) {
+            const needModel = !(opts && opts.needModel === false);
             const p = AI_PROVIDERS.find(x => x.value === cfg.provider) || {};
             if (p.vertex) {
                 if (cfg.authMode === 'sa') {
@@ -28376,7 +28751,7 @@
                 } else if (!cfg.apiKey) {
                     return '快速模式要填 API Key';
                 }
-                if (!cfg.model) return '请填一个模型名，例如 gemini-2.5-flash';
+                if (needModel && !cfg.model) return '请填一个模型名，例如 gemini-2.5-flash';
                 return '';
             }
             if (!cfg.baseUrl) return '请填写服务商或 Base URL';
@@ -28485,7 +28860,12 @@
                 }
                 ok('⑤ 换到 access token（' + escapeHtml(String(token).slice(0, 12)) + '…）');
 
-                // ⑥ 真列一次模型 —— 验证项目 / 区域 / 权限
+                // ⑥ 真列一次模型 —— 只为验证「项目 / 区域 / 权限」
+                // ⚠⚠ 这一步失败**不等于配置坏了**：⑤ 已经把 token 换到手，说明
+                //   JSON / 私钥 / 账号都是对的。列模型是**额外**能力，而且 Google
+                //   那边经常不可用（v1 那条资源根本没有 list 方法、账号也常没这个权限）。
+                //   ⇒ 必须说清「这不挡对话」，否则用户会一直以为自己配错了 ——
+                //     这一轮用户报的就是这个症状（「已经开放代理，却还是列模型失败」）。
                 const cfg = apigGather();
                 cfg.authMode = 'sa';
                 cfg.saJson = raw;
@@ -28495,8 +28875,17 @@
                     tip('可以点「保存」了');
                 } catch (e) {
                     no('⑥ 列模型失败：' + ((e && e.message) || e));
-                    tip('token 已经拿到了，所以问题在 <b>项目 ID / 区域 / 该账号的权限</b>' +
-                        '（还要确认这个 API 允许浏览器直连）');
+                    tip('⚠ <b>但这不代表配置坏了</b> —— ⑤ 已经换到 token，说明 JSON / 私钥 / 账号都对');
+                    tip('列模型只是额外能力，Google 这条接口经常不可用（也常常没给账号这个权限）' +
+                        '⇒ <b>不影响对话</b>：模型名在面板里直接手输就行，例如 gemini-2.5-flash');
+                    tip('真要查：① 项目 ID / 区域与项目是否一致；② 该 Service Account 有没有 ' +
+                        'Vertex AI 的查看权限；③ 这个接口允不允许浏览器直连');
+                    // 顺手把内置候选摆上，用户点「保存」之前就有东西可选
+                    const dl = document.getElementById('apig-model-list');
+                    const cur = (document.getElementById('apig-model').value || '').trim();
+                    const hints = ST_GEMINI_MODEL_HINTS.slice();
+                    if (cur && hints.indexOf(cur) < 0) hints.unshift(cur);
+                    if (dl) dl.innerHTML = hints.map(m => '<option value="' + escapeHtml(m) + '"></option>').join('');
                 }
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = '✅ 验证 JSON（分步）'; }
@@ -28504,8 +28893,9 @@
         }
 
         async function apigFetchModels() {
-            const cfg = apigGather();
-            const bad = apigReadyCheck(cfg);
+            const cfg = stAiEnsureProto(apigGather());
+            // ⚠ 拉模型**不能要求先有模型**（`needModel:false`）—— 这一步就是为了挑模型
+            const bad = apigReadyCheck(cfg, { needModel: false });
             if (bad) { apigStatus('⚠️ ' + bad, 'warn'); return; }
             const btn = document.getElementById('apig-fetch-btn');
             btn.disabled = true;
@@ -28515,16 +28905,35 @@
                 // ⚠ 复用编写器那份 stAiFetchModels：三种协议的 URL / 头都在那里。
                 //   这里自己再拼一遍就是「改了一处忘了另一处」的老毛病 ——
                 //   上一版就是这么把 Anthropic 的头漏掉的
-                const list = await stAiFetchModels(cfg);
-                apiGlobal.models = list;
-                // 落盘一份，免得刷新后又得重拉（模型列表是缓存，不是配置本体）
-                apiGlobalPersist();
+                let list = null, why = '';
+                try {
+                    list = await stAiFetchModels(cfg);
+                } catch (e) {
+                    // ⚠⚠ Google 那边列模型**经常不可用**（v1 那条资源没有 list 方法 /
+                    //    该账号没这个权限 / 形状又变了），而**列不出来根本不该挡路** ——
+                    //    模型框本来就能手输，酒馆（SillyTavern）连列都不列。
+                    //    ⇒ 退回内置候选。但**必须把失败原因说出来**，绝不能把失败
+                    //      伪装成成功（RULES 六之二十七）。
+                    if (cfg.proto !== 'gemini') throw e;
+                    list = ST_GEMINI_MODEL_HINTS.slice();
+                    why = (e && e.message) || String(e);
+                }
+                if (!why) {
+                    apiGlobal.models = list;
+                    // 落盘一份，免得刷新后又得重拉（模型列表是缓存，不是配置本体）
+                    apiGlobalPersist();
+                }
                 const dl = document.getElementById('apig-model-list');
                 const keep = document.getElementById('apig-model').value.trim();
                 const all = list.slice();
                 if (keep && all.indexOf(keep) < 0) all.unshift(keep);
                 dl.innerHTML = all.map(m => '<option value="' + escapeHtml(m) + '"></option>').join('');
-                apigStatus('✅ 拉到 ' + list.length + ' 个模型（输入框里点一下就能挑），选一个再保存', 'ok');
+                if (why) {
+                    apigStatus('⚠️ 列不出来（' + why + '）—— 已摆上内置候选，直接挑或手输模型名都行。' +
+                        '⚠ 这**不影响对话**：模型名本来就能手输', 'warn');
+                } else {
+                    apigStatus('✅ 拉到 ' + list.length + ' 个模型（输入框里点一下就能挑），选一个再保存', 'ok');
+                }
             } catch (e) {
                 apigStatus('❌ 获取失败：' + ((e && e.message) ? e.message : String(e)), 'warn');
             } finally {
