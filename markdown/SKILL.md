@@ -336,10 +336,10 @@ numbers that do not match what the user sees.
 **Kill Chrome in a `finally`** — a leaked headless process holds the debug port and the next run
 fails to bind.
 
-### Three ways a headless run dies with no output at all
+### Four ways a headless run dies with no output at all
 
-These cost two full runs in one session. Each looks identical from the outside: the harness produces
-**nothing**, and the shell gets killed.
+These cost two full runs in one session. The first three look identical from the outside: the harness
+produces **nothing**, and the shell gets killed. The fourth produces *all-zero output* instead.
 
 **1. A `window.confirm()` / `alert()` in the code path hangs the renderer forever.**
 
@@ -391,6 +391,161 @@ cd <scratch> && "$NODE" verify.js > run.log 2>&1; echo "EXIT=$?" >> run.log
 Log a timestamp per section (`[3.8s]`) — it tells you whether you have a hang or merely a slow run.
 Also give the HTTP server an error handler (`srv.on('error', rej)`) so a busy port fails loudly
 instead of hanging on an unresolved `listen` promise.
+
+**4. A fan-out runner that uses `spawnSync` reports `0 passed / 0 failed` for every suite.**
+
+The symptom is a runner that shells out to N child harnesses printing, for *each* suite,
+`[none] 0.0s ← no parseable summary line`, with the totals line saying `0 通过 / 0 失败`. Every suite
+looks broken at once — so you suspect the suites, then the product, then "the environment".
+
+In this environment `spawnSync` / `execFileSync` / `execSync` **fail immediately with `EBUSY`**; the
+async `spawn` API is fine. The decisive diagnostic is to test both spellings side by side:
+
+```js
+const cp = require('child_process');
+console.log('spawnSync :', cp.spawnSync(process.execPath, ['-e', 'console.log("ok")']).error);
+cp.spawn(process.execPath, ['-e', 'console.log("ok")']).stdout.on('data', d => console.log('spawn     :', d.toString()));
+// → spawnSync : Error: spawnSync ... EBUSY
+// → spawn     : ok
+```
+
+Two rules follow:
+
+- **Fan-out harnesses (a runner, a linter, a reverse-test driver) must use async `spawn`.** A harness
+  whose *own* child is a browser boot usually already does — which is exactly why the bug looks
+  selective: the suites run, only the driver around them is dead.
+- **When a fan-out runner reports 0/0, suspect the driver before the product.** `0 passed / 0 failed`
+  with an unparseable summary is a *driver* signature; a real product breakage still prints red lines.
+- ⚠ **If the project has more than one runner, fix all of them.** In this case the local runner was
+  migrated to async `spawn` and the *external* one — a second `_verify/` tree with its own `run-all.js`
+  — was missed, so that half of the verification silently reported `0/0` for a whole round. Whenever
+  you fix a structural bug in shared tooling, ask **"how many copies of this file exist?"** before
+  declaring it done.
+- **Make the runner print the tail of any suite that failed.** `0.0s ← no parseable summary` tells you
+  *that* the driver died but not *why*; the reason (a stack trace, `EBUSY`, a missing module) is only in
+  the child's raw output. Print the last ~25 lines for failing suites — **print, don't write files**, so
+  no stale artifacts accumulate.
+
+⚠ And note what this cost: the first conclusion was "the sandbox only allows one level of process
+creation", which is a plausible-sounding story that fits the evidence and is **wrong**. A workaround
+(a bash driver) was written around it before the falsifying test above was run. **Any "the environment
+doesn't allow X" conclusion must be falsified by an alternative spelling of X before you act on it** —
+otherwise you build infrastructure around a fiction.
+
+### Three more signatures that look like product breakage and are not
+
+Both were found by running a *fan-out* runner over a suite family, so they only showed up when the
+suites ran **back to back** — each suite was green on its own.
+
+**A. `1 passed / 1 failed`, and the one that passed is the "no uncaught errors" check.**
+
+That combination means **the page never finished loading**: nothing has executed yet, so there are
+zero exceptions, and the *next* `ev('SOME_CONSTANT')` throws `ReferenceError` — which your `ev()`
+helper re-throws, killing the suite before it prints a summary.
+
+The root cause is always one of two shortcuts:
+
+- a **fixed sleep** after `Page.navigate` (`await sleep(2500)`) instead of waiting for the real event.
+  Under load — many Chrome processes already running, plus a page that `@import`s a web font — 2.5 s
+  is not enough.
+- a **hardcoded CDP port**. If a previous suite's Chrome has not exited, yours cannot bind that port,
+  and you attach to the *old* browser instead.
+
+```js
+// ✅ wait for the real event, and take a free port instead of a fixed one
+const loaded = new Promise(res => cdp.on('Page.loadEventFired', res));
+await cdp.send('Page.navigate', { url: `http://127.0.0.1:${HTTP_PORT}/` }, SID);
+await loaded;
+await ev(`document.fonts.ready.then(() => true)`, true);   // webfonts settle before you measure
+
+const cdpPort = await (async () => {
+  for (let i = 0; i < 80; i++) {
+    const p = 9500 + Math.floor(Math.random() * 900);
+    const free = await new Promise(res => {
+      const probe = http.createServer();
+      probe.on('error', () => { try { probe.close(); } catch (e) {} res(false); });
+      probe.listen(p, '127.0.0.1', () => probe.close(() => res(true)));
+    });
+    if (free) return p;
+    await sleep(40);
+  }
+  return 9500 + Math.floor(Math.random() * 900);
+})();
+```
+
+Deliberately **do not** add a "fall back to proceeding anyway" timeout: that converts "the page never
+loaded" into "the suite ran and passed", which is far harder to notice. A hang is better than a lie.
+
+Rule of thumb: **when the passing count is 1 and that one check is "no errors", suspect the load, not
+the product.** Confirm by running the single suite alone — if it is green alone and red in the batch,
+it is the harness.
+
+**B. A stale assertion — the mirror image of an always-true one.**
+
+The product's error text changed (a refactor reworded it); the assertion still matched the old string,
+so the suite went **permanently red** while the product was perfectly fine. The two failure modes are
+mirror images and neither fixes itself:
+
+| | suite result | reality |
+|---|---|---|
+| always-true assertion | **always green** | nothing is being verified |
+| stale assertion | **always red** | the product is fine |
+
+⚠ **`grep`-ing the product will lie to you.** The old string usually survives somewhere — a comment
+explaining the history. `grep -c "old message" page.html` returning `1` looks like "the string is still
+there", so you conclude the assertion is fine. Only *running it* tells the truth.
+
+What to assert instead: **the semantics, not the sentence.** Split one vague check into two:
+
+```js
+check('empty list is rejected (does not silently return [])', err !== '', true);
+check('the error is about models', err, e => /模型/.test(String(e)), 'mentions 模型');
+```
+
+Asserting the whole sentence means every copy tweak breaks the suite, and a check that reports on
+every edit is a check nobody reads. But "wide" is not "loose": still refuse to accept *any* thrown
+error, or an unrelated parse error passes.
+
+**C. Every check passes, the summary never prints, and the process never exits.**
+
+The suite printed all of its green checks — including the final "no console errors" — and then just
+hung. Forced kill after 240 s: `EXIT=null`. **The checks were fine; the teardown was not.**
+
+The `finally` block ran `fs.rmSync(profile, { recursive: true, maxRetries: 8, retryDelay: 150 })`.
+On this machine **deleting a single file takes ~200 ms** (writing one takes 6 ms), and a Chrome
+profile holds hundreds of files — so the recursive delete effectively **never returns**. And because
+the summary line sits *after* the `finally`, a hung teardown means **you get no summary at all**.
+That is what makes it so confusing: a reverse test that parses the summary reports "no parseable
+summary line", and a fan-out runner reports exactly the same thing — so it reads like the suite
+*never ran*.
+
+```js
+// ✅ hand the delete to a detached child; never block the parent on it
+if (profile) {
+  try {
+    spawn(process.execPath, ['-e',
+      'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})',
+      profile], { detached: true, stdio: 'ignore' }).unref();
+  } catch (e) {}
+}
+```
+
+Measured after the fix: teardown **0.3 s**, process exits immediately, suite total **10 s** (it had
+been 240 s with no exit). Leaving the temp dir behind is fine — a `cdp-` prefix allow-list sweeper
+picks it up later. **"Clean teardown" and "the process can exit" are mutually exclusive here — pick
+exiting.**
+
+⚠ Do **not** try to fix this with `fs.promises.rm` plus `Promise.race(…, sleep(3000))`. That
+unblocks the main thread, but **`process.exit()` still waits for the in-flight delete in the libuv
+thread pool** — the summary prints and then the process lingers for 30 s+, so the runner still sees
+a timeout.
+⚠ **Measure, do not guess.** I guessed wrong **twice** — "`kill()` is async, wait for Chrome to exit
+first", then "it's a `maxRetries × retryDelay` retry storm" — before timing a single write against a
+single delete made the answer obvious in one shot. Put a timestamp on **each** teardown step; five
+lines is enough.
+⚠ This is a **family** of failure, not one suite: a batch run reported `0.0s` for every layer (the
+driver used a sync spawn API), and a fan-out runner reported `TIMEOUT` for the visual layer. In all
+three cases the symptom pointed at the product or the network, and the cause was the harness.
 
 **Serve over `http://127.0.0.1:<port>`, not `file://`.** `localStorage` on `file://` is unreliable in
 Chrome, and a tiny static server makes the origin stable and `localStorage` predictable. A 10-line
@@ -1830,6 +1985,49 @@ Two rules:
 check('导入角色卡后系统提示词被关掉', w.eval('aiConfig.promptEnabled'), false);
 check('开关自动取消勾选', $('ai-prompt-enabled').checked, false);
 check('提示词区变成 ai-prompt-off', $('ai-prompt-body').classList.contains('ai-prompt-off'), true);
+```
+
+### A mode that must be re-asserted per entry point cannot live in the shared state object
+
+The follow-up to the above, and the *opposite* failure. One `<input type="file">` was reused for two
+jobs — "import a whole card" and "extract only the entries". Which job it is has to be decided in the
+`change` handler, so the natural design is a flag on the shared editor state:
+
+```js
+stEditor.importMode = 'card';                 // ❌ set by stImportPick()
+input.addEventListener('change', ev => {
+  const mode = stEditor.importMode;           // read here
+  ...
+});
+```
+
+It works until the user clicks **Cancel** in the OS file dialog. Then `change` never fires — so the
+flag is *never consumed*, and the next ordinary import reads a stale `'extract'` and silently does the
+wrong thing. There is no entry point to clear it, because the cancel path *is not a callback*.
+
+Put the mode on the **DOM node**, and have every picker write it explicitly right before `.click()`:
+
+```js
+function stImportPick()  { const el = $('#st-import-file'); el.dataset.mode = 'card';    el.click(); }
+function stExtractPick() { const el = $('#st-import-file'); el.dataset.mode = 'extract'; el.click(); }
+
+input.addEventListener('change', ev => {
+  const mode = (ev.target.dataset && ev.target.dataset.mode) || 'card';
+  ...
+});
+```
+
+Generalised: **shared mutable state is only safe when every path that can leave it set also passes
+through code that resets it.** A cancel/abort/dismiss path is the classic counter-example — it leaves
+the state set with no callback to clear it. If the state is a property of *the interaction* rather
+than of the document, store it on the element that owns the interaction.
+
+The assertion is worth writing, because the bug is invisible otherwise — the happy path is green:
+
+```js
+await ev(`stExtractPick()`);   // leaves mode = 'extract'
+await ev(`stImportPick()`);
+check('正常点「导入」→ mode=card', await ev(`$('#st-import-file').dataset.mode`), 'card');
 ```
 
 ### Check the off-transition, not just the on-transition
