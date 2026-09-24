@@ -114,13 +114,17 @@ console.log('\n== 再删 ==');
 const failed = [];
 let done = 0;
 for (const h of before) {
+    const t0 = Date.now();
     try {
         fs.rmSync(h.full, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 });
         done++;
+        // ⚠⚠ **每个都打印，不要「每 100 个才打印一次」** —— 残留通常只有几十个（第二十一轮实测 44 个），
+        //   而本机删一个 profile 目录要**上百秒**（~200 ms/文件 × 几百个文件）
+        //   ⇒ 隔 100 个才打印 = **全程无输出**，看起来跟「挂了」一模一样。
+        console.log('  ✓ ' + h.name + '  ' + ((Date.now() - t0) / 1000).toFixed(1) + 's  (' + done + '/' + before.length + ')');
     } catch (e) {
         failed.push(h.name + '  ' + (e && e.code ? e.code : e));
     }
-    if (done % 100 === 0 && done) console.log('  … ' + done + ' / ' + before.length);
 }
 console.log('  删除成功 ' + done + ' / ' + before.length);
 if (failed.length) {
