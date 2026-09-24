@@ -2168,10 +2168,19 @@ cleaner.unref();
      磁盘争用会让 ~200 ms/文件 再翻几倍 —— 但**修法一样，一行**：
      把 `rmSync` 换成上面那个 `spawn(detached)` 三行。
    ⇒ 结论：**这不是「28 个不用动」，是「28 个都该动」**，只是优先级低于产品。
-   ⇒ **已改**（2026-09-24）：本地 **21 个文件**铺上 `spawn(detached)`（19 套 + `sb-diag*` /
-     `sb-zoom5` / `_probe-focus.js`）；⚠ 只剩 `_probe-mobile-nav.js`（一次性探针）未改。
+   ⇒ **已改**（2026-09-24，两批）：本地 **29 个文件**铺上 `spawn(detached)` ——
+     **18 个套件**（19 套里只有 `check.js` 不建 profile，无需改）+ **11 个探针 / 工具**
+     （`sb-diag` / `sb-diag3` / `sb-diag5` / `sb-diag-class` / `sb-shot-color` /
+     `sb-zoom` / `sb-zoom5` / `_probe-focus` / `_probe-mobile-nav` /
+     `_probe-stcard-anim` / `_probe-tabs-anim`）。
+     ⚠ **只有 `_purge-tmp.js` 保留同步删** —— 同步清理本来就是它的职责，**别改它**。
+     ⚠ 两批的教训：第一批只覆盖了变量名叫 `profile` 的写法（19 个文件），
+     第二批才发现还有 `path.join(os.tmpdir(), x)` 和 `chromeProf` 两种写法 ——
+     **「照着 grep 结果改」时，grep 的模式本身就是一份写死的清单**（同族六之五十二）。
      前后对照：`smoke.js` 改前「打出 91 passed 后卡住、10 min 44 s 不退」→
-     改后 **`EXIT=0` / 25 s / 91 passed, 0 failed**。
+     改后 **`EXIT=0` / 25 s / 91 passed, 0 failed**；
+     **全部改完后的整跑：19 套 / 2 691 通过 / 0 失败、全程 4.5 分钟**
+     （改之前那次：19 分钟只跑完 1 套、第 2 套 `900.1s` 超时）。
 
 ### 六之五十六 · **镜像 `cmp` 不一致时，先 `diff` 看方向再 `cp`**（第二十一轮）
 
