@@ -886,7 +886,7 @@ const HEAD_STYLE_RAW =
     await sleep(200);
     // ⚠ profile 目录要自己删 —— 不删的话每跑一次就多一个（实测堆到 873 个 / 14.5 GB）。
     //   放在 sleep 之后：进程刚 kill 掉时目录还锁着，等它退干净再删。
-    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+    try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', profile], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
   }
 
   console.log(`\n===== 第七轮（调整大小）：${pass} 通过 / ${fail} 失败 =====`);

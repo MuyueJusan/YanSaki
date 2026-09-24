@@ -11,7 +11,10 @@ const CHROME = ['C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
 //   外面的 `.catch` 够不着）。`st-ai.js` 早就这么做了，这里是补齐。
 let chromeProf = null;
 const dropProf = () => {
-  try { if (chromeProf) fs.rmSync(chromeProf, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+  // ⚠⚠ **不要在本进程里删**：这台机器删一个文件要 ~200 ms，profile 有几百个文件 ⇒
+  //   `rmSync(…, {maxRetries: 8})` 永不返回 ⇒ 卡住收尾 ⇒ **连汇总行都打不出来**。
+  //   派一个**脱离的子进程**去删（第二十一轮；RULES.md 六之五十五）。
+  try { if (chromeProf) require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', chromeProf], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
 };
 
 let pass = 0, fail = 0;

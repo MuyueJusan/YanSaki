@@ -521,7 +521,7 @@ function startServer() {
     try { if (srv) srv.close(); } catch (e) {}
     // ⚠ 必须带 maxRetries：Windows 上进程刚 kill 时 profile 还锁着，
     //   裸 rmSync 会 EBUSY 退出而外面这层 catch 把它吞掉 —— 静默失败
-    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+    try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', profile], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
   }
   process.exit(fail ? 1 : 0);
 })();

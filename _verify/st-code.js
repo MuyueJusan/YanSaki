@@ -3060,7 +3060,7 @@ registerMvuSchema(结构);`;
     try { chrome.kill(); } catch (e) {}
     // ⚠ profile 目录要自己删 —— 不删的话每跑一次就多一个（实测堆到 873 个 / 14.5 GB）。
     //   这一套是最大的一份（单跑 33 s），漏一个就是几十 MB。
-    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+    try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', profile], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
   }
 
   console.log(`\n===== 第十二轮（Code / Agent）：${pass} 通过 / ${fail} 失败 =====`);

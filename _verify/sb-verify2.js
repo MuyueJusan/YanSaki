@@ -517,7 +517,7 @@ const DIALOGS = [];
     try { if (srv) srv.close(); } catch (e) {}
     try { chrome.kill(); } catch (e) {}
     // ⚠ profile 目录要自己删 —— 不删的话每跑一次就多一个（实测堆到 873 个 / 14.5 GB）
-    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+    try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', profile], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
     console.log(`\n========== ${pass} passed, ${fail} failed ==========`);
     if (fails.length) console.log('FAILED: ' + fails.join(' | '));
   }

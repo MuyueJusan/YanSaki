@@ -1334,7 +1334,7 @@ window.fetch = async function (url, init) {
     try { if (cdp && cdp.ws) cdp.ws.close(); } catch (e) {}
     try { chrome.kill(); } catch (e) {}
     await sleep(400);
-    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+    try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', profile], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
   }
 
   console.log(`\n== 汇总 ==`);

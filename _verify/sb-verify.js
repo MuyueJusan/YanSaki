@@ -632,7 +632,7 @@ const DIALOGS = [];
     //   实测堆到 873 个目录 / 14.5 GB（`st-ai.js` 早就这么做了，这里是补齐）。
     //   maxRetries 是为 Windows：进程刚 kill 掉时目录还锁着，不重试就是 EBUSY，
     //   而那是**静默**的（外面还有一层 catch 兜着）。
-    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+    try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', profile], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
     console.log(`\n========== ${pass} passed, ${fail} failed ==========`);
     if (fails.length) console.log('FAILED: ' + fails.join(' | '));
   }

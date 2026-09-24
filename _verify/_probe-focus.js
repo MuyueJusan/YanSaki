@@ -88,6 +88,6 @@ class CDP {
   try { await cdp.send('Browser.close', {}, SID); } catch (e) {}
   try { chrome.kill(); } catch (e) {}
   try { srv.close(); } catch (e) {}
-  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+  try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', profile], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
   process.exit(0);
 })();

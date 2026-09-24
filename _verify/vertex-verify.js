@@ -786,7 +786,10 @@ class CDP {
     try { if (cdp) cdp.ws.close(); } catch (e) {}
     try { chrome.kill(); } catch (e) {}
     await sleep(400);
-    try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) {}
+    // ⚠⚠ 同 smoke.js / home-verify.js：**不要在本进程里删**（本机删一个文件 ~200 ms，
+    //   几百个文件的 profile 会把 finally 拖到超时，而**汇总行写在 finally 之后**）。
+    //   派脱离的子进程删（第二十一轮；RULES.md 六之五十五）。
+    try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', profile], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
     try { srv.close(); } catch (e) {}
   }
 
