@@ -178,7 +178,7 @@ const CHROME = ['C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
 function dropProf() {
   try {
     fs.readdirSync(os.tmpdir()).filter(x => x.startsWith('cdp-tabanim-')).forEach(x => {
-      try { fs.rmSync(path.join(os.tmpdir(), x), { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); } catch (e) {}
+      try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', path.join(os.tmpdir(), x)], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
     });
   } catch (e) {}
 }

@@ -20,7 +20,7 @@ const CHROME = ['C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
 let chromeProf = null, chromeProc = null, httpSrv = null;
 const dropProf = () => {
   if (!chromeProf) return;
-  try { fs.rmSync(chromeProf, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }); }
+  try { require('child_process').spawn(process.execPath, ['-e', 'require("fs").rmSync(process.argv[1],{recursive:true,force:true,maxRetries:0})', chromeProf], { detached: true, stdio: 'ignore' }).unref(); }
   // ⚠ 别把失败吞掉 —— 静默的清理等于没有清理（见 2026-09-20 日志 ⑰）
   catch (e) { console.log('  ⚠ 临时 profile 没删掉：' + chromeProf + '（' + e.code + '）'); }
 };
