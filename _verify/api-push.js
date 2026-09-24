@@ -33,13 +33,34 @@ const GO = process.argv.includes('--go');
 const branchArg = process.argv.find(a => a.startsWith('--branch='));
 const BRANCH = branchArg ? branchArg.split('=')[1] : 'main';
 
-const git = (...a) => cp.execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();
-// ⚠⚠ `maxBuffer` 必须显式给：`execFileSync` 默认只有 **1 MB**，而 `saki.html` / `index.html`
-//   都是 **1.5 MB** 上下 ⇒ 读它们自己的 blob 时 `spawnSync` 直接 `ENOBUFS` + `SIGTERM`
-//   （报错长得像「git 挂了」，其实是 Node 把管道掐了）。
-//   2026-09-23 实测：推到 `M index.html → blob …` 这一步就崩，栈顶是 `gitBuf`。
-//   ⇒ **凡是用 `execFileSync` 读「可能很大的文件内容」的地方，都要给 maxBuffer。**
-const gitBuf = (...a) => cp.execFileSync('git', a, { cwd: ROOT, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
+// ⚠⚠ 这里**必须用异步 `spawn`** —— 本环境里 `spawnSync` / `execFileSync` / `execSync`
+//   一律立刻返回 `EBUSY`（见 RULES 六之四十六）。
+//   2026-09-24 实测：这份脚本原来用的是 `execFileSync`，第一句 `git rev-parse HEAD` 就
+//   `spawnSync git EBUSY` 崩掉 ⇒ **一个被技能文档指着说「working implementation」的工具，
+//   其实一行都没跑起来**（而它的 dry-run 也崩，所以没人会「顺手发现」）。
+//   ⇒ 改成异步之后才真的能跑；`--go` 全链路实测通过（blob / tree / commit 三个 sha 全对）。
+// ⚠ 顺带：异步 `spawn` 是**流式**的，所以 `execFileSync` 那个 1 MB 管道上限（ENOBUFS）
+//   在这里根本不存在 —— `maxBuffer` 那一课仍然要记，只是不再是这份实现的风险点。
+function runGit(args, asBuffer) {
+    return new Promise((res, rej) => {
+        const p = cp.spawn('git', args, { cwd: ROOT });
+        const out = [], err = [];
+        p.stdout.on('data', d => out.push(d));
+        p.stderr.on('data', d => err.push(d));
+        p.on('error', rej);
+        p.on('close', code => {
+            if (code !== 0) {
+                rej(new Error('git ' + args.join(' ') + ' → ' +
+                    Buffer.concat(err).toString('utf8').trim()));
+                return;
+            }
+            const buf = Buffer.concat(out);
+            res(asBuffer ? buf : buf.toString('utf8').trim());
+        });
+    });
+}
+const git = (...a) => runGit(a, false);
+const gitBuf = (...a) => runGit(a, true);
 
 function token() {
     if (!fs.existsSync(CRED)) return null;
@@ -66,8 +87,8 @@ async function api(tok, url, method, body) {
 }
 
 // `git cat-file commit <sha>` → { tree, parents[], author, committer, message }
-function readCommit(sha) {
-    const raw = gitBuf('cat-file', 'commit', sha).toString('utf8');
+async function readCommit(sha) {
+    const raw = (await gitBuf('cat-file', 'commit', sha)).toString('utf8');
     const nl = raw.indexOf('\n\n');
     const head = raw.slice(0, nl).split('\n');
     const msg = raw.slice(nl + 2);                       // ⚠ 含结尾换行，原样保留
@@ -102,7 +123,7 @@ function die(msg) { console.log('\n❌ ' + msg + '\n（远端 ref 未改动）')
     if (ref.status !== 200) die('读 ref 失败 HTTP ' + ref.status + ' ' + JSON.stringify(ref.body));
     const remoteHead = ref.body.object.sha;
 
-    const localHead = git('rev-parse', 'HEAD');
+    const localHead = await git('rev-parse', 'HEAD');
     console.log('== 现状 ==');
     console.log('  远端 refs/heads/' + BRANCH + ' = ' + remoteHead);
     console.log('  本地 HEAD                 = ' + localHead);
@@ -114,7 +135,7 @@ function die(msg) { console.log('\n❌ ' + msg + '\n（远端 ref 未改动）')
     // 远端必须是本地 HEAD 的祖先，否则不是快进 —— 先拉再推，别硬来
     let ancestors;
     try {
-        ancestors = git('rev-list', localHead).split('\n');
+        ancestors = (await git('rev-list', localHead)).split('\n');
     } catch (e) { die('读本地历史失败：' + e.message); }
     if (!ancestors.includes(remoteHead)) {
         die('远端 HEAD 不是本地 HEAD 的祖先 ⇒ 不是快进。\n' +
@@ -122,9 +143,11 @@ function die(msg) { console.log('\n❌ ' + msg + '\n（远端 ref 未改动）')
     }
 
     const chain = [];
-    for (let s = localHead; s !== remoteHead; s = git('rev-parse', s + '^')) chain.unshift(s);
+    for (let s = localHead; s !== remoteHead; s = await git('rev-parse', s + '^')) chain.unshift(s);
     console.log('\n== 要推 ' + chain.length + ' 个 commit ==');
-    chain.forEach(s => console.log('  ' + s.slice(0, 7) + '  ' + git('log', '-1', '--format=%s', s)));
+    for (const s of chain) {
+        console.log('  ' + s.slice(0, 7) + '  ' + await git('log', '-1', '--format=%s', s));
+    }
 
     if (!GO) {
         console.log('\n（dry-run）加 `--go` 才真推。');
@@ -134,7 +157,7 @@ function die(msg) { console.log('\n❌ ' + msg + '\n（远端 ref 未改动）')
     // ---------- 逐个 commit 复刻 ----------
     let prevTree = null;
     for (const sha of chain) {
-        const c = readCommit(sha);
+        const c = await readCommit(sha);
         console.log('\n--- ' + sha.slice(0, 7) + ' ---');
 
         if (!prevTree) {
@@ -142,11 +165,11 @@ function die(msg) { console.log('\n❌ ' + msg + '\n（远端 ref 未改动）')
             if (rc.status !== 200) die('读远端父提交失败 HTTP ' + rc.status);
             prevTree = rc.body.tree.sha;
         }
-        const wantTree = git('rev-parse', sha + '^{tree}');
+        const wantTree = await git('rev-parse', sha + '^{tree}');
 
         // 这个 commit 相对父提交改了哪些路径（`--no-renames` 让 R 变回 A+D，解析简单）
-        const st = git('diff-tree', '-r', '--no-renames', '--name-status', '-z',
-            c.parents[0], sha).split('\0').filter(Boolean);
+        const st = (await git('diff-tree', '-r', '--no-renames', '--name-status', '-z',
+            c.parents[0], sha)).split('\0').filter(Boolean);
         const entries = [];
         for (let i = 0; i < st.length; i += 2) {
             const status = st[i], p = st[i + 1];
@@ -155,12 +178,12 @@ function die(msg) { console.log('\n❌ ' + msg + '\n（远端 ref 未改动）')
                 console.log('  删除 ' + p);
                 continue;
             }
-            const mode = git('ls-tree', sha, '--', p).split(/\s+/)[0];
-            const blobBytes = gitBuf('cat-file', 'blob', sha + ':' + p);
+            const mode = (await git('ls-tree', sha, '--', p)).split(/\s+/)[0];
+            const blobBytes = await gitBuf('cat-file', 'blob', sha + ':' + p);
             const b = await api(tok, '/repos/' + REPO + '/git/blobs', 'POST',
                 { content: blobBytes.toString('base64'), encoding: 'base64' });
             if (b.status !== 201 && b.status !== 200) die('建 blob 失败（' + p + '）HTTP ' + b.status);
-            const wantBlob = git('rev-parse', sha + ':' + p);
+            const wantBlob = await git('rev-parse', sha + ':' + p);
             if (b.body.sha !== wantBlob) die('blob sha 不一致（' + p + '）：远端 ' + b.body.sha + ' vs 本地 ' + wantBlob);
             entries.push({ path: p, mode: mode, type: 'blob', sha: b.body.sha });
             console.log('  ' + status + ' ' + p + '  → blob ' + b.body.sha.slice(0, 10) + ' ✅');

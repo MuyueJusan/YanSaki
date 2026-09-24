@@ -305,6 +305,33 @@ whole chain of pending commits, gates on every sha, and refuses to move the ref 
 commit sha equals the local one. Verified end-to-end: blob, tree and commit shas all matched,
 the ref moved, and the push still triggered the Pages deploy normally.
 
+⚠⚠ **That implementation was dead for a day and nobody noticed — because it used `execFileSync`.**
+Re-measured 2026-09-24: `spawnSync` / `execFileSync` / `execSync` all return **`EBUSY`** in this
+environment, so the script died on its very first `git rev-parse HEAD`:
+
+```
+Error: spawnSync git EBUSY   at git (api-push.js:36)   at api-push.js:105
+```
+
+It defaulted to dry-run, and **dry-run crashed too** — so there was no "I'll just try it and see"
+path that would have surfaced the problem. A tool that a skill points at as *working* is worse than
+no tool: it makes you stop looking. **Convert every git helper to async `spawn`** (collect
+`stdout`/`stderr` chunks, resolve on `close` with code 0). Two side effects, both good: the 1 MB
+`execFileSync` pipe ceiling (`ENOBUFS`) disappears entirely, and `await` forces the call sites to
+be ordered explicitly.
+
+⚠ **Before writing a new helper for this, search for the existing one.** This exact procedure was
+already implemented and documented — and a later session re-derived it from scratch and wrote a
+second, parallel script before noticing. `grep -rn "<keyword>" _verify/` and a look at the relevant
+skill costs a minute; a duplicated 200-line tool costs the rest of the session and leaves two
+copies to keep in sync.
+
+⚠ **Map which hosts the proxy actually allows before concluding "the network is down".** Measured
+through the same proxy in one sweep: `api.github.com` **200**, `codeload.github.com` **301**, while
+`github.com`, `www.github.com`, `objects.githubusercontent.com`, `raw.githubusercontent.com` and
+`gist.github.com` all fail (`CONNECT` never completes). Only `git push` / `git fetch` need the
+blocked host; everything in this section runs on the allowed one.
+
 ## 7. Secret hygiene before pushing
 
 ```bash
