@@ -2168,6 +2168,10 @@ cleaner.unref();
      磁盘争用会让 ~200 ms/文件 再翻几倍 —— 但**修法一样，一行**：
      把 `rmSync` 换成上面那个 `spawn(detached)` 三行。
    ⇒ 结论：**这不是「28 个不用动」，是「28 个都该动」**，只是优先级低于产品。
+   ⇒ **已改**（2026-09-24）：本地 **21 个文件**铺上 `spawn(detached)`（19 套 + `sb-diag*` /
+     `sb-zoom5` / `_probe-focus.js`）；⚠ 只剩 `_probe-mobile-nav.js`（一次性探针）未改。
+     前后对照：`smoke.js` 改前「打出 91 passed 后卡住、10 min 44 s 不退」→
+     改后 **`EXIT=0` / 25 s / 91 passed, 0 failed**。
 
 ### 六之五十六 · **镜像 `cmp` 不一致时，先 `diff` 看方向再 `cp`**（第二十一轮）
 
