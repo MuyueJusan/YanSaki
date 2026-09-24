@@ -432,7 +432,7 @@ creation", which is a plausible-sounding story that fits the evidence and is **w
 doesn't allow X" conclusion must be falsified by an alternative spelling of X before you act on it** —
 otherwise you build infrastructure around a fiction.
 
-### Three more signatures that look like product breakage and are not
+### Four more signatures that look like product breakage and are not
 
 Both were found by running a *fan-out* runner over a suite family, so they only showed up when the
 suites ran **back to back** — each suite was green on its own.
@@ -547,6 +547,25 @@ lines is enough.
 driver used a sync spawn API), and a fan-out runner reported `TIMEOUT` for the visual layer. In all
 three cases the symptom pointed at the product or the network, and the cause was the harness.
 
+**D. A preview assertion reads `{w: 0}` while the computed style says `"210px"`.**
+
+One suite reported two failures — `actual={"w":0,"cs":"210px"}`, expected `210` — in a batch run, and
+**100/0 green when run alone**. The pair is the tell:
+
+- `getBoundingClientRect().width === 0` → not laid out
+- `getComputedStyle(el).width === "210px"` → the inline style is there and resolvable
+
+An element whose ancestor is `display:none` **also** reports its *specified* width from
+`getComputedStyle`, not `auto` — so **"rect 0 + computed value" is the signature of "parsed, but this
+document has no layout yet"**, and it is *not* reachable from a correct product: the generated HTML
+is right, only the reading is early.
+
+The poll loop was `if (got) break;` — it stopped at the first **non-null** answer instead of the first
+**real** one. See "Evaluate succeeded ≠ document is ready" below for the fix, and note the two
+follow-on traps: **record both numbers** so "not rendered" stays distinguishable from "the product
+computed 0", and **do not blame a zombie frame** — see the OOPIF section for why that explanation is
+falsifiable in one line.
+
 **Serve over `http://127.0.0.1:<port>`, not `file://`.** `localStorage` on `file://` is unreliable in
 Chrome, and a tiny static server makes the origin stable and `localStorage` predictable. A 10-line
 `http.createServer` reading from the target directory is enough.
@@ -568,6 +587,12 @@ const childSessions = [];
 cdp.on('Target.attachedToTarget', p => {
   if (p.targetInfo && p.targetInfo.type === 'iframe') childSessions.push(p.sessionId);
 });
+// ⚠ and PRUNE on detach — a push-only list grows without bound. Measured: after one suite run
+// the list held 5 entries of which 4 had dead sessions ("Session with given id not found").
+cdp.on('Target.detachedFromTarget', p => {
+  const i = childSessions.indexOf(p.sessionId);
+  if (i >= 0) childSessions.splice(i, 1);
+});
 await cdp.send('Target.setAutoAttach',
   { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, SID);
 
@@ -578,6 +603,13 @@ for (let i = childSessions.length - 1; i >= 0; i--) {
     { expression: '...', returnByValue: true }, childSessions[i]); } catch (e) { /* stale */ }
 }
 ```
+
+⚠ **A push-only session list is a diagnostic trap, not just a leak.** With 4 dead entries of 5, the
+obvious story for a `{w: 0}` reading becomes "we picked a hidden *zombie* frame" — and it is
+**wrong**, falsifiable in one line: the loop scans **newest-first**, and a dead session **throws**
+and gets skipped; it never *answers*. A zero-rect reading with a live computed style came from a
+**live** frame whose document was simply not laid out yet. The leak's real cost is that it makes a
+wrong hypothesis look plausible; prune it and the misleading evidence disappears.
 
 `setAutoAttach` must be enabled **before** the frame is created (i.e. before the `srcdoc` is set or
 the page navigates). Assertions worth writing once you're in: the sandbox attribute really lacks
@@ -637,6 +669,28 @@ for (let i = 0; i < 30; i++) {
 
 Rule of thumb: **whenever you cross a document boundary (navigation, `srcdoc`, iframe reload),
 replace "sleep N ms then assert" with "poll until the target state appears, then assert".**
+
+⚠ **"Poll" is not enough — the break condition must be the *substantive* one.** `if (got) break;`
+*looks* like polling and is not: the first non-null answer is often a **parsed-but-not-yet-laid-out**
+document, which reads as `{w: 0}` (signature D above). Break on the very property you are about to
+assert — `if (got && got.w > 0) break;`. **This does not weaken the assertion**: it only declines to
+sample during the window before the frame is rendered. If the product is genuinely broken the loop
+still exhausts and still fails, and it reports the **real** reading instead of a layout artifact.
+
+⚠ **A `null`-returning `frameEval` is a contract, not a bug — so the caller owns the condition.**
+Here `frameEval` returns the first answer that does not throw, `null` included. The project had
+already hit this trap, documented it in a comment, and worked around it at **one** call site — while
+another suite kept two loops with a bare `if (x) break;` and kept flaking. **After fixing a race like
+this, grep every `if (…) break;` in the suite family and ask of each: "is the condition I wait on the
+thing I actually assert?"** — `if (wsUrl) break;` (waiting for a CDP endpoint) is fine; "the selector
+found an element" is not.
+
+⚠ **Do not expect to reproduce it on demand.** Sampling immediately after the paint on an idle
+machine gave `null → 210|210px`: the bad window is **shorter than one sample**. Four IO/CPU-hog
+processes pushed it out to 20+ consecutive `null`s — **load widens the window, it never removes it.**
+So "run it again" is not a verdict. Qualify a flake with **repeated single-suite runs** *plus* a
+**code-level, nameable mechanism**; and record both the raw reading and the computed style, so
+"nothing rendered" cannot be mistaken for "the product computed zero".
 
 **Never hardcode the port — pick the first one that actually binds.** A hardcoded port can be
 transiently reserved by the OS or the sandbox. The failure mode is nasty: the whole suite dies with

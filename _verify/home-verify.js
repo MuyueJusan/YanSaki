@@ -51,8 +51,16 @@ const log = m => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s] ${m}`)
 
 let pass = 0, fail = 0;
 const fails = [];
+// ⚠ `pred` 不是函数时**不能直接用 `===`**：数组 / 对象拿 `===` 比**永远是 false**，
+//   而打印出来长这样 —— `actual=["a","b"]  expect=["a","b"]`，看着一模一样却当场变红。
+//   （RULES 六之七那条「数组不能用 `===` 比」记的就是这个；这里直接从助手这一层堵掉。）
+function same(a, b) {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return false; }
+}
 function check(name, actual, pred, expect) {
-  const ok = typeof pred === 'function' ? pred(actual) : actual === pred;
+  const ok = typeof pred === 'function' ? pred(actual) : same(actual, pred);
   if (ok) { pass++; console.log(`  ✅ ${name}`); }
   else {
     fail++; fails.push(name);
@@ -308,6 +316,117 @@ const BAD_JSON = { name: '空壳', nothing: true };
     // 反向对照：还没选文件时，勾选清单**不该**出现
     check('还没选文件时没有条目勾选框（对照）', await checkboxes(), 0);
     await shot('home-01-overview.png');
+
+    // ============ C2. 首页内容模块化 ============
+    // 首页的内容不再是「一长条拼起来的字符串」，而是注册表驱动的四个独立模块。
+    section('C2. 首页内容模块化');
+    const modIds = () => ev(`[...document.querySelectorAll('#st-panes .st-mod')].map(m => m.dataset.mod)`);
+    const modTitles = () => ev(`[...document.querySelectorAll('#st-panes .st-mod-title')].map(n => n.textContent)`);
+    const modState = id => ev(`(function(){
+      const m = document.getElementById('st-mod-${id}');
+      if (!m) return null;
+      const body = m.querySelector('.st-mod-body');
+      return {
+        closed: m.classList.contains('st-mod-closed'),
+        // 折叠判据读 **computed**，不读 rect —— 被 0fr 压成 0 高的元素 rect 量不出内容
+        rows: getComputedStyle(body).gridTemplateRows,
+        heads: m.querySelectorAll('.st-mod-head').length,
+        arrows: m.querySelectorAll('.st-mod-arrow').length,
+        pads: m.querySelectorAll('.st-mod-pad').length
+      }; })()`);
+    const rowsZero = st => !!st && parseFloat(st.rows) === 0;
+    // 「真的看不见了没有」—— 收起前后问**同一个点**现在是谁的。
+    // ⚠ 这是唯一量得动的判据：rect 那条路对折叠面板是死的（见 RULES 六之三十一那一族）
+    const probePoint = id => ev(`(function(){
+      const m = document.getElementById('st-mod-${id}');
+      const pad = m.querySelector('.st-mod-pad');
+      const r = pad.getBoundingClientRect();
+      const x = Math.round(r.left + r.width / 2);
+      const y = Math.round(r.top + 8);
+      const hit = document.elementFromPoint(x, y);
+      return { inBody: !!(hit && hit.closest && hit.closest('#st-mod-${id} .st-mod-body')) };
+    })()`);
+    const clickHead = id => ev(`(function(){
+      const m = document.getElementById('st-mod-${id}');
+      const h = m.querySelector('.st-mod-head');
+      if (!h) return false;
+      h.click();
+      return true; })()`);
+
+    // ① 没头像时**头像模块整个不渲染**（注册表里有它，但 body 给了空串）
+    check('没头像时模块只有三个（头像那块整个不渲染）',
+      await modIds(), ['overview', 'actions', 'extract']);
+    check('模块标题按注册表顺序', await modTitles(), ['概览', '快捷动作', '从别处搬条目']);
+
+    // ② 每个模块都得有头 / 箭头 / 内边距层 —— 少了任何一个就是个「裸块」，不叫模块
+    const shape = [];
+    for (const id of ['overview', 'actions', 'extract']) {
+      const s = await modState(id);
+      shape.push([s.heads, s.arrows, s.pads].join('/'));
+    }
+    check('每个模块都有头 + 箭头 + 内边距层', shape, ['1/1/1', '1/1/1', '1/1/1']);
+
+    // ③ 默认全部**展开**
+    check('默认全部展开（computed 行高不是 0）',
+      [rowsZero(await modState('overview')), rowsZero(await modState('actions')),
+       rowsZero(await modState('extract'))], [false, false, false]);
+
+    // ④ 拆完之后原来那两个钩子还在（外面 371 条那层也盯它们）
+    check('概览模块里就是那张 .st-kv（钩子没动）',
+      await ev(`!!document.querySelector('#st-mod-overview .st-kv')`), true);
+    check('快捷动作模块里 3 个按钮',
+      await ev(`document.querySelectorAll('#st-mod-actions .st-actions button').length`), 3);
+    // ⚠ 合计必须还是 4：外部 verify_steditor.js 的 D1c 正是数这个
+    check('整个首页的 .st-actions 按钮合计 4（3 + 提取入口 1）',
+      await ev(`document.querySelectorAll('#st-panes .st-actions button').length`), 4);
+
+    // ⑤ 折叠：走**真实点击**，不直接改 class
+    const before = await probePoint('overview');
+    check('收起前：模块体中心那个点确实落在模块体里（前提成立）', before.inBody, true);
+    await clickHead('overview');
+    await sleep(450);                       // 过渡 0.3s，留点余量
+    const ov = await modState('overview');
+    check('点一下头：模块打上 st-mod-closed', ov.closed, true);
+    check('收起之后行高真的塌成 0（computed）', rowsZero(ov), true);
+    check('收起之后那个点**不再**落在模块体里（命中测试）',
+      (await probePoint('overview')).inBody, false);
+    // 反向对照：别的模块不能被连累
+    check('对照：收起概览没连累快捷动作（它还是展开的）',
+      rowsZero(await modState('actions')), false);
+
+    // ⑥ 收起状态必须扛得过 stRerender() —— 状态挂 DOM 上的话这里会自己弹开
+    await ev(`(function(){ stEditor.card.bookEntries.push(stBlankEntry()); stRerender(); return true; })()`);
+    await sleep(120);
+    check('重绘之后仍然是收起的（状态不在 DOM 上）', (await modState('overview')).closed, true);
+
+    // ⑦ 落盘 + 走**真实加载路径**读回来（只读一眼 localStorage 不算数）
+    await ev(`(function(){ stEditor.homeClosed = {}; stLoadDraft(); stRerender(); return true; })()`);
+    await sleep(150);
+    check('把内存里的状态清掉、走 stLoadDraft 读回来：仍然是收起的',
+      (await modState('overview')).closed, true);
+    check('读回来的确实是「概览收起」这一条',
+      await ev(`(function(){ const d = JSON.parse(localStorage.getItem(ST_DRAFT_KEY) || '{}');
+        return !!(d.homeClosed && d.homeClosed.overview === true); })()`), true);
+
+    // ⑧ 再点一次要能展开回来
+    await clickHead('overview');
+    await sleep(450);
+    const ov2 = await modState('overview');
+    check('再点一下：展开回来（class 摘掉）', ov2.closed, false);
+    check('再点一下：行高回到非 0', rowsZero(ov2), false);
+
+    // ⑨ 有头像时头像模块**出现**（跟 ① 配成一对正反证据）
+    await ev(`(function(){
+      stEditor.avatar = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      stEditor.avatarName = '探针头像';
+      stRerender(); return true; })()`);
+    await sleep(150);
+    check('有头像时头像模块出现，且排在最前',
+      await modIds(), ['avatar', 'overview', 'actions', 'extract']);
+    await ev(`(function(){ stEditor.avatar = null; stEditor.avatarName = ''; stRerender(); return true; })()`);
+    await sleep(150);
+
+    await shot('home-01b-modules.png');
 
     // ============ D. 概览数字跟真实数据一致 ============
     section('D. 概览数字跟着真实数据走');

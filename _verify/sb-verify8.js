@@ -277,6 +277,15 @@ const HEAD_STYLE_RAW =
       oopif.push({ sessionId: p.sessionId, url: p.targetInfo.url || '' });
       try { await cdp.send('Runtime.enable', {}, p.sessionId); } catch (e) {}
     });
+    // ⚠ 这份清单**只 push 不删**过：预览 iframe 每重画一次就换一个 target，
+    // 死掉的 session 全留在数组里（实测一轮下来 5 个里 4 个是僵尸）。
+    // frameEval 每次从尾部往前白撞一遍它们，报错还被撑成「已看到 5 个 OOPIF」
+    // —— 查问题时很容易误判成「选错了帧」。只增不减的清单属于
+    // 「每加一次东西就来收账」那一类，趁早删
+    cdp.on('Target.detachedFromTarget', p => {
+      const i = oopif.findIndex(o => o.sessionId === p.sessionId);
+      if (i >= 0) oopif.splice(i, 1);
+    });
     const consoleErrors = [];
     cdp.on('Runtime.consoleAPICalled', p => {
       if (p.type === 'error') consoleErrors.push((p.args || []).map(a => a.value || a.description).join(' '));

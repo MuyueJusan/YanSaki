@@ -285,6 +285,15 @@ const HEAD_STYLE_RAW =
       oopif.push({ sessionId: p.sessionId, url: p.targetInfo.url || '' });
       try { await cdp.send('Runtime.enable', {}, p.sessionId); } catch (e) {}
     });
+    // ⚠ 这份清单**只 push 不删**过：预览 iframe 每重画一次就换一个 target，
+    // 死掉的 session 全留在数组里（实测一轮下来 5 个里 4 个是僵尸）。
+    // frameEval 每次从尾部往前白撞一遍它们，报错还被撑成「已看到 5 个 OOPIF」
+    // —— 查问题时很容易误判成「选错了帧」。只增不减的清单属于
+    // 「每加一次东西就来收账」那一类，趁早删
+    cdp.on('Target.detachedFromTarget', p => {
+      const i = oopif.findIndex(o => o.sessionId === p.sessionId);
+      if (i >= 0) oopif.splice(i, 1);
+    });
     const consoleErrors = [];
     cdp.on('Runtime.consoleAPICalled', p => {
       if (p.type === 'error') consoleErrors.push((p.args || []).map(a => a.value || a.description).join(' '));
@@ -805,7 +814,12 @@ const HEAD_STYLE_RAW =
         const r = el.getBoundingClientRect();
         return { w: Math.round(r.width), cs: getComputedStyle(el).width };
       })()`).catch(() => null);
-      if (i2) break;
+      // ⚠ 光「元素存在」不够：srcdoc 刚换上时元素已经解析出来了（inline 里就是 210px，
+      // 所以 cs 读得到），但 Chrome 还没给它布局 ⇒ 读出来是 w:0 / cs:"210px"。
+      // frameEval 把「没抛异常的答案」当正经答案，不会重试 —— 于是整跑（机器忙）时
+      // 随机翻车成「真机预览里那块也变宽了 actual={w:0,cs:"210px"}」。
+      // 第六轮那套的注释里踩过同一个坑 ⇒ 必须等**实质条件**，不是等「有值」
+      if (i2 && i2.w > 0) break;
     }
     check('真机预览里那块也变宽了', i2, v => !!v && v.w === 210, '210');
     await shot('sb7-resize.png', '.st-sb-canvas-wrap');
@@ -831,7 +845,7 @@ const HEAD_STYLE_RAW =
         if (!el) return null;
         return { w: Math.round(el.getBoundingClientRect().width) };
       })()`).catch(() => null);
-      if (j2) break;
+      if (j2 && j2.w > 0) break;   // 同上：等布局完，别把「还没渲染」当成真答案
     }
     check('画布上那个块 260px 宽', j.w, 260);
     check('真机预览里也是 260px', j2, v => !!v && v.w === 260, '260');

@@ -2499,7 +2499,42 @@ toggle 回来 —— 会打转。`stCodeMenuToggle` 是幂等的，所以真转�
 
 ## 十八、首页（`stPaneHome`）
 
-**第二十一轮加的**，**排在选项卡最前**、也是**默认落点**（见 §二）。三块：概览 → 快捷动作 → 从别处搬条目。
+**第二十一轮加的**，**排在选项卡最前**、也是**默认落点**（见 §二）。
+**第二十一轮同日改成「模块化」**：内容不再是一长条拼起来的字符串，而是注册表驱动的四个模块
+（头像 → 概览 → 快捷动作 → 从别处搬条目）。
+
+### 模块框架（`ST_HOME_MODULES` / `stHomeModule` / `stHomeFold`）
+
+```js
+const ST_HOME_MODULES = [
+    { id: 'avatar',   ico: '🖼', title: '头像',         hint: '导出时写进卡里',           body: stHomeBodyAvatar },
+    { id: 'overview', ico: '📋', title: '概览',         hint: '这张卡现在长什么样',        body: stHomeBodyOverview },
+    { id: 'actions',  ico: '⚡', title: '快捷动作',     hint: '跟顶栏那几个按钮是同一批',   body: stHomeBodyActions },
+    { id: 'extract',  ico: '📚', title: '从别处搬条目', hint: '别的角色卡 / 世界书 → 这张卡', body: stHomeBodyExtract }
+];
+```
+
+- **加一块内容 = 往这张表里加一行 + 写一个 `stHomeBodyXxx()`**，`stPaneHome()` 一行都不用动
+- **顺序就是显示顺序**；`body` 直接引用函数声明（会提升），所以表可以写在函数前面
+- **`body` 返回空串 ⇒ 这个模块整个不渲染**（没头像时头像模块就不出现，不留空壳）
+- 每个模块 = `.st-mod` 外壳：头（`.st-mod-head` 整行可点：图标 + 标题 + 提示 + 箭头）+ 体
+  （`.st-mod-body` → `.st-mod-inner` → `.st-mod-pad`）
+
+⚠ **折叠机制复用 `.st-fold` 那一套**（`grid-template-rows: 0fr → 1fr`），别另起 `max-height`。
+⚠ 方向跟 `.st-fold` **相反**：模块**默认展开**（第一眼要看内容，不是先点开四个块），
+所以「不带 class」= 展开态，加了 `.st-mod-closed` 才收起。
+⚠ **内边距放在 `.st-mod-pad` 上、不放在 `.st-mod-inner` 上** —— `.st-mod-inner` 是被 `0fr`
+压成 0 高的那个元素，它自己带 padding 的话，收起后仍会留下一条 padding 高的空档。
+
+⚠⚠ **折叠状态放 `stEditor.homeClosed`，不放 DOM。**
+首页每次改数据都会 `stRerender()` **重铺整块 `innerHTML`** —— 状态挂 DOM 上的话，
+用户折起来的模块会**自己弹开**。它跟 `tabsCollapsed` 一样**落盘**（`stSaveDraftInner` 里那行
+`homeClosed: stEditor.homeClosed`），也**不随新建重置**（界面偏好，不是卡数据）。
+⚠ 跟 `personaTplOpen` 的取舍**正好相反**：那个默认**收起**，落盘会让「默认折叠」只在第一次成立，
+所以它故意不落盘；这个默认**展开**，落盘只影响用户自己折起来的那几个。
+
+⚠ 折叠「真的看不见了没有」**量 rect 是量不出来的**（`0fr` 裁切不影响 `getBoundingClientRect()`）——
+判据是 **computed `grid-template-rows` + 命中测试**（`_verify/home-verify.js` C2 段就是这么断的）。
 
 ### 概览
 
@@ -2518,7 +2553,12 @@ toggle 回来 —— 会打转。`stCodeMenuToggle` 是幂等的，所以真转�
 
 ⚠ `ST_HOME_BODY_FIELDS` **必须跟 `renderStCard()` 里那份逐字一致** ——
 否则会出现「首页说 5/8、卡片摘要说 6/8」这种谁都不信的数字。
-有头像时另给一个 `.st-avatar-box` 缩略图（复用头像页那两个类）。
+
+### 头像
+
+有头像时给一个 `.st-avatar-box` 缩略图（复用头像页那两个类）。
+⚠ **没头像时 `stHomeBodyAvatar()` 返回空串 ⇒ 整个模块不渲染** —— 所以模块数量是**会变的**
+（空卡上只有 3 个），断言不能写死「四个模块都在」。
 
 ### 快捷动作
 

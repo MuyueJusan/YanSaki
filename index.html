@@ -3147,6 +3147,89 @@
 
         .st-fold-head:hover .st-fold-hint { opacity: 1; }
 
+        /* —— 首页的「模块块」——
+           首页的内容不再是一长条拼起来的字符串，而是四个各自独立的模块：
+           每个模块 = 一行可点的头（图标 + 标题 + 一句提示）+ 一个体。
+           ⚠ 折叠机制**复用上面 `.st-fold` 那一套**（`grid-template-rows: 0fr → 1fr`），
+             别为它另起 `max-height` —— 两套手感会不一样。
+           ⚠ 跟 `.st-fold` 的**方向相反**：模块**默认展开**（第一眼要看内容，不是先点开四个块），
+             所以「不带 class」= 展开态，加了 `.st-mod-closed` 才收起。
+           ⚠ 内边距放在 `.st-mod-pad` 上、**不放在 `.st-mod-inner` 上**：
+             `.st-mod-inner` 是被 `0fr` 那一行压成 0 高的那个元素，
+             它自己带 padding 的话，收起后仍会留下一条 padding 高的空档。 */
+        .st-mod {
+            border: 1px solid rgba(120, 150, 180, 0.32);
+            border-radius: 11px;
+            background: rgba(255, 255, 255, 0.55);
+            margin: 0 0 10px;
+            overflow: hidden;
+        }
+
+        .st-mod-head {
+            display: flex;
+            align-items: baseline;
+            gap: 7px;
+            width: 100%;
+            margin: 0;
+            padding: 9px 11px;
+            border: none;
+            background: none;
+            font-family: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .st-mod-head:hover { background: rgba(121, 174, 210, 0.13); }
+
+        .st-mod-ico { font-size: 0.8rem; }
+
+        .st-mod-title {
+            font-size: 0.78rem;
+            color: #14384f;
+            font-weight: bold;
+            letter-spacing: 0.02em;
+        }
+
+        .st-mod-hint {
+            flex: 1 1 auto;
+            font-size: 0.68rem;
+            color: #33546b;
+            opacity: 0.7;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .st-mod-head:hover .st-mod-hint { opacity: 1; }
+
+        .st-mod-arrow {
+            display: inline-block;
+            font-size: 0.6rem;
+            color: #14384f;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .st-mod.st-mod-closed .st-mod-arrow { transform: rotate(-180deg); }
+
+        .st-mod-body {
+            display: grid;
+            grid-template-rows: 1fr;
+            transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .st-mod.st-mod-closed .st-mod-body { grid-template-rows: 0fr; }
+
+        .st-mod-inner { overflow: hidden; }
+
+        .st-mod-pad { padding: 1px 11px 11px; }
+
+        /* 复古皮肤下别是半透明白 —— Win9x 那边是一块实心面板 */
+        body.retro-mode .st-mod {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
         .st-big {
             font-family: inherit;
             font-size: 0.85rem;
@@ -16189,6 +16272,11 @@
             //   而不是一个空的名字输入框
             tab: 'home',
             tabsCollapsed: false,
+            // 首页那四个模块各自的折叠状态：`{ 模块 id: true }` = 这个模块收起了。
+            // ⚠ 跟 `tabsCollapsed` 一样**落盘**（不像 personaTplOpen 那样故意不落盘）——
+            //   模块默认是**展开**的，落盘只会让「用户自己折起来的那几个」保持折着，
+            //   不会破坏「默认展开」这个意图。⚠ 也**不随新建重置**：它是界面偏好，不是卡数据。
+            homeClosed: {},
             card: null,
             raw: null,          // 导入的原始 JSON，只在本次会话里留着
             rawBook: null,      // 导入的原始 character_book，用来兜住书级字段
@@ -16293,6 +16381,8 @@
                 stEditor.card = stNormalizeDraft(saved.card);
                 stEditor.tab = ST_TABS.some(t => t.id === saved.tab) ? saved.tab : 'home';
                 stEditor.tabsCollapsed = saved.tabsCollapsed === true;
+                stEditor.homeClosed = (saved.homeClosed && typeof saved.homeClosed === 'object' &&
+                    !Array.isArray(saved.homeClosed)) ? saved.homeClosed : {};
                 stEditor.srcName = stStr(saved.srcName);
                 stEditor.mvuOwn = saved.mvuOwn === true;
                 stEditor.sbOwn = saved.sbOwn === true;
@@ -16329,6 +16419,7 @@
                 v: 1,
                 tab: stEditor.tab,
                 tabsCollapsed: stEditor.tabsCollapsed,
+                homeClosed: stEditor.homeClosed,
                 srcName: stEditor.srcName,
                 mvuOwn: stEditor.mvuOwn === true,
                 sbOwn: stEditor.sbOwn === true,
@@ -23413,7 +23504,69 @@
         const ST_HOME_BODY_FIELDS = ['name', 'description', 'personality', 'scenario',
             'mesExample', 'systemPrompt', 'postHistoryInstructions', 'firstMes'];
 
+        // 首页的**模块注册表**。首页的内容不再是一长条拼起来的字符串，而是四个各自独立的
+        // 模块：每个模块有自己的头（图标 + 标题 + 一句提示）、自己的体、自己的折叠状态。
+        // ⇒ **加一块内容 = 往这张表里加一行 + 写一个 body 函数**，`stPaneHome()` 不用动。
+        // ⚠ 顺序就是显示顺序。`body` 返回空串 = 这个模块**整个不渲染**（比如没头像时）。
+        // ⚠ `body` 直接引用函数声明（会提升），所以这张表可以写在它们前面。
+        const ST_HOME_MODULES = [
+            { id: 'avatar',   ico: '🖼', title: '头像',         hint: '导出时写进卡里',
+              body: stHomeBodyAvatar },
+            { id: 'overview', ico: '📋', title: '概览',         hint: '这张卡现在长什么样',
+              body: stHomeBodyOverview },
+            { id: 'actions',  ico: '⚡', title: '快捷动作',     hint: '跟顶栏那几个按钮是同一批',
+              body: stHomeBodyActions },
+            { id: 'extract',  ico: '📚', title: '从别处搬条目', hint: '别的角色卡 / 世界书 → 这张卡',
+              body: stHomeBodyExtract }
+        ];
+
+        // 一个模块的外壳。折叠**默认展开**（不带 class 就是展开态）。
+        function stHomeModule(m) {
+            const body = m.body();
+            if (!body) return '';               // 没内容的模块整个不出现，不留空壳
+            const closed = stEditor.homeClosed[m.id] === true;
+            return '<section class="st-mod' + (closed ? ' st-mod-closed' : '') +
+                    '" id="st-mod-' + m.id + '" data-mod="' + m.id + '">' +
+                '<button class="st-mod-head" type="button" onclick="stHomeFold(\'' + m.id + '\')">' +
+                    '<span class="st-mod-ico">' + m.ico + '</span>' +
+                    '<span class="st-mod-title">' + escapeHtml(m.title) + '</span>' +
+                    '<span class="st-mod-hint">' + escapeHtml(m.hint) + '</span>' +
+                    '<span class="st-mod-arrow">▲</span>' +
+                '</button>' +
+                '<div class="st-mod-body"><div class="st-mod-inner">' +
+                    '<div class="st-mod-pad">' + body + '</div>' +
+                '</div></div></section>';
+        }
+
+        // 折叠 / 展开一个模块。
+        // ⚠ 状态留在 `stEditor.homeClosed` 里（跟 `tabsCollapsed` 一样），**不能留在 DOM 上** ——
+        //   首页每次改数据都会 `stRerender()` 重铺整块 innerHTML，
+        //   状态挂 DOM 上的话，用户折起来的模块会自己弹开。
+        function stHomeFold(id) {
+            if (!ST_HOME_MODULES.some(m => m.id === id)) return;
+            if (stEditor.homeClosed[id]) delete stEditor.homeClosed[id];
+            else stEditor.homeClosed[id] = true;
+            stSaveDraft();
+            stRerender();
+        }
+
         function stPaneHome() {
+            return stPaneHead('🏠 首页',
+                '当前草稿长什么样，以及从哪儿开始。这里的新建 / 导入跟顶栏那几个按钮是同一批动作。') +
+                ST_HOME_MODULES.map(stHomeModule).join('');
+        }
+
+        // —— 模块 ①：头像。没头像就整块不渲染 ——
+        function stHomeBodyAvatar() {
+            if (!stEditor.avatar) return '';
+            return '<div class="st-avatar-box">' +
+                '<img class="st-avatar-prev" src="' + escapeHtml(stEditor.avatar) + '" alt="">' +
+                '<div class="st-avatar-meta">头像：' +
+                    escapeHtml(stEditor.avatarName || '已选') + '</div></div>';
+        }
+
+        // —— 模块 ②：概览。这些数字**一律现算**，不缓存 ——
+        function stHomeBodyOverview() {
             const c = stEditor.card;
             const nm = String(c.name || '').trim();
             const filled = ST_HOME_BODY_FIELDS.filter(k => String(c[k] || '').trim()).length;
@@ -23425,7 +23578,7 @@
             if (stEditor.mvuOwn) own.push('MVU');
             if (stEditor.sbOwn) own.push('状态栏');
 
-            const kv = '<div class="st-kv">' +
+            return '<div class="st-kv">' +
                 '<b>名字</b><span>' + (nm ? escapeHtml(nm) : '<i>（还没起名字）</i>') + '</span>' +
                 '<b>规格</b><span>' + escapeHtml(ST_SPEC_LABEL[c.spec]) + '</span>' +
                 '<b>来源</b><span>' + (stEditor.srcName
@@ -23440,30 +23593,23 @@
                     ? escapeHtml(own.join(' / ')) : '<i>无</i>') + '</span>' +
                 '<b>创建时间</b><span>' + escapeHtml(stHomeTime(c.creationDate)) + '</span>' +
             '</div>';
-
-            return stPaneHead('🏠 首页',
-                '当前草稿长什么样，以及从哪儿开始。这里的新建 / 导入跟顶栏那几个按钮是同一批动作。') +
-                (stEditor.avatar
-                    ? '<div class="st-avatar-box">' +
-                      '<img class="st-avatar-prev" src="' + escapeHtml(stEditor.avatar) + '" alt="">' +
-                      '<div class="st-avatar-meta">头像：' +
-                        escapeHtml(stEditor.avatarName || '已选') + '</div></div>'
-                    : '') +
-                kv +
-                '<div class="st-sub">快捷动作</div>' +
-                '<div class="st-actions">' +
-                    '<button class="st-big" type="button" onclick="stNewCard(true)">✚ 新建角色卡</button>' +
-                    '<button class="st-big" type="button" onclick="stImportPick()">' +
-                        '📥 导入角色卡（PNG / JSON）</button>' +
-                    '<button class="st-big st-plain" type="button" onclick="stLoadFromTavern()">' +
-                        '📇 读取酒馆当前卡</button>' +
-                '</div>' +
-                stHomeExtractBlock();
         }
 
-        // 「从别处搬条目」这一块。两种形态：
+        // —— 模块 ③：快捷动作。跟顶栏那几个按钮是同一批动作，只是收在一处 ——
+        function stHomeBodyActions() {
+            return '<div class="st-actions">' +
+                '<button class="st-big" type="button" onclick="stNewCard(true)">✚ 新建角色卡</button>' +
+                '<button class="st-big" type="button" onclick="stImportPick()">' +
+                    '📥 导入角色卡（PNG / JSON）</button>' +
+                '<button class="st-big st-plain" type="button" onclick="stLoadFromTavern()">' +
+                    '📇 读取酒馆当前卡</button>' +
+            '</div>';
+        }
+
+        // —— 模块 ④：从别处搬条目。两种形态：
         //   还没选文件 → 一个按钮 + 说明；选好了 → 来源信息 + 勾选清单 + 导入
-        function stHomeExtractBlock() {
+        // ⚠ 这里**不再自带小标题**（`.st-sub`）—— 标题归模块头，别再重复一遍
+        function stHomeBodyExtract() {
             const src = stEditor.extractSrc;
             const msg = stEditor.extractMsg || { text: '', kind: '' };
             const msgHtml = msg.text
@@ -23471,11 +23617,9 @@
                     : (msg.kind === 'warn' ? ' st-warn' : ' st-ok')) + '">' +
                   escapeHtml(msg.text) + '</div>'
                 : '';
-            const head = '<div class="st-sub">从其他角色卡 / 世界书提取条目</div>';
 
             if (!src) {
-                return head +
-                    '<div class="st-note">' +
+                return '<div class="st-note">' +
                         '选一张<b>别的角色卡</b>（PNG / JSON）或一份<b>世界书 JSON</b>，' +
                         '把里面的条目挑出来、并进当前这张卡的世界书。' +
                         '来源文件<b>不会被改动</b>，当前卡的正文一个字段都不动。' +
@@ -23503,8 +23647,7 @@
                     '</span></label>';
             }).join('');
 
-            return head +
-                '<div class="st-note">来源：<b>' + escapeHtml(src.srcName) + '</b>（' +
+            return '<div class="st-note">来源：<b>' + escapeHtml(src.srcName) + '</b>（' +
                     escapeHtml(src.kind) + '）· 世界书名 ' + escapeHtml(src.bookName || '未命名') +
                     ' · 共 ' + entries.length + ' 条</div>' +
                 '<div class="st-actions">' +
