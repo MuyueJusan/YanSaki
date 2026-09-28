@@ -5595,3 +5595,81 @@ Two lessons, one per side:
 The same gate is worth running on the **unmodified** page at the start of a reverse run: it proves the
 gate itself can pass, so a red later means the injection broke something — not that the gate is broken.
 
+
+## What you *set* is not what the product *receives* — and a synthetic event performs no default action
+
+Three independent ways a UI test can measure something the product never sees. All three were hit in
+one round while testing a tag-input widget (type a word, press Enter, the word becomes a chip).
+
+### 1. `<input type="text">` silently strips `\r` and `\n` from `value`
+
+The HTML spec gives text inputs a *value sanitization algorithm*: setting `value` — and pasting —
+removes CR and LF. So this assertion never reaches the splitter it is nominally testing:
+
+```js
+el.value = 'a,b\nc';            // el.value is already 'a,bc'  ← the \n is gone
+el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+```
+
+It read back `["a","bc"]`, not `["a","b","c"]`. The parser was fine — the newline never arrived.
+
+⚠ The sting: that widget's own placeholder had said "one per line" for as long as it had existed.
+**It was never true**, and nobody noticed, because nobody had ever pasted a multi-line list into it.
+A promise in the UI that no test covers is a promise you don't know you're breaking.
+
+Two ways out, and you want both:
+
+- Test the **parser** directly (`splitList('x\ny,z')`) — proves the logic is intact.
+- Test the **reachable path**: paste. A single-line input *can* receive newlines via the clipboard, so
+  wire an `onpaste` that reads `clipboardData` and splits, and test *that*.
+
+The general rule: **"set `value` + dispatch an event" cannot test any behaviour that depends on what
+the browser does to the value.** Newline stripping in text inputs, illegal characters in
+`<input type=number>`, `maxlength` truncation, IME composition — all of it is the browser's
+sanitization, not your product's logic. Drive the path that *produces* the value (paste, drop, IME,
+`beforeinput`), or unit-test one layer down.
+
+### 2. A synthetic event does not perform the default action
+
+After adding `onpaste` there were two things to prove: a multi-line paste **is** taken over, and a
+single-word paste **is not** (it should fall through to the browser's own insertion).
+
+The intuitive assertion — "paste a word, then check the input contains it" — **cannot work**:
+`el.dispatchEvent(new ClipboardEvent('paste', …))` is synthetic, so the browser never runs the default
+insertion. The check reads `''` even when the product is perfectly correct. A permanently false
+assertion.
+
+The fix is to pick a quantity the **listener** decides rather than one the **default action** decides:
+
+```js
+const e = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+el.dispatchEvent(e);
+return e.defaultPrevented;      // true = we took over; false = left to the browser
+```
+
+That yields a genuinely discriminating pair, and it is defined on the synthetic path because
+`defaultPrevented` is set by the handler, not by the browser's follow-through.
+
+⚠ `new ClipboardEvent(..., { clipboardData: new DataTransfer() })` works in Chrome, so the clipboard
+route needs no `Input.dispatchKeyEvent` machinery.
+
+The general rule: **to assert that a listener fired, don't measure the outcome of the default action.**
+Same family: `click()` then checking "did the form submit", `keydown` then checking "did the character
+land". Under synthetic dispatch those are the browser's business. Prefer the model's own state, a
+changed class, or `defaultPrevented`.
+
+### 3. "Enter" means "commit the candidate" while an IME is composing
+
+A tag input that commits on Enter shreds Chinese / Japanese input: typing 你好 and pressing Enter to
+accept the candidate fires `keydown` with `key: 'Enter'` **before** the composition ends, so half a
+word becomes a chip. The product needs
+
+```js
+if (ev.isComposing || ev.keyCode === 229) return true;
+```
+
+and the harness needs an assertion for it, because the bug is completely invisible when you test in
+English. `new KeyboardEvent('keydown', { key: 'Enter', isComposing: true })` sets the flag in Chrome,
+so the guard is directly testable — **pair it with the positive case** ("after composition ends, Enter
+*does* commit"). Without the pair, an unconditional `return true` would also pass, and you'd have
+swapped a real bug for a feature that never fires.

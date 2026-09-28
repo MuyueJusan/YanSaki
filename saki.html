@@ -3866,6 +3866,88 @@
             color: #7a5410;
         }
 
+        /* 关键词标签（世界书条目的 keys / secondary_keys）。
+           长得像社交软件里的标签：一个词一个圆角矩形，回车落一个、点 × 删一个。
+           外框照抄 .st-field input 那副长相（边框 / 圆角 / 内边距），
+           这样它跟旁边的普通输入框上下排在一起时不会一跳一跳的 */
+        .st-tags {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px;
+            min-height: 34px;
+            padding: 4px 6px;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            border-radius: 8px;
+            background: #ffffff;
+            cursor: text;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .st-tags:focus-within {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.18);
+        }
+
+        .st-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            max-width: 100%;
+            font-size: 0.74rem;
+            line-height: 1.6;
+            padding: 1px 3px 1px 9px;
+            border: 1px solid rgba(120, 150, 180, 0.7);
+            border-radius: 999px;
+            background: rgba(226, 240, 250, 0.95);
+            color: #24455c;
+        }
+
+        /* 长词要能截断 —— 不然一个超长关键词会把整行撑破 */
+        .st-tag > span {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .st-tag-x {
+            flex: 0 0 auto;
+            width: 15px;
+            height: 15px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: #6b8698;
+            font-family: inherit;
+            font-size: 0.7rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .st-tag-x:hover {
+            background: rgba(200, 80, 80, 0.18);
+            color: #a03030;
+        }
+
+        /* 输入框融进标签框里：没边框、没背景，光标就贴在最后一个标签后面。
+           选择器必须压过 .st-field input —— 那一条是给普通输入框用的
+           （元素 + 类 = 0,1,1，光写 .st-tags-in 是 0,1,0，压不住） */
+        .st-field .st-tags-in,
+        .st-field .st-tags-in:focus {
+            flex: 1 1 70px;
+            min-width: 70px;
+            width: auto;
+            padding: 3px 2px;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+            font-family: inherit;
+            font-size: 0.82rem;
+            color: #1a2b3c;
+        }
+
         .st-empty {
             font-size: 0.78rem;
             color: #5b7488;
@@ -4245,6 +4327,33 @@
         }
 
         body.retro-mode .st-chip.st-on { background: #a8e0c0; }
+
+        /* 标签也走 95 那套方角。输入框要显式压过
+           body.retro-mode .st-field input（0,2,2）—— 它是白的、有边框 */
+        body.retro-mode .st-tags {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-tag {
+            background: #d4d0c8;
+            color: #000000;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-tag-x { color: #000000; }
+        body.retro-mode .st-tag-x:hover { background: #800000; color: #ffffff; }
+
+        body.retro-mode .st-field .st-tags-in,
+        body.retro-mode .st-field .st-tags-in:focus {
+            background: transparent;
+            color: #000000;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
 
         body.retro-mode .st-tbtn {
             background: #d4d0c8;
@@ -16695,6 +16804,34 @@
                 '</div>';
         }
 
+        // 关键词标签 —— 世界书的 keys / secondary_keys 用它。
+        // 长得像社交软件里的标签：一个词一个圆角矩形，回车落一个、点 × 删一个。
+        // 存的仍然是数组（走 XxxText 那套别名），只是编辑手感换成了标签。
+        // DOM 上派生两个东西：st-<id>（输入框）、st-<id>-tags（装标签的框）
+        function stTags(label, path, opts) {
+            const o = opts || {};
+            const base = 'st-' + o.id;
+            const list = stSplitList(stGet(path));
+            const ph = o.ph || '';
+            return '<div class="st-field st-wide">' +
+                '<label for="' + base + '">' + escapeHtml(label) +
+                    (o.hint ? ' <span class="st-hint-inline">' + escapeHtml(o.hint) + '</span>' : '') +
+                '</label>' +
+                '<div class="st-tags" id="' + base + '-tags"' +
+                    ' data-path="' + escapeHtml(path) + '"' +
+                    ' data-ph="' + escapeHtml(ph) + '"' +
+                    ' onclick="stTagsFocus(\'' + base + '\')">' +
+                    list.map((w, i) => stTagHtml(base, i, w)).join('') +
+                    '<input id="' + base + '" type="text" class="st-tags-in"' +
+                        // 有标签时不挂 placeholder —— 否则它会挤在最后一个标签旁边
+                        (list.length || !ph ? '' : ' placeholder="' + escapeHtml(ph) + '"') +
+                        ' onkeydown="return stTagsKey(event,\'' + base + '\')"' +
+                        ' onpaste="return stTagsPaste(event,\'' + base + '\')"' +
+                        ' onblur="stTagsCommit(\'' + base + '\')">' +
+                '</div>' +
+            '</div>';
+        }
+
         // 多行文本
         function stArea(label, path, opts) {
             const o = opts || {};
@@ -24618,13 +24755,17 @@
                         stInput('备注 comment', p + '.comment', {
                             id: 'e' + i + '-comment', ph: '只给自己看，比如「好感度系统」'
                         }) +
-                        stInput('关键词 keys', p + '.keysText', {
-                            id: 'e' + i + '-keys', wide: true,
-                            ph: '一行一个（也支持逗号分隔）'
+                        // 关键词 / 次关键词用标签控件：一个词一个圆角矩形，
+                        // 回车落一个、点 × 删一个。存的还是数组，只是编辑手感换了
+                        stTags('关键词 keys', p + '.keysText', {
+                            id: 'e' + i + '-keys',
+                            ph: '输入后回车落一个词（逗号也行）',
+                            hint: '回车落一个 · 点 × 删掉'
                         }) +
-                        stInput('次关键词 secondary_keys', p + '.secondaryKeysText', {
-                            id: 'e' + i + '-sec', wide: true,
-                            ph: '一行一个'
+                        stTags('次关键词 secondary_keys', p + '.secondaryKeysText', {
+                            id: 'e' + i + '-sec',
+                            ph: '输入后回车落一个词',
+                            hint: '回车落一个 · 点 × 删掉'
                         }) +
                         stArea('内容 content', p + '.content', {
                             id: 'e' + i + '-content', rows: 6, tall: true
@@ -27642,6 +27783,110 @@
             const obj = parent.obj[parent.key];
             if (!obj || typeof obj !== 'object') return false;
             obj[listKey] = stSplitList(value);
+            return true;
+        }
+
+        // ===== 关键词标签的手感（控件本体在 stTags() 里）=====
+        // 下面这几个都从 DOM 上读 data-path，改完统一 stSet 回去 ——
+        // 模型始终是唯一事实来源，画出来的标签永远是模型的投影：
+        // 万一写失败，标签当场不出现，而不是界面骗你说加上了
+
+        function stTagHtml(base, i, word) {
+            return '<span class="st-tag"><span>' + escapeHtml(word) + '</span>' +
+                '<button type="button" class="st-tag-x" title="删掉「' + escapeHtml(word) + '」"' +
+                    ' onclick="stTagsDel(\'' + base + '\',' + i + ')">×</button></span>';
+        }
+
+        // 重画标签。**只换标签节点，输入框原地留着** —— 整块重画一次光标就飞了，
+        // 而这些词正是在输入框里一个字一个字敲出来的
+        function stTagsPaint(base) {
+            const box = document.getElementById(base + '-tags');
+            const inp = document.getElementById(base);
+            if (!box || !inp) return;
+            const list = stSplitList(stGet(box.dataset.path));
+            Array.prototype.forEach.call(box.querySelectorAll('.st-tag'), n => n.remove());
+            // beforebegin 逐个插在输入框前面 ⇒ 顺序天然就是对的
+            list.forEach((w, i) => inp.insertAdjacentHTML('beforebegin', stTagHtml(base, i, w)));
+            inp.placeholder = list.length ? '' : (box.dataset.ph || '');
+        }
+
+        function stTagsFocus(base) {
+            const inp = document.getElementById(base);
+            if (inp) inp.focus();
+        }
+
+        // 落词。粘进来的一整串会按换行 / 逗号切成好几个；已经在列表里的不再加 ——
+        // 否则重复词会静默堆起来，而重复的关键词对世界书匹配没有任何好处
+        function stTagsCommit(base) {
+            const box = document.getElementById(base + '-tags');
+            const inp = document.getElementById(base);
+            if (!box || !inp) return;
+            const words = stSplitList(inp.value);
+            inp.value = '';
+            if (!words.length) return;
+            const list = stSplitList(stGet(box.dataset.path));
+            let added = false;
+            words.forEach(w => { if (list.indexOf(w) < 0) { list.push(w); added = true; } });
+            if (added) stSet(box.dataset.path, list.join('\n'));
+            stTagsPaint(base);
+        }
+
+        // 粘贴。⚠⚠ 必须自己拦：`<input type="text">` 的 value 会被浏览器按 HTML 规范
+        // **抹掉 `\r` / `\n`**（单行输入的 value sanitization），所以粘一行清单进来
+        // 会静默粘成「ab」这种连体词 —— 旧版那句「一行一个」的提示其实从来没成立过。
+        // 只有**含分隔符**的才接管；粘一个普通单词仍然让浏览器自己插，别抢原生手感
+        function stTagsPaste(ev, base) {
+            const dt = ev.clipboardData || window.clipboardData;
+            if (!dt) return true;
+            const text = String(dt.getData('text') || '');
+            if (!text || !/[\n,，]/.test(text)) return true;
+            const box = document.getElementById(base + '-tags');
+            if (!box) return true;
+            ev.preventDefault();
+            const list = stSplitList(stGet(box.dataset.path));
+            let added = false;
+            stSplitList(text).forEach(w => {
+                if (list.indexOf(w) < 0) { list.push(w); added = true; }
+            });
+            if (added) stSet(box.dataset.path, list.join('\n'));
+            stTagsPaint(base);
+            const inp = document.getElementById(base);
+            if (inp) { inp.value = ''; inp.focus(); }
+            return false;
+        }
+
+        function stTagsDel(base, i) {
+            const box = document.getElementById(base + '-tags');
+            if (!box) return;
+            const list = stSplitList(stGet(box.dataset.path));
+            if (i < 0 || i >= list.length) return;
+            list.splice(i, 1);
+            stSet(box.dataset.path, list.join('\n'));
+            stTagsPaint(base);
+            stTagsFocus(base);
+        }
+
+        // 回车落一个词。逗号也落 —— 旧版就是按 [\n,，] 切的，粘一串进来的手感得留着。
+        // 输入框空着按退格 = 删掉最后一个（社交软件的常见手感）
+        function stTagsKey(ev, base) {
+            // ⚠ 中文输入法组字中的回车是「选字」，不是「落词」。
+            // 不挡掉的话，打「你好」按回车上屏会把半个词落成标签
+            if (ev.isComposing || ev.keyCode === 229) return true;
+            if (ev.key === 'Enter' || ev.key === ',' || ev.key === '，') {
+                ev.preventDefault();
+                stTagsCommit(base);
+                return false;
+            }
+            if (ev.key === 'Backspace' && ev.target.value === '') {
+                const box = document.getElementById(base + '-tags');
+                if (!box) return true;
+                const list = stSplitList(stGet(box.dataset.path));
+                if (list.length) {
+                    ev.preventDefault();
+                    stTagsDel(base, list.length - 1);
+                    return false;
+                }
+            }
             return true;
         }
 

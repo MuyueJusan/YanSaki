@@ -24,7 +24,7 @@ const path = require('path');
 
 const DIR = __dirname;
 
-// 19 套回归测试。**顺序就是打印顺序**：静态检查放最前（最快、也最先能拦住东西）。
+// 20 套回归测试。**顺序就是打印顺序**：静态检查放最前（最快、也最先能拦住东西）。
 const SUITES = [
     'check.js',
     'sb-verify.js', 'sb-verify2.js', 'sb-verify3.js', 'sb-verify4.js',
@@ -35,6 +35,8 @@ const SUITES = [
     'st-ai.js', 'apig-verify.js', 'vertex-verify.js', 'st-code.js',
     // 第二十一轮：编写器「首页」选项卡（概览 / 新建 / 导入 / 从别处搬条目）
     'home-verify.js',
+    // 第二十二轮：世界书条目的关键词标签控件（keys / secondary_keys）
+    'book-verify.js',
     'sb-keep-compare.js', 'smoke.js'
 ];
 

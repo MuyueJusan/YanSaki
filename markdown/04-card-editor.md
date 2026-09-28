@@ -403,6 +403,57 @@ tEXt 块：keyword\0base64(UTF-8 JSON)
 
 `stEntryContentRaw(e)` 负责正文的**装饰器往返** —— `@@activate` 之类的行在界面上单独一行显示，导出时拼回正文首部。
 
+### 关键词 / 次关键词是**标签控件**（`stTags`，第二十三轮）
+
+条目里的 `keys`（触发词）与 `secondaryKeys`（次关键词）在界面上是**标签**：
+一个词一个圆角矩形，回车落一个、点 `×` 删一个。
+
+| 位置 | 名字 | 干什么 |
+|---|---|---|
+| `stTags(label, path, opts)` | 构造器 | 跟 `stInput` / `stArea` 并排放在「通用小控件」一节 |
+| `stTagHtml(base, i, word)` | 画一个标签 | `×` 是 `<button type="button">`，onclick 带的是**下标** `i` 不是词 |
+| `stTagsPaint(base)` | 重画标签 | ⚠ **只换标签节点，输入框原地留着** |
+| `stTagsCommit(base)` | 落词 | 读输入框 → 切 → 去重 → `stSet` 回去 |
+| `stTagsDel(base, i)` | 删第 `i` 个 | |
+| `stTagsKey(ev, base)` | 键盘 | 回车 / 半角逗号 / 全角逗号落词；空框退格删最后一个 |
+| `stTagsPaste(ev, base)` | 粘贴 | 含 `[\n,，]` 的才接管 |
+
+**DOM 形状**：`st-<id>` 是输入框、`st-<id>-tags` 是装标签的框。
+⚠ 输入框的 id **没换**（还是 `st-e0-keys` / `st-e0-sec`），`label[for]` 照样指得过去。
+
+**存的还是数组**：走的还是 `ST_TEXT_LIST` 那套 `XxxText → keys` 别名
+（`stSetListText` → `stSplitList`），所以 `stAfterSet` 里那条定向刷新
+（`/^card\.bookEntries\[(\d+)\]\.(comment|keysText|enabled)$/` → `stRefreshEntrySummary`）
+**一个字没改**就复用了 —— 它只刷那一行摘要、**不整块重画**，所以光标不会飞。
+
+#### 四个必须记住的坑
+
+1. **⚠⚠ `<input type="text">` 的 `value` 会被浏览器抹掉 `\r` / `\n`**（HTML 规范的
+   value sanitization）⇒ **旧版那句「一行一个」的提示从来没成立过**：它也是个单行输入框，
+   多行文本粘进去会被**静默粘成连体词**（`b\nc` → `bc`）。
+   所以补了 `onpaste` 自己拦 —— 含 `[\n,，]` 的切开一次落进去，
+   **单个普通词不接管**（留给浏览器原生插入）。见 `RULES.md` 六之五十八。
+2. **⚠ 选择器特异性**：输入框那条必须写 `.st-field .st-tags-in`（0,2,0）。
+   光写 `.st-tags-in`（0,1,0）压不住 `.st-field input`（0,1,1）——
+   会得到一个有白底有边框的方框塞在圆角框里。retro-mode 下还要再压一层
+   （`body.retro-mode .st-field input` 是 0,2,2），所以那里写成 `body.retro-mode .st-field .st-tags-in`。
+3. **⚠⚠ 中文输入法组字中的回车是「选字」不是「落词」** ⇒ `stTagsKey` 开头必须
+   `if (ev.isComposing || ev.keyCode === 229) return true;`。不挡掉的话，
+   打「你好」按回车上屏会把半个词落成标签。
+4. **⚠ 不要整块重画**（`stTagsPaint` 的注释原话）：这些词是在输入框里**一个字一个字**敲出来的，
+   把输入框换成新节点 = 光标飞走。`book-verify.js` 有一条断言盯着节点身份
+   （`window.__inp === document.getElementById('st-e0-keys')`）。
+
+#### 相对旧版的行为变化
+
+| | 旧（`stInput`） | 新（`stTags`） |
+|---|---|---|
+| 一个词长什么样 | 文本框里的一行 | 圆角矩形 |
+| 落一个词 | 打逗号（或换行 —— **实际到不了**） | 回车 / 半角逗号 / 全角逗号 |
+| 删一个词 | 手工去文本框里删 | 点那个词的 `×` |
+| 一次粘多行 | **粘成连体词**（静默） | 按行切开，一行一个 |
+| 重复词 | 会重复堆着 | 不再重复加 |
+
 ---
 
 ## 十、正则页（`stPaneRegex`）

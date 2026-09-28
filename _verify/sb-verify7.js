@@ -821,6 +821,23 @@ const HEAD_STYLE_RAW =
       // 第六轮那套的注释里踩过同一个坑 ⇒ 必须等**实质条件**，不是等「有值」
       if (i2 && i2.w > 0) break;
     }
+    // ⚠⚠ 先把「这一帧到底有没有布局」单独断出来。
+    //   `w:0` + `cs:"210px"` 有**三种**成因，长得一模一样（见 RULES 六之五十七 / 六之六十）：
+    //     ① 刚解析、还没布局 —— 毫秒级，上面的轮询等得到；
+    //     ② **整帧的视口真的是 0×0** ⇒ 这一帧从没被布局过。**永久**：改写 srcdoc 也救不回来，
+    //        要重建 iframe（切走再切回选项卡）才恢复；
+    //     ③ 元素自己待在 display:none 里（computed width 照样返回指定值）。
+    //   判据是量 **document.body** 的 rect：body 也是 0 ⇒ 整帧没布局（②）；
+    //   body 正常而元素是 0 ⇒ 元素自己隐藏（③）。
+    //   ⚠ 这条红了就说明是 ②，下面那条宽度断言**必然跟着红**。没有它的话，报出来的是
+    //   「那块不是 210px」，看着像产品把尺寸算错了 —— 方向全歪（实测：整跑时就是这么报的，
+    //   害我以为只是取样时机问题，白修了一轮）。红在这里才说得清是什么事。
+    const frameBox = await frameEval(`(() => ({
+      bodyW: Math.round(document.body.getBoundingClientRect().width),
+      bodyH: Math.round(document.body.getBoundingClientRect().height) }))()`)
+      .catch(e => ({ err: String(e.message).slice(0, 60) }));
+    check('真机预览那一帧已经布局了（body 有尺寸）',
+      frameBox, v => !!(v && v.bodyW > 0), 'bodyW > 0');
     check('真机预览里那块也变宽了', i2, v => !!v && v.w === 210, '210');
     await shot('sb7-resize.png', '.st-sb-canvas-wrap');
 
@@ -848,6 +865,11 @@ const HEAD_STYLE_RAW =
       if (j2 && j2.w > 0) break;   // 同上：等布局完，别把「还没渲染」当成真答案
     }
     check('画布上那个块 260px 宽', j.w, 260);
+    const frameBox2 = await frameEval(`(() => ({
+      bodyW: Math.round(document.body.getBoundingClientRect().width) }))()`)
+      .catch(e => ({ err: String(e.message).slice(0, 60) }));
+    check('真机预览那一帧已经布局了（第二处，同 ②）',
+      frameBox2, v => !!(v && v.bodyW > 0), 'bodyW > 0');
     check('真机预览里也是 260px', j2, v => !!v && v.w === 260, '260');
     check('  → 命中框贴着块（选中轮廓不会拉到整栏那么长）', j.hitW, 260);
 

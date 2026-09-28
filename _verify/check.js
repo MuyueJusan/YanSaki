@@ -300,7 +300,15 @@ const ESCAPE_ALLOW = {
     // 描述文字本身走 escapeHtml（用户输入，必须转）。
     // ⚠ 按钮文字/`disabled` 那两处是三目，`+ (busy ? …)` 以 `(` 开头，RE_RAW 抓不到 ——
     //   两个分支都是写死的字面量，本来就安全
-    stSbAiRowHtml:     ['ST_SB_AI_DESC_MAX']
+    stSbAiRowHtml:     ['ST_SB_AI_DESC_MAX'],
+    // 关键词标签控件（世界书的 keys / secondary_keys）。两处裸值都不是外部输入：
+    //   `base` = 'st-' + o.id，而 o.id 是调用点写死的（'e0-keys' 这种）——
+    //   一共 7 处（id / data 属性 / 两个 onclick / onkeydown / onpaste / onblur）；
+    //   `i` 是数组下标。真正会进 DOM 的文字（标签词 / 路径 / 提示语 / title）全走 escapeHtml。
+    //   ⚠ 点名加进来是**故意**的：加 onpaste 那一下它就从 6 涨到 7 并当场变红 ——
+    //     这正是这道闸门存在的理由（让「又插了一个值」必须被看见一次）
+    stTags:            ['base', 'base', 'base', 'base', 'base', 'base', 'base'],
+    stTagHtml:         ['base', 'i']
 };
 
 // 括号配平地抠出函数体（字符串 / 注释 / 模板串要跳过）
@@ -358,7 +366,7 @@ const found = {};
 //   只会得到一道「看着在守、其实没看过」的闸门。
 //   ⇒ 所以：**新加的构建函数一律点名加进来**（下面这个 stSbPrefabHtml 就是），
 //     老的等真去动它们的时候再逐条收。缺口在这儿写着，不藏。
-const RE_FN = /function (stCode[A-Za-z]*Html|stCodeHighlight|stSbPrefabHtml|stSbAiRowHtml)\s*\(/g;
+const RE_FN = /function (stCode[A-Za-z]*Html|stCodeHighlight|stSbPrefabHtml|stSbAiRowHtml|stTags|stTagHtml)\s*\(/g;
 let fmm;
 while ((fmm = RE_FN.exec(codeNoBlob)) !== null) {
     const safe = blankSafe(bodyOf(codeNoBlob, fmm.index));
