@@ -5337,7 +5337,20 @@
         @media (max-width: 900px), (orientation: portrait) and (max-width: 1100px) {
             .st-code-view { display: flex; }
             .st-code-card { flex: 1 1 auto; border-right: none; }
-            .st-code-pop { width: 84vw; max-width: 84vw; }
+            /* ⚠⚠ 弹层挂在**按钮**上（`.st-code-menu` 是 position:relative），而窄屏下这条
+               工具栏会折行 ⇒ 按钮落在中段时，一条 84vw 宽的弹层就从屏幕**左边**穿出去
+               （真机反馈：手机上「记忆」弹窗左边被切掉，「每次发消息」少了一个「每」）。
+               CSS 算不出按钮在视口里的 x，所以窄屏干脆**把弹层改挂到整条工具栏上**：
+               details 变回 static，containing block 上移到 `.st-code-bar`（给它加定位），
+               于是 left/right 一起给就能横满整条 —— 无论按钮折到第几行都不会出界。
+               ⚠ 这两条必须写在 `.st-code-pop-r`（4822 那组）**之后** —— 同权重，后写的赢；
+                 否则它的 `left:auto; right:0` 会把这里盖回去，弹层又贴回按钮右边。
+               ⚠ `top: calc(100% + 6px)` 的含义也跟着变了：原来是「按钮下面 6px」，
+                 现在是「**整条工具栏**下面 6px」—— 这正是窄屏想要的样子。 */
+            .st-code-bar { position: relative; }
+            .st-code-menu { position: static; }
+            .st-code-pop,
+            .st-code-pop-r { left: 8px; right: 8px; width: auto; max-width: 460px; }
             .st-code-split[data-view="card"] .st-code-agent { display: none; }
             .st-code-split[data-view="agent"] .st-code-card { display: none; }
             /* 窄屏上「地址 + 按钮」并排会把输入框挤成一条缝，堆起来 */

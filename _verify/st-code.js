@@ -426,6 +426,81 @@ const MOCK_SRC = `
     await sleep(280);
     await ev(`stCodeViewSet('card')`);
 
+    // ⚠⚠ 真机反馈：手机上「记忆」弹窗**左边被切掉**（「每次发消息」少了一个「每」）。
+    //   根因：弹层挂在**按钮**上（`.st-code-menu` 是 position:relative），而窄屏工具栏会
+    //   折行 ⇒ 按钮落在中段、弹层又有 84vw 宽 ⇒ 从屏幕**左边**穿出去。
+    //   修法：窄屏把弹层改挂到**整条工具栏**上（details 变 static、`.st-code-bar` 加定位）。
+    // ⚠ 这里必须用**手机**宽度（360）—— 上面那块用的 600 折不到中段，测不出这个 bug。
+    section('A2. 窄屏弹层不许出界（360×800，真机反馈的回归）');
+    await cdp.send('Emulation.setDeviceMetricsOverride',
+      { width: 360, height: 800, deviceScaleFactor: 1, mobile: true }, SID);
+    await sleep(340);
+    const menuCloseAll = () => ev(`(function(){
+      document.querySelectorAll('#st-panes .st-code-bar > .st-code-menu')
+        .forEach(d => { d.open = false; }); return true; })()`);
+    const menuOpen = async i => {
+      await menuCloseAll(); await sleep(110);
+      await ev(`document.querySelectorAll('#st-panes .st-code-bar > .st-code-menu')[${i}]` +
+        `.querySelector('summary').click()`);
+      await sleep(200);
+    };
+    // 量**视口坐标**（getBoundingClientRect），跟 0 / innerWidth 直接比
+    const popGeo = i => ev(`(function(){
+      const d = document.querySelectorAll('#st-panes .st-code-bar > .st-code-menu')[${i}];
+      if (!d) return null;
+      const p = d.querySelector('.st-code-pop'); if (!p) return null;
+      const r = p.getBoundingClientRect();
+      return { open: d.open, left: Math.round(r.left), right: Math.round(r.right),
+               width: Math.round(r.width), vw: innerWidth,
+               menuPos: getComputedStyle(d).position };
+    })()`);
+    // ⚠⚠ 选择器必须用**直接子代**（`>`）—— 技能弹层里还嵌着一个
+    //   `<details class="st-code-menu">🧰 工具型 skill 长什么样</details>`，
+    //   它**没有** `.st-code-pop`（只是一段折叠说明）。用后代选择器会数出 5 个、
+    //   下标整体错位，而且那条会报成「弹层没打开」—— 看着像产品坏了，其实是测试挑错了元素。
+    const POPN = ['当前 skill 列表', '历史会话', '思维强度', '记忆'];
+    // ⚠ 下标是**假设**，先把它验掉：名字对不上就说明顺序变了，后面的断言全在测错东西
+    const sums = await ev(`Array.from(document.querySelectorAll('#st-panes .st-code-bar > .st-code-menu'))
+      .map(d => d.querySelector('summary').textContent)`);
+    check('窄屏：工具栏 4 个菜单的名字与顺序对得上（下标才可信）',
+      Array.isArray(sums) && sums.length === 4 && POPN.every((n, i) => sums[i].indexOf(n) >= 0),
+      true, POPN.join(' / '));
+    for (let i = 0; i < 4; i++) {
+      await menuOpen(i);
+      const g = await popGeo(i);
+      check(`窄屏：${POPN[i]} 弹层真的开了且量得到`, !!(g && g.open && g.width > 0), true);
+      // 主断言：整条弹层落在视口里（左右都不许出界）
+      check(`窄屏：${POPN[i]} 弹层左边没出界`, !!(g && g.left >= 0), true, 'left >= 0');
+      check(`窄屏：${POPN[i]} 弹层右边没出界`, !!(g && g.right <= g.vw), true, 'right <= innerWidth');
+      // 对照组：它得是**铺开**的，不能被压成一条缝 —— 否则上面两条「不出界」是白给的
+      check(`窄屏：${POPN[i]} 弹层确实铺开了（不是被压扁）`, !!(g && g.width > 200), true, 'width > 200');
+    }
+    check('窄屏：details 变回 static（弹层改挂整条工具栏）',
+      (await popGeo(3)).menuPos, 'static');
+    // 留一张真机宽度的截图：⚠ 不能用 shot(name, sel) —— 它会把宽度改回 1440，正好毁掉窄屏版式
+    await menuOpen(3);
+    const mpng = await cdp.send('Page.captureScreenshot', { format: 'png' }, SID);
+    fs.writeFileSync(path.join(SHOTS, 'st-code-mobile-pop.png'), Buffer.from(mpng.data, 'base64'));
+    console.log(`  📸 st-code-mobile-pop.png (${Math.round(mpng.data.length / 1365)} KB)`);
+    await menuCloseAll(); await sleep(120);
+
+    // 对照组：桌面宽度下**必须还是老行为**（弹层贴着按钮、-r 往右对齐）。
+    // ⚠ 少了这块，把媒体查询写成全局也能全绿 —— 那桌面端就被顺手改坏了。
+    await cdp.send('Emulation.setDeviceMetricsOverride',
+      { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, SID);
+    await sleep(300);
+    check('桌面：details 还是 relative（弹层仍挂按钮）',
+      (await popGeo(3)).menuPos, 'relative');
+    await menuOpen(3);
+    const deskGap = await ev(`(function(){
+      const d = document.querySelectorAll('#st-panes .st-code-bar > .st-code-menu')[3];
+      const p = d.querySelector('.st-code-pop');
+      return Math.round(d.getBoundingClientRect().right - p.getBoundingClientRect().right);
+    })()`);
+    check('桌面：「记忆」弹层右边缘仍贴着按钮右边缘（.st-code-pop-r 生效）',
+      Math.abs(deskGap) <= 1, true, '差 ≤ 1px');
+    await menuCloseAll(); await sleep(120);
+
     // ================= B. 协议层 =================
     section('B. 协议层：两套协议的请求形状');
     await useOwn('openai', 'gpt-4o');

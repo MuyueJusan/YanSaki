@@ -5704,3 +5704,51 @@ the class). Prefer a derived set — mark the buttons that *need* a selection (`
 over that, then add a second assertion that the marking is complete (every button in that row carries
 it). Without the second one, forgetting to mark a new button means it is *never* disabled, and no count
 notices.
+
+## An over-matching selector makes the harness blame the product
+
+Reaching for a descendant selector is the default reflex, and it silently widens the set. A check for
+the four dropdown menus in a toolbar used `.st-code-bar .st-code-menu` and matched **five** — the
+skills popup contains a nested `<details class="st-code-menu">` that is a collapsible note with no
+popup of its own. Indices shifted by one, so "menu #1" resolved to that note, `getBoundingClientRect()`
+returned all zeros, and the suite reported **"the popup did not open."**
+
+That is the expensive part: the failure message pointed at the product. The product was fine; the test
+had picked the wrong element. A red assertion that names the wrong cause costs more than no assertion,
+because it sends you reading the wrong source.
+
+Two habits:
+
+1. **Use a child combinator when you mean "the ones directly in this container."** `.bar > .menu`
+   cannot accidentally sweep in a nested one. Reach for the descendant form only when you have
+   actually reasoned about the nesting.
+2. **Assert the identity of the set before you index into it.** One extra assertion — "the four
+   menus' labels match, in this order" — converts a silent mis-index into a loud, correctly-directed
+   failure. An index is an assumption; unchecked assumptions are where the wrong-element bug lives.
+
+The general form: **a failure message must be able to distinguish "the product is wrong" from "my
+probe is wrong."** If it cannot, it will eventually send you to the wrong file.
+
+## Layout bugs need a viewport, not a wider element
+
+A popup anchored to a button (`position: absolute; left: 0` inside a `position: relative` wrapper)
+overflowed the screen on a phone. The instinct is to shrink it (`max-width`) — that only reduces the
+overflow, it does not remove it. Whether it overflows depends on **where the button lands**, and
+"where the button lands" is not a quantity CSS can read. So `left: 0` means "hug the button", and
+nothing can mean "stay on screen".
+
+**The fix is to change the containing block, not the size:** make the wrapper `position: static` and
+give the *toolbar* `position: relative`, then set `left: 8px; right: 8px` so the popup spans the
+toolbar regardless of wrapping. Two cautions worth remembering:
+
+- The override must sit **after** the rule it overrides — `.st-code-pop-r { left: auto; right: 0 }`
+  is the same specificity, so source order decides. You cannot see who wins by grepping; you have to
+  measure the rendered box.
+- Re-anchoring changes what `top: calc(100% + 6px)` means (from "below the button" to "below the
+  toolbar"). That was the desired behaviour here, but it is a silent change — check it.
+
+**Test at a width where the bug actually occurs.** The existing narrow-screen block used 600 px; the
+toolbar did not wrap to a mid-row button at 600, so the bug was invisible. The regression test uses
+**360 px**, and the reverse test (revert the fix, re-run) turns 4 assertions red — including the exact
+symptom the user reported. Assert both edges against `[0, innerWidth]`, and pair it with a
+"the popup is actually wide" control, or squashing it to zero width also passes "it is on screen".
