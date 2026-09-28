@@ -3866,6 +3866,44 @@
             color: #7a5410;
         }
 
+        /* 世界书条目的多选：每条摘要前面一个勾选框 + 条目列表上面一条批量操作栏。
+           ⚠ 勾选框必须待在 <summary> 里（要跟摘要排在同一行），而点它**不能**把
+             条目一起开合 —— 靠 onclick 里 stopPropagation 挡住冒泡，见 stEntryHtml */
+        .st-sel-box {
+            flex: 0 0 auto;
+            width: 15px;
+            height: 15px;
+            margin: 0;
+            accent-color: #3a7bd5;
+            cursor: pointer;
+        }
+
+        .st-batch {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            padding: 7px 9px;
+            margin-bottom: 8px;
+            border: 1px solid rgba(120, 150, 180, 0.45);
+            border-radius: 9px;
+            background: rgba(238, 246, 253, 0.85);
+        }
+
+        .st-batch-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 全选那个勾选框：借 .st-check 的长相，但不要它上下那圈留白 */
+        .st-batch-all { padding: 0; margin-right: 2px; }
+
+        .st-batch-info {
+            font-size: 0.74rem;
+            color: #33546b;
+        }
+
         /* 关键词标签（世界书条目的 keys / secondary_keys）。
            长得像社交软件里的标签：一个词一个圆角矩形，回车落一个、点 × 删一个。
            外框照抄 .st-field input 那副长相（边框 / 圆角 / 内边距），
@@ -4345,6 +4383,16 @@
 
         body.retro-mode .st-tag-x { color: #000000; }
         body.retro-mode .st-tag-x:hover { background: #800000; color: #ffffff; }
+
+        /* 多选栏 / 勾选框也走方角那套 —— 不补的话复古皮肤下会冒出一条圆角的
+           浅蓝色卡片贴在 Win98 灰的页面里 */
+        body.retro-mode .st-batch {
+            border-radius: 0;
+            border-color: #808080;
+            background: #ffffff;
+        }
+
+        body.retro-mode .st-sel-box { accent-color: #000080; }
 
         body.retro-mode .st-field .st-tags-in,
         body.retro-mode .st-field .st-tags-in:focus {
@@ -16465,6 +16513,12 @@
             // 提取区自己的一条提示。**不跟 stEditor.msg 合并** ——
             // 那条会被 stPaintMsg 分给常驻条 / 人设页，而这条要贴在提取区里
             extractMsg: { text: '', kind: '' },
+            // —— 世界书的多选 ——
+            // 选中的条目 **id**（不是下标 —— 下标在增删 / 上下移动之后就失效了）。
+            // ⚠ 跟 extractSel 相反：那边是导入**之前**还没有 id 才按索引记，
+            //   这边条目早就在卡里了，id 是稳的。
+            // ⚠ 会话级界面状态：不落盘、不进卡、不进任何导出的 JSON
+            bookSel: [],
             // ⚠ **「这一次点导入是干嘛的」故意不放在这里**，放在 `<input>` 的
             //   `dataset.mode` 上。理由：用户点了「提取条目」又**在文件框里点取消**时，
             //   `change` 事件**根本不触发** ⇒ 存在 stEditor 上的模式**没有机会被清掉**，
@@ -16761,6 +16815,9 @@
             panes.scrollTop = 0;
             // 常驻状态条不属于任何一页，得单独刷一遍
             stPaintMsg();
+            // 世界书那个「全选」勾选框的**半选态**（indeterminate）没有对应的 HTML 属性，
+            // 只能等节点挂上去之后再补一次 —— 光靠拼字符串是设不出来的
+            stBookSelPaint();
             renderStCard();
         }
 
@@ -24724,6 +24781,7 @@
                     }) +
                 '</div>' +
                 '<div class="st-sub">条目（' + entries.length + ' 条 · 启用 ' + on + ' 条）</div>' +
+                (entries.length ? stBookBatchBar(entries) : '') +
                 (entries.length
                     ? entries.map((e, i) => stEntryHtml(e, i)).join('')
                     : '<div class="st-empty">还没有条目。点下面的「✚ 添加条目」。</div>') +
@@ -24747,8 +24805,15 @@
                     (e.comment ? escapeHtml(e.comment) : '<i>（没写备注）</i>') +
                     (keys ? ' · ' + escapeHtml(keys.slice(0, 40)) : '') +
                 '</span>';
+            // 多选那个勾选框。⚠ 它待在 <summary> 里，而点 <summary> 会开合 <details> ——
+            // 所以 onclick 里必须 stopPropagation 把冒泡挡掉，否则勾一条就把那条摊开了
+            const box = '<input type="checkbox" class="st-sel-box"' +
+                ' data-id="' + escapeHtml(e.id) + '"' +
+                (stBookSelIds().has(e.id) ? ' checked' : '') +
+                ' onclick="event.stopPropagation()"' +
+                ' onchange="stBookSelToggle(this)" title="选中这一条">';
             return '<details class="st-entry' + (e.enabled ? '' : ' st-entry-off') + '" id="st-entry-' + i + '">' +
-                '<summary>' + sum + '</summary>' +
+                '<summary>' + box + sum + '</summary>' +
                 '<div class="st-entry-body">' +
                     stAiEntryPanel(e, i) +
                     '<div class="st-grid">' +
@@ -28259,6 +28324,9 @@
             const a = stEditor.card.bookEntries;
             if (i < 0 || i >= a.length) return;
             a.splice(i, 1);
+            // 单条删除也要把它从选中集里摘掉 —— 留着的话「已选 N 条」会多算一个。
+            // （stBookSelIds 本来就会滤掉死 id，这里只是顺手把数组本身也清干净）
+            stBookSelPut(stBookSelIds());
             stSaveDraft();
             stRerender();
         }
@@ -28283,6 +28351,250 @@
             a.splice(i + 1, 0, copy);
             stSaveDraft();
             stRerender();
+        }
+
+        // ===== 世界书多选管理 =====
+        //
+        // 选中状态按**条目 id** 记，不按下标 —— 下标在增删 / 上下移动之后就失效了，
+        // 会出现「勾了第 3 条，删掉第 1 条之后第 3 条自己变成了第 2 条」这种事。
+        // （MVU / 状态栏那两个选择器也是同一条理由，见 stEditor 里 mvuSel / sbSel 的注释。）
+        //
+        // ⚠ 它是**会话级界面状态**，跟 extractSel / personaReq 同类：不落盘、不进卡、
+        //   也不会出现在任何导出的 JSON 里。落盘的话下次打开会莫名其妙勾着一堆条目。
+
+        // 还活着的选中 id 集合。⚠ 删条目 / 换卡之后残留的 id **不算选中** ——
+        // 不筛掉的话「已选 N 条」会数出一个根本点不到的条目，批量删除还会删错东西
+        function stBookSelIds() {
+            const raw = Array.isArray(stEditor.bookSel) ? stEditor.bookSel : [];
+            const a = (stEditor.card && Array.isArray(stEditor.card.bookEntries))
+                ? stEditor.card.bookEntries : [];
+            const alive = new Set();
+            a.forEach(e => alive.add(e.id));
+            return new Set(raw.filter(id => alive.has(id)));
+        }
+
+        // 选中的条目下标（升序）
+        function stBookSelIdx() {
+            const set = stBookSelIds();
+            const a = (stEditor.card && Array.isArray(stEditor.card.bookEntries))
+                ? stEditor.card.bookEntries : [];
+            const out = [];
+            a.forEach((e, i) => { if (set.has(e.id)) out.push(i); });
+            return out;
+        }
+
+        // 把集合写回 stEditor.bookSel（顺手把死 id 清掉）
+        function stBookSelPut(set) {
+            stEditor.bookSel = Array.from(set);
+        }
+
+        function stBookSelClear() { stEditor.bookSel = []; }
+
+        function stBookSelToggle(box) {
+            const id = box.getAttribute('data-id');
+            if (!id) return;
+            const set = stBookSelIds();
+            if (box.checked) set.add(id); else set.delete(id);
+            stBookSelPut(set);
+            stBookSelPaint();
+        }
+
+        function stBookSelAll(on) {
+            const a = stEditor.card ? stEditor.card.bookEntries : [];
+            stBookSelPut(new Set(on ? a.map(e => e.id) : []));
+            stBookSelPaint();
+        }
+
+        function stBookSelInvert() {
+            const a = stEditor.card ? stEditor.card.bookEntries : [];
+            const set = stBookSelIds();
+            stBookSelPut(new Set(a.filter(e => !set.has(e.id)).map(e => e.id)));
+            stBookSelPaint();
+        }
+
+        // 只重画「勾选框 + 那一行计数 + 按钮禁用态」，**不整页重画**。
+        // ⚠ 条目卡片里有输入框（备注 / 正文 / 关键词标签），整页重画会把正在编辑的
+        //   那个节点换掉 —— 光标飞、滚动跳。所以这里只改勾选状态，不碰卡片本身
+        function stBookSelPaint() {
+            const a = (stEditor.card && Array.isArray(stEditor.card.bookEntries))
+                ? stEditor.card.bookEntries : [];
+            const set = stBookSelIds();
+            document.querySelectorAll('#st-panes .st-sel-box').forEach(box => {
+                box.checked = set.has(box.getAttribute('data-id'));
+            });
+            const all = document.getElementById('st-sel-all');
+            if (all) {
+                all.checked = a.length > 0 && set.size === a.length;
+                // ⚠ indeterminate 只能靠 JS 设，没有对应的 HTML 属性 ——
+                //   光靠渲染出来的字符串是设不出来的，必须在这里补
+                all.indeterminate = set.size > 0 && set.size < a.length;
+            }
+            const info = document.getElementById('st-sel-info');
+            if (info) info.textContent = '已选 ' + set.size + ' / ' + a.length + ' 条';
+            document.querySelectorAll('#st-book-batch .st-need-sel').forEach(b => {
+                b.disabled = set.size === 0;
+            });
+        }
+
+        // 批量改一个布尔字段。走的是和单条编辑同一条路：改完 stSaveDraft + stRerender，
+        // 所以摘要上那两枚「启用 / 常驻」小标签会跟着变，草稿也立刻落盘
+        function stBookBatch(kind) {
+            const idx = stBookSelIdx();
+            if (!idx.length) return;
+            const label = { on: '启用', off: '停用', constOn: '设为常驻', constOff: '取消常驻' }[kind] || kind;
+            const a = stEditor.card.bookEntries;
+            idx.forEach(i => {
+                const e = a[i];
+                if (!e) return;
+                if (kind === 'on') e.enabled = true;
+                else if (kind === 'off') e.enabled = false;
+                else if (kind === 'constOn') e.constant = true;
+                else if (kind === 'constOff') e.constant = false;
+            });
+            stSaveDraft();
+            stRerender();
+            stBookSelPaint();
+            stExportMsg('✅ 已把选中的 ' + idx.length + ' 条' + label + '。', 'ok');
+        }
+
+        // 批量删除。⚠ 从**后往前**删 —— 从前往后删的话，删掉第 2 条之后原来第 5 条
+        // 就变成了第 4 条，后面记着的下标全部错位，删掉的就不是用户勾的那些了
+        function stBookBatchDel() {
+            const idx = stBookSelIdx();
+            if (!idx.length) return;
+            const n = idx.length;
+            if (!window.confirm('确定删除选中的 ' + n + ' 条世界书条目？删了就没了，没有撤销。')) return;
+            const a = stEditor.card.bookEntries;
+            for (let k = idx.length - 1; k >= 0; k--) a.splice(idx[k], 1);
+            stBookSelClear();
+            stSaveDraft();
+            stRerender();
+            stExportMsg('🗑 已删除 ' + n + ' 条世界书条目。', 'warn');
+        }
+
+        // 选中条目 → **独立世界书** JSON。⚠ 形状跟卡内的 character_book **不是一回事**：
+        //   · 顶层 entries 是**以 uid 字符串为键的对象**，不是数组 —— SillyTavern 的
+        //     world-info.js 里到处是 `data.entries[uid]` / `Object.values(data.entries)`
+        //   · 字段用 ST 世界书自己的名字：key / keysecondary / uid / disable / position(数字)
+        //     （卡内那份是 keys / secondary_keys / id / enabled / position 字符串）
+        //   · ST 导入时会跑 addMissingWorldInfoFields()，按它自己的模板把缺的字段补上，
+        //     所以这里**只写我们真有的**，不编造默认值 —— 少写是安全的，写错才是灾难
+        function stEntryToWiJson(e, uid) {
+            return {
+                uid: uid,
+                key: e.keys.slice(),
+                keysecondary: e.secondaryKeys.slice(),
+                comment: e.comment,
+                content: stEntryContentRaw(e),
+                constant: !!e.constant,
+                selective: !!e.selective,
+                selectiveLogic: e.selectiveLogic,
+                order: e.order,
+                position: e.position,
+                disable: !e.enabled,
+                depth: e.depth,
+                role: e.role,
+                probability: e.probability,
+                useProbability: !!e.useProbability,
+                caseSensitive: e.caseSensitive,
+                matchWholeWords: e.matchWholeWords,
+                useGroupScoring: e.useGroupScoring,
+                excludeRecursion: !!e.excludeRecursion,
+                preventRecursion: !!e.preventRecursion,
+                delayUntilRecursion: e.delayUntilRecursion,
+                scanDepth: e.scanDepth,
+                group: e.group,
+                groupWeight: e.groupWeight,
+                groupOverride: !!e.groupOverride,
+                triggers: e.triggers.slice(),
+                sticky: e.sticky == null ? 0 : e.sticky,
+                cooldown: e.cooldown == null ? 0 : e.cooldown,
+                delay: e.delay == null ? 0 : e.delay,
+                outletName: e.outletName,
+                characterFilter: {
+                    isExclude: !!e.characterFilter.isExclude,
+                    names: e.characterFilter.names.slice(),
+                    tags: e.characterFilter.tags.slice()
+                },
+                matchPersonaDescription: !!e.matchPersonaDescription,
+                matchCharacterDescription: !!e.matchCharacterDescription,
+                matchCharacterPersonality: !!e.matchCharacterPersonality,
+                matchCharacterDepthPrompt: !!e.matchCharacterDepthPrompt,
+                matchScenario: !!e.matchScenario,
+                matchCreatorNotes: !!e.matchCreatorNotes,
+                useRegex: !!e.useRegex,
+                vectorized: false,
+                addMemo: true,
+                displayIndex: uid,
+                extensions: {}
+            };
+        }
+
+        function stBookToStandaloneJson(list) {
+            const c = stEditor.card;
+            const entries = {};
+            list.forEach((e, i) => { entries[String(i)] = stEntryToWiJson(e, i); });
+            return {
+                name: c.bookName || (c.name ? c.name + ' 的世界书' : '世界书'),
+                description: c.bookDescription || '',
+                entries: entries
+            };
+        }
+
+        function stBookExportSel() {
+            const idx = stBookSelIdx();
+            if (!idx.length) return;
+            const all = stEditor.card.bookEntries;
+            const picked = idx.map(i => all[i]);
+            try {
+                const text = JSON.stringify(stBookToStandaloneJson(picked), null, 2);
+                const base = stSafeFileName(stEditor.card.bookName ||
+                    (stEditor.card.name ? stEditor.card.name + ' 的世界书' : '世界书'));
+                const part = picked.length === all.length ? '' : '（选中 ' + picked.length + ' 条）';
+                const name = base + part + '.json';
+                stDownload(name, new Blob([text], { type: 'application/json' }));
+                stEditor.lastExport = '世界书 · ' + name + ' · ' + text.length + ' 字符';
+                stSaveDraft();
+                stExportNote();
+                stExportMsg('✅ 已导出世界书 ' + name + '（' + picked.length + ' 条 · ' +
+                    text.length + ' 字符）。', 'ok');
+            } catch (e) {
+                stExportMsg('❌ 导出失败：' + (e && e.message ? e.message : e), 'bad');
+            }
+        }
+
+        // 批量操作那一栏。**一条都没选时按钮只是 disabled，不隐藏** ——
+        // 藏起来的话用户根本不知道有这些功能
+        function stBookBatchBar(entries) {
+            const n = stBookSelIds().size;
+            const all = entries.length > 0 && n === entries.length;
+            const dis = n ? '' : ' disabled';
+            return '<div class="st-batch" id="st-book-batch">' +
+                '<div class="st-batch-row">' +
+                    '<label class="st-check st-batch-all">' +
+                        '<input type="checkbox" id="st-sel-all"' + (all ? ' checked' : '') +
+                            ' onchange="stBookSelAll(this.checked)">' +
+                        '<span>全选</span>' +
+                    '</label>' +
+                    '<button class="st-mini" type="button" onclick="stBookSelInvert()">反选</button>' +
+                    '<span class="st-batch-info" id="st-sel-info">已选 ' + n + ' / ' +
+                        entries.length + ' 条</span>' +
+                '</div>' +
+                '<div class="st-batch-row">' +
+                    '<button class="st-mini st-need-sel" type="button"' + dis +
+                        ' onclick="stBookBatch(\'on\')">启用</button>' +
+                    '<button class="st-mini st-need-sel" type="button"' + dis +
+                        ' onclick="stBookBatch(\'off\')">停用</button>' +
+                    '<button class="st-mini st-need-sel" type="button"' + dis +
+                        ' onclick="stBookBatch(\'constOn\')">设为常驻</button>' +
+                    '<button class="st-mini st-need-sel" type="button"' + dis +
+                        ' onclick="stBookBatch(\'constOff\')">取消常驻</button>' +
+                    '<button class="st-mini st-need-sel" type="button"' + dis +
+                        ' onclick="stBookExportSel()">📤 导出为世界书</button>' +
+                    '<button class="st-mini st-danger st-need-sel" type="button"' + dis +
+                        ' onclick="stBookBatchDel()">✕ 删除</button>' +
+                '</div>' +
+            '</div>';
         }
 
         function stAddGreeting() {
@@ -28534,6 +28846,8 @@
             stEditor.extractSrc = null;
             stEditor.extractSel = {};
             stEditor.extractMsg = '';
+            // 世界书的多选同理 —— 上一张卡勾中的那些条目 id 在新卡里一个都不存在
+            stBookSelClear();
             stMvuAfterLoad();     // 新卡没有 MVU / 状态栏，顺手把接管标记清干净
             stSaveDraft();
             if (stIsOpen()) renderStEditor();

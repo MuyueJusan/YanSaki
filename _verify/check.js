@@ -308,7 +308,15 @@ const ESCAPE_ALLOW = {
     //   ⚠ 点名加进来是**故意**的：加 onpaste 那一下它就从 6 涨到 7 并当场变红 ——
     //     这正是这道闸门存在的理由（让「又插了一个值」必须被看见一次）
     stTags:            ['base', 'base', 'base', 'base', 'base', 'base', 'base'],
-    stTagHtml:         ['base', 'i']
+    stTagHtml:         ['base', 'i'],
+    // 世界书的多选栏（批量启用 / 停用 / 常驻 / 导出 / 删除）。
+    // 八个候选全不是外部输入：
+    //   · `dis` × 6 —— `const dis = n ? '' : ' disabled'`，两个分支都是**写死的字面量**
+    //   · `n` —— `stBookSelIds().size`，一个数字
+    //   · `entries.length` —— 数组长度，数字
+    // 真正会进 DOM 的文字（条目 id 走 data 属性、按钮文案）要么是写死的，
+    // 要么在 stEntryHtml 那边已经 escapeHtml 过（那个函数本来就在点名范围里）
+    stBookBatchBar:    ['dis', 'dis', 'dis', 'dis', 'dis', 'dis', 'entries.length', 'n']
 };
 
 // 括号配平地抠出函数体（字符串 / 注释 / 模板串要跳过）
@@ -366,7 +374,7 @@ const found = {};
 //   只会得到一道「看着在守、其实没看过」的闸门。
 //   ⇒ 所以：**新加的构建函数一律点名加进来**（下面这个 stSbPrefabHtml 就是），
 //     老的等真去动它们的时候再逐条收。缺口在这儿写着，不藏。
-const RE_FN = /function (stCode[A-Za-z]*Html|stCodeHighlight|stSbPrefabHtml|stSbAiRowHtml|stTags|stTagHtml)\s*\(/g;
+const RE_FN = /function (stCode[A-Za-z]*Html|stCodeHighlight|stSbPrefabHtml|stSbAiRowHtml|stTags|stTagHtml|stBookBatchBar)\s*\(/g;
 let fmm;
 while ((fmm = RE_FN.exec(codeNoBlob)) !== null) {
     const safe = blankSafe(bodyOf(codeNoBlob, fmm.index));

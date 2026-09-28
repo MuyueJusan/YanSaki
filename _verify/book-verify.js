@@ -557,6 +557,275 @@ const W_D = '子规';
       [await chips(KS), await chips(SS)], [[W_A], [W_C]]);
     await shot('book-03-draft.png');
 
+    // ============ L. 世界书多选管理 ============
+    section('L. 世界书多选管理');
+
+    // 页面内小工具（都走真实路径：真 .click()、真内联 handler）
+    const boxes = () => ev(`[...document.querySelectorAll('#st-panes .st-sel-box')].map(b => b.checked)`);
+    const clickBox = async (i) => { const ok = await ev(`(function(){
+        const b = document.querySelectorAll('#st-panes .st-sel-box')[${i}];
+        if (!b) return false; b.click(); return true; })()`); await sleep(90); return ok; };
+    const selInfo = () => ev(`(function(){ const el = document.getElementById('st-sel-info');
+        return el ? el.textContent : null; })()`);
+    const allBox = () => ev(`(function(){ const el = document.getElementById('st-sel-all');
+        return el ? { checked: el.checked, ind: el.indeterminate } : null; })()`);
+    // ⚠ 不写死「6 个」—— 那是个会随界面增删而漂的数字。改成**从 DOM 推导**：
+    //   「该禁用的那批」靠 `.st-need-sel` 自己标出来，另外单独断言
+    //   「第二行每个按钮都标了」—— 漏标一个的话它会永远不禁用，而计数看不出来
+    const batch = () => ev(`(function(){
+        const bar = document.getElementById('st-book-batch');
+        if (!bar) return null;
+        const all = [...bar.querySelectorAll('.st-mini')];
+        const need = all.filter(b => b.classList.contains('st-need-sel'));
+        const rows = bar.querySelectorAll('.st-batch-row');
+        const row2 = rows[1] ? [...rows[1].querySelectorAll('.st-mini')] : [];
+        return { total: all.length, need: need.length, row2: row2.length,
+                 needAllOff: need.every(b => b.disabled),
+                 needAllOn: need.every(b => !b.disabled),
+                 labels: all.map(b => b.textContent.trim()) }; })()`);
+    const clickBatch = async (label) => { const ok = await ev(`(function(){
+        const b = [...document.querySelectorAll('#st-book-batch .st-mini')]
+            .find(x => x.textContent.indexOf(${JSON.stringify(label)}) >= 0);
+        if (!b) return false; b.click(); return true; })()`); await sleep(180); return ok; };
+    const entryOpen = (i) => ev(`(function(){ const d = document.getElementById('st-entry-${i}');
+        return d ? d.open : null; })()`);
+    const field = (f) => ev(`stEditor.card.bookEntries.map(e => e.${f})`);
+    const names = () => ev(`stEditor.card.bookEntries.map(e => e.comment)`);
+    // 夹具：n 条备注各不相同的条目。⚠ 备注取不同值 —— 一样的话
+    //   「删对了没有」根本分不出来（六之二十六）
+    const multiBook = async (n) => {
+      await ev(`(function(){
+        const NAMES = ['阿尔法', '贝塔', '伽马', '德尔塔'];
+        const out = [];
+        for (let i = 0; i < ${n}; i++) {
+          const e = stBlankEntry();
+          e.comment = NAMES[i];
+          e.keys = ['k' + i];
+          out.push(e);
+        }
+        stEditor.card.bookEntries = out;
+        stEditor.bookSel = [];
+        stSwitchTab('book');
+        return true; })()`);
+      await sleep(260);
+    };
+
+    // —— L1. 控件就位 ——
+    await multiBook(3);
+    check('三个条目各有一个多选勾选框', await boxes(), v => v.length === 3, 3);
+    check('批量操作栏在，且排在第一个条目**前面**',
+      await ev(`(function(){
+        const bar = document.getElementById('st-book-batch');
+        const first = document.getElementById('st-entry-0');
+        if (!bar || !first) return null;
+        return (bar.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0; })()`),
+      true);
+    check('一条都没选时：该禁用的动作按钮全禁用', await batch(),
+      v => !!v && v.need > 0 && v.needAllOff, 'need>0 且全 disabled');
+    // ⚠ 这条防的是「新加一个批量按钮忘了标 st-need-sel」——
+    //   漏标的话它永远不会被禁用，而上面那条照样绿
+    check('第二行每个按钮都标了 st-need-sel（没人漏标）', await batch(),
+      v => !!v && v.row2 > 0 && v.row2 === v.need, 'row2 === need');
+    // ⚠ 对照组：全选 / 反选**不该**被禁用 —— 它们本来就不需要先有选中项。
+    //   少了这条，把「所有按钮一律 disabled」也能骗绿
+    check('对照组：全选 / 反选不受「有没有选中」影响',
+      await ev(`(function(){
+        const all = document.getElementById('st-sel-all');
+        const inv = [...document.querySelectorAll('#st-book-batch .st-mini')]
+          .find(b => b.textContent.indexOf('反选') >= 0);
+        return { all: !!all && !all.disabled, inv: !!inv && !inv.disabled }; })()`),
+      v => !!v && v.all && v.inv, '两个都可用');
+    check('计数那一行是「已选 0 / 3 条」', await selInfo(), v => v === '已选 0 / 3 条');
+
+    // —— L2. 点勾选框只选中，**不把条目摊开** ——
+    await ev(`window.__box0 = document.querySelectorAll('#st-panes .st-sel-box')[0]`);
+    const openBefore = await entryOpen(0);
+    await clickBox(0);
+    check('点一下勾选框 ⇒ 它自己变成选中', (await boxes())[0], true);
+    // ⚠⚠ 这条是这一节最要紧的一条：勾选框待在 <summary> 里，而 <summary> 的默认动作
+    //    是开合 <details>。少了 stopPropagation，勾一条就会把那条摊开
+    check('⚠ 点勾选框**没有**把条目摊开（stopPropagation 挡住了冒泡）',
+      await entryOpen(0), v => v === openBefore, openBefore);
+    check('计数跟着变成「已选 1 / 3 条」', await selInfo(), v => v === '已选 1 / 3 条');
+    check('选中之后动作按钮全解禁', await batch(),
+      v => !!v && v.need > 0 && v.needAllOn, 'need>0 且全可用');
+    // ⚠ 定向重画：勾选框的节点身份必须没变。整页重画的话这个引用会失效 ——
+    //   而条目卡片里有输入框，整页重画会把正在编辑的节点换掉（光标飞）
+    check('⚠ 是定向重画：勾选框节点身份没变',
+      await ev(`window.__box0 === document.querySelectorAll('#st-panes .st-sel-box')[0]`), true);
+    // 对照组：点 summary 本身**确实**会开合 —— 证明上面那条不是因为「点了什么都不动」
+    await ev(`document.getElementById('st-entry-0').querySelector('summary').click()`);
+    await sleep(160);
+    check('对照组：点 summary 本身会把条目开合', await entryOpen(0), v => v !== openBefore);
+    await ev(`document.getElementById('st-entry-0').querySelector('summary').click()`);
+    await sleep(160);
+
+    // —— L3. 全选 / 反选 / 半选态 ——
+    await clickBox(1);
+    check('选两条时「全选」是半选态（indeterminate）', await allBox(),
+      v => !!v && v.ind === true && v.checked === false);
+    await ev(`document.getElementById('st-sel-all').click()`);
+    await sleep(160);
+    check('点「全选」⇒ 三条全选上', await boxes(), [true, true, true]);
+    check('全选之后「全选」勾上、且不再是半选态', await allBox(),
+      v => !!v && v.checked === true && v.ind === false);
+    await clickBatch('反选');
+    check('全选状态下点「反选」⇒ 一条都不剩', await boxes(), [false, false, false]);
+    await clickBatch('反选');
+    check('再点一次「反选」⇒ 又全回来了', await boxes(), [true, true, true]);
+
+    // —— L4. 批量停用 / 启用（带「只动选中的」对照） ——
+    await multiBook(3);
+    await clickBox(0);
+    await clickBox(1);
+    await clickBatch('停用');
+    // ⚠⚠ 对照组在这条里：只选了前两条，第三条**必须一点没动** ——
+    //    少了它，「批量」写成「全部」也会全绿
+    check('批量停用只动选中的两条，第三条不受影响', await field('enabled'),
+      [false, false, true], '[false, false, true]');
+    check('摘要上的小标签也跟着变成「停用」',
+      await ev(`[...document.querySelectorAll('#st-panes .st-entry')].map(d => {
+        const c = d.querySelector('summary .st-chip');
+        return c ? c.textContent : null; })`),
+      v => v.length === 3 && v[0] === '停用' && v[1] === '停用' && v[2] === '启用');
+    await clickBatch('启用');
+    check('批量启用把三条都打开了', await field('enabled'), [true, true, true]);
+
+    // —— L5. 批量设为常驻 / 取消常驻 ——
+    await multiBook(3);
+    await clickBox(0);
+    await clickBox(2);
+    await clickBatch('设为常驻');
+    check('批量设为常驻只动选中的（0 和 2）', await field('constant'),
+      [true, false, true], '[true, false, true]');
+    check('摘要上出现「常驻」小标签',
+      await ev(`[...document.querySelectorAll('#st-panes .st-entry')].map(d =>
+        !!d.querySelector('summary .st-chip.st-const'))`),
+      [true, false, true]);
+    await clickBatch('取消常驻');
+    check('批量取消常驻 ⇒ 三条都关掉', await field('constant'), [false, false, false]);
+
+    // —— L6. 批量删除：问不问 / 答不要 / 只删选中的 ——
+    await multiBook(4);
+    await clickBox(1);
+    await clickBox(3);
+    await ev(`window.__dlg = []; window.__confirmYes = false;`);
+    await clickBatch('删除');
+    check('答「不要」时先**问了一句**', await ev(`window.__dlg.length`), v => v === 1);
+    check('答「不要」⇒ 一条都没删', await names(), ['阿尔法', '贝塔', '伽马', '德尔塔']);
+    await ev(`window.__confirmYes = true; window.__dlg = [];`);
+    await clickBatch('删除');
+    check('答「要」⇒ 问了第二次', await ev(`window.__dlg.length`), v => v === 1);
+    // ⚠⚠ 删的是**不连续**的第 2、第 4 条。从前往后删的实现会下标错位，
+    //    留下的就不是「阿尔法 / 伽马」了
+    check('⚠ 只删勾中的那两条，顺序不变', await names(), ['阿尔法', '伽马']);
+    check('删完选中集清空', await selInfo(), v => v === '已选 0 / 2 条');
+
+    // —— L7. 单条删除会把死 id 从选中集里摘掉 ——
+    await multiBook(3);
+    await ev(`document.getElementById('st-sel-all').click()`);
+    await sleep(160);
+    // 走**真按钮**（条目卡片里那个 ✕ 删除），不是直接调 stDelEntry
+    await ev(`document.querySelector('#st-entry-0 .st-actions button.st-danger').click()`);
+    await sleep(260);
+    check('单条删除之后计数跟着减，不留死 id', await selInfo(), v => v === '已选 2 / 2 条');
+
+    // —— L8. 导出为世界书（形状 + 往返） ——
+    await multiBook(3);
+    await ev(`(function(){
+      stEditor.card.bookName = '探针世界书';
+      stEditor.card.bookEntries[0].constant = true;
+      stEditor.card.bookEntries[0].keys = [${JSON.stringify(W_A)}];
+      stEditor.card.bookEntries[0].secondaryKeys = [${JSON.stringify(W_B)}];
+      stEditor.card.bookEntries[1].enabled = false;
+      window.__dl = null;
+      window.stDownload = function (name, blob) { window.__dl = { name: name, blob: blob }; };
+      return true; })()`);
+    await clickBox(0);
+    await clickBox(1);
+    await clickBatch('导出为世界书');
+    const dl = await ev(`(async function(){
+      if (!window.__dl) return null;
+      return { name: window.__dl.name, text: await window.__dl.blob.text() }; })()`, true);
+    check('导出真的触发了下载', dl, v => !!v && !!v.text);
+    check('部分导出时文件名标出条数', dl && dl.name,
+      v => v === '探针世界书（选中 2 条）.json', '探针世界书（选中 2 条）.json');
+    let wi = null;
+    try { wi = JSON.parse(dl.text); } catch (e) { wi = null; }
+    check('导出的是一份能解析的 JSON', wi, v => !!v && typeof v === 'object');
+    // ⚠⚠ 这条是从 ST 源码里核出来的形状：世界书的 `entries` 是**以 uid 字符串为键的对象**，
+    //    不是数组（world-info.js 里到处是 data.entries[uid] / Object.values(data.entries)）。
+    //    写成数组的话 ST 那边会直接读不到条目
+    check('⚠ entries 是**对象**不是数组', wi && wi.entries,
+      v => !!v && !Array.isArray(v) && typeof v === 'object', 'object');
+    check('entries 的键是 "0" / "1"', wi && Object.keys(wi.entries || {}),
+      v => JSON.stringify(v) === '["0","1"]');
+    check('用的是 ST 世界书的字段名（key / keysecondary / uid / disable）',
+      wi && wi.entries && wi.entries['0'],
+      v => !!v && Array.isArray(v.key) && Array.isArray(v.keysecondary) &&
+          v.uid === 0 && typeof v.disable === 'boolean',
+      'key[] + keysecondary[] + uid + disable');
+    check('key / keysecondary 装的就是那两条词',
+      wi && wi.entries && wi.entries['0'],
+      v => !!v && v.key[0] === W_A && v.keysecondary[0] === W_B, [W_A, W_B]);
+    check('constant 原样带出去', wi && wi.entries && wi.entries['0'].constant, true);
+    check('disable 是 enabled 的反面（第二条是停用的）',
+      wi && wi.entries && wi.entries['1'].disable, true);
+    check('position 是**数字**（卡内那份才是字符串）',
+      wi && wi.entries && typeof wi.entries['0'].position, 'number');
+    // ⚠⚠ 往返才是「形状对不对」唯一可信的判据：把导出的 JSON 喂回产品自己的解析器，
+    //    条目一个不少、字段一个不差，才说明这份文件不是「看着像」
+    const rt = await ev(`(function(){
+      try {
+        const b = parseWorldBook(JSON.parse(${JSON.stringify(dl.text)}), '往返');
+        return { n: b.entries.length, names: b.entries.map(e => e.comment),
+                 keys: b.entries.map(e => e.keys),
+                 sec: b.entries.map(e => e.secondaryKeys),
+                 en: b.entries.map(e => e.enabled),
+                 con: b.entries.map(e => e.constant) };
+      } catch (e) { return { err: String(e.message) }; } })()`);
+    check('往返：导出的世界书能被自己的解析器读回来（2 条）',
+      rt && rt.n, v => v === 2, 2);
+    check('往返：备注一字不差', rt,
+      v => !!v && JSON.stringify(v.names) === '["阿尔法","贝塔"]', '阿尔法 / 贝塔');
+    check('往返：第 1 条的关键词 / 次关键词一字不差', rt,
+      v => !!v && JSON.stringify(v.keys[0]) === JSON.stringify([W_A]) &&
+          JSON.stringify(v.sec[0]) === JSON.stringify([W_B]), W_A + ' / ' + W_B);
+    // 对照组：第 2 条的关键词是夹具给的 'k1'，跟第 1 条**不同** ——
+    //   两边一样的话「有没有把条目接错」根本分不出来（六之二十六）
+    check('对照组：第 2 条带的是它自己的关键词，没串到第 1 条', rt,
+      v => !!v && JSON.stringify(v.keys[1]) === JSON.stringify(['k1']), ['k1']);
+    check('往返：启用与常驻也对得上', rt,
+      v => !!v && JSON.stringify(v.en) === '[true,false]' &&
+          JSON.stringify(v.con) === '[true,false]',
+      'en [true,false] / con [true,false]');
+    // 对照组：全选导出时文件名里**不该**有「选中 N 条」
+    await ev(`document.getElementById('st-sel-all').click()`);
+    await sleep(160);
+    await ev(`window.__dl = null;`);
+    await clickBatch('导出为世界书');
+    const dl2 = await ev(`(function(){ return window.__dl ? window.__dl.name : null; })()`);
+    check('对照组：全选导出时文件名不带「选中」', dl2,
+      v => v === '探针世界书.json', '探针世界书.json');
+
+    // —— L9. 新建卡之后选中清空 ——
+    await ev(`stNewCard(false)`);
+    await sleep(300);
+    check('新建卡之后选中集清空', await ev(`stEditor.bookSel.length`), v => v === 0);
+
+    // —— L10. 复古皮肤下方角 ——
+    await multiBook(2);
+    const radiusOf = () => ev(`(function(){
+      const el = document.getElementById('st-book-batch');
+      return el ? getComputedStyle(el).borderTopLeftRadius : null; })()`);
+    const normalR = await radiusOf();
+    check('非复古时批量栏是圆角', normalR, v => v && v !== '0px' && v !== '0px 0px', normalR);
+    await ev(`document.body.classList.add('retro-mode')`);
+    await sleep(220);
+    check('复古模式下批量栏变方角', await radiusOf(), v => v === '0px', '0px');
+    await ev(`document.body.classList.remove('retro-mode')`);
+    await sleep(160);
+
     // ============ K. 收尾 ============
     section('K. 收尾');
     check('世界书面板还在（没被标签控件带崩）',

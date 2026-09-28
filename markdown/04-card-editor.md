@@ -454,6 +454,63 @@ tEXt 块：keyword\0base64(UTF-8 JSON)
 | 一次粘多行 | **粘成连体词**（静默） | 按行切开，一行一个 |
 | 重复词 | 会重复堆着 | 不再重复加 |
 
+### 多选管理（第二十四轮）
+
+条目列表上方多了一条批量栏，每条摘要前面多了一个勾选框。
+
+| 函数 | 干什么 | 要点 |
+|---|---|---|
+| `stBookBatchBar(entries)` | 画那条批量栏 | 点名加进了 `check.js` 的 `RE_FN` |
+| `stBookSelIds()` | 选中的 id 集合 | ⚠ **会滤掉已经死掉的 id** |
+| `stBookSelIdx()` | 选中的**下标**（升序） | 批量操作用它 |
+| `stBookSelToggle(box)` / `stBookSelAll(on)` / `stBookSelInvert()` | 单个 / 全选 / 反选 | 只调 `stBookSelPaint()` |
+| `stBookSelPaint()` | 只重画勾选状态 + 计数 + 按钮禁用态 | ⚠ **不整页重画** |
+| `stBookBatch(kind)` | 批量改 `enabled` / `constant` | `on` / `off` / `constOn` / `constOff` |
+| `stBookBatchDel()` | 批量删除 | 先 `confirm`，**从后往前**删 |
+| `stEntryToWiJson(e, uid)` / `stBookToStandaloneJson(list)` / `stBookExportSel()` | 导出成独立世界书 | 见下 |
+
+**状态**：`stEditor.bookSel` = 选中的条目 **id** 数组。
+
+⚠ **为什么按 id 不按下标**：下标在增删 / 上下移动之后就失效了。按索引记的话会出现
+「勾了第 3 条，删掉第 1 条之后第 3 条自己变成了第 2 条」—— 用户勾的和实际动的不是同一批。
+MVU / 状态栏那两个选择器也是同一条理由。
+
+⚠ **它是会话级界面状态**：不落盘、不进卡、不进任何导出的 JSON，新建卡时清空。
+（对照：`extractSel` 反而是按**索引**记的 —— 那批条目在导入**之前**还没有 id。）
+
+#### 四个必须记住的坑
+
+1. **⚠⚠ 勾选框在 `<summary>` 里，点它不能把条目摊开** —— `<summary>` 的默认动作是
+   开合 `<details>`，所以 `onclick` 里要 `event.stopPropagation()`。套件配了
+   「点 summary 本身**确实**会开合」作对照 —— 少了它，「点了什么都不动」也全绿。
+2. **⚠ 半选态 `indeterminate` 没有对应的 HTML 属性** ⇒ 只能等节点挂上去之后由
+   `stBookSelPaint()` 补一次。`renderStEditor()` 收尾时调它。
+3. **⚠ 单次勾选必须定向重画** —— 条目卡片里有备注 / 正文 / 关键词标签三个输入框，
+   整页重画会把正在编辑的那个节点换掉（光标飞、滚动跳）。有节点身份断言盯着。
+4. **⚠ 批量删除要从后往前** —— 从前往后删的话，删掉第 2 条之后原来的第 5 条就变成了
+   第 4 条，后面记的下标全部错位。套件专门删**不连续**的两条来盯这件事。
+
+#### 导出的是**独立世界书**，不是卡内 `character_book`
+
+两个形状**不一样**（动手前回 ST 源码核过，不猜）：
+
+| | 卡内 `character_book` | 独立世界书（`worlds/*.json`） |
+|---|---|---|
+| 顶层 `entries` | 数组 | **以 uid 字符串为键的对象** |
+| 关键词 | `keys` / `secondary_keys` | `key` / `keysecondary` |
+| 条目标识 | `id` | `uid` |
+| 启用 | `enabled`（正向） | `disable`（**反向**） |
+| 位置 | `position` 字符串 `before_char` | `position` **数字** |
+
+⚠ `entries` 是对象这一点是从 `world-info.js` 核出来的 —— 那边到处是
+`data.entries[uid]` 和 `Object.values(data.entries)`，写成数组会直接读不到条目。
+
+⚠ ST 导入时会跑 `addMissingWorldInfoFields()` 按自己的模板补缺字段
+⇒ **少写是安全的，写错才是灾难**，所以只写我们真有的那些，不编造默认值。
+
+⚠ **判据是往返**：把导出的 JSON 喂回自己的 `parseWorldBook`，条目 / 备注 / 关键词 /
+启用 / 常驻全对得上才算数。「JSON 里有没有 `key` 这个字段」证明不了它能被读回来。
+
 ---
 
 ## 十、正则页（`stPaneRegex`）

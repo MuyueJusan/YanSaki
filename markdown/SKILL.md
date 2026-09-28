@@ -5673,3 +5673,34 @@ English. `new KeyboardEvent('keydown', { key: 'Enter', isComposing: true })` set
 so the guard is directly testable — **pair it with the positive case** ("after composition ends, Enter
 *does* commit"). Without the pair, an unconditional `return true` would also pass, and you'd have
 swapped a real bug for a feature that never fires.
+
+## Exporting to a foreign format: the criterion is a round-trip
+
+When the app writes a file meant to be read by *another* program, "the JSON has the field names I
+expected" is not evidence. Three ways it passes while the file is unreadable: `entries` written as an
+array where the consumer does `data.entries[uid]`; a boolean written in the **opposite polarity**
+(`enabled` where the consumer reads `disable`); an enum written as a string where the consumer does
+`Number(...)` and gets `NaN`. Every one of those keeps a field-name assertion green.
+
+**What to do instead:**
+
+1. **Do not infer the target shape from the shape you already have.** The most dangerous case is two
+   formats in the same domain that look nearly identical — an app-internal shape and the public spec.
+   They are *deliberately* different, and copying the one you already write is the natural mistake.
+   Read the consumer's source (one `WebFetch`) before writing a byte. In this project the card-embedded
+   `character_book` and the standalone world book differ in exactly that way: `entries` is an array in
+   one and an **object keyed by uid string** in the other.
+2. **Feed the export back into your own parser and compare field by field.** That is the only
+   criterion that can fail. Assert the count, the order, and each field's *value* — not its presence.
+   Add a control: give two source records *different* values, or "read the wrong record" also passes.
+3. **If the consumer backfills missing fields, write less.** SillyTavern runs
+   `addMissingWorldInfoFields()` on import, filling every absent key from its own template. So an
+   omitted field is repaired, while a *wrong* default you invented **overrides** that repair. Omit
+   rather than guess; the same reasoning applies to any consumer with a schema migration step.
+
+Also from the same round: **do not hard-code counts that the DOM can tell you.** An assertion said
+"all **six** action buttons are disabled"; the container actually held seven (a seventh control shared
+the class). Prefer a derived set — mark the buttons that *need* a selection (`.st-need-sel`) and assert
+over that, then add a second assertion that the marking is complete (every button in that row carries
+it). Without the second one, forgetting to mark a new button means it is *never* disabled, and no count
+notices.
