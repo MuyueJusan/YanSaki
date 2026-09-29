@@ -94,7 +94,7 @@ G:\saki\
 
 ### 本目录里有两类文件：**文档** 和 **镜像**
 
-上面 `01…06` / `README` / `CHANGELOG` 是文档，直接改。另外五份**不是文档，是镜像** ——
+上面 `01…06` / `README` / `CHANGELOG` 是文档，直接改。另外六份**不是文档，是镜像** ——
 源头在别处，**改这里没有任何效果**（应用不读它们），只会让你以为记忆已经更新了：
 
 | 本目录 | 源头 | 是什么 |
@@ -104,6 +104,7 @@ G:\saki\
 | `YYYY-MM-DD.md` | `.workbuddy-ai/memory/YYYY-MM-DD.md` | 分段工作日志，**只追加** |
 | `SKILL.md` | `~/.workbuddy-ai/skills/verify-single-file-html-app/SKILL.md` | 「怎么验证单文件 HTML 应用」的技能原文 |
 | `SKILL-git-push.md` | `~/.workbuddy-ai/skills/git-push-existing-github-repo/SKILL.md` | 「把本地文件夹推进一个**已有**仓库」的技能原文（远端可能是在跑的线上站点、用 `reset --soft FETCH_HEAD` 代替 `--force`、转私有会让 Pages 变 404 等） |
+| `SKILL-android-apk.md` | `~/.workbuddy-ai/skills/wrap-html-in-android-apk/SKILL.md` | 「把单文件 HTML 页面封成可安装的 Android APK」的技能原文（免 Gradle 手工链路；`file://` 是 opaque origin 会打死 `localStorage`；javac 必须 JDK 11/17，21+ 会让 d8 内部崩） |
 
 放一份在这里是为了**跟着项目走**（`.workbuddy-ai/` 不一定跟仓库一起备份）。
 代价是**会漂** —— 改完记忆或技能之后顺手同步一遍，**方向永远是「从源头拷过来」**：
@@ -113,6 +114,7 @@ cd /g/saki
 for f in .workbuddy-ai/memory/*.md; do cp "$f" "markdown/$(basename "$f")"; done
 cp "C:/Users/YanSaki/.workbuddy-ai/skills/verify-single-file-html-app/SKILL.md" markdown/SKILL.md
 cp "C:/Users/YanSaki/.workbuddy-ai/skills/git-push-existing-github-repo/SKILL.md" markdown/SKILL-git-push.md
+cp "C:/Users/YanSaki/.workbuddy-ai/skills/wrap-html-in-android-apk/SKILL.md" markdown/SKILL-android-apk.md
 ```
 
 ### 反向：在**新设备**上把技能与记忆装回去（`setup-dev.sh`）

@@ -120,25 +120,53 @@ function die(msg) { console.log('\n❌ ' + msg + '\n（远端 ref 未改动）')
 
     // ---------- 远端现状 ----------
     const ref = await api(tok, '/repos/' + REPO + '/git/ref/heads/' + BRANCH);
-    if (ref.status !== 200) die('读 ref 失败 HTTP ' + ref.status + ' ' + JSON.stringify(ref.body));
-    const remoteHead = ref.body.object.sha;
+    const isNewBranch = ref.status === 404;
+    if (!isNewBranch && ref.status !== 200) {
+        die('读 ref 失败 HTTP ' + ref.status + ' ' + JSON.stringify(ref.body));
+    }
 
     const localHead = await git('rev-parse', 'HEAD');
-    console.log('== 现状 ==');
-    console.log('  远端 refs/heads/' + BRANCH + ' = ' + remoteHead);
-    console.log('  本地 HEAD                 = ' + localHead);
+    let remoteHead;
+
+    if (isNewBranch) {
+        // ⚠ 新分支：远端根本没有这个 ref。**不能拿 main 硬当基准** ——
+        //   本地这个分支可能基于任何东西。正确做法是沿本地历史**往回走**，
+        //   找到第一个「远端已经有」的 commit，那才是真正的基准。
+        //   （2026-09-29 推 apk 分支就是这个情况：它 = main 的 head + 1 个 commit，
+        //     所以只有那一个 commit 需要真的建对象。）
+        console.log('== 现状 ==');
+        console.log('  远端 refs/heads/' + BRANCH + ' = （不存在，将新建）');
+        console.log('  本地 HEAD                 = ' + localHead);
+        remoteHead = null;
+        for (const s of (await git('rev-list', localHead)).split('\n')) {
+            const q = await api(tok, '/repos/' + REPO + '/git/commits/' + s);
+            if (q.status === 200) { remoteHead = s; break; }
+        }
+        if (!remoteHead) {
+            die('本地历史里没有一个 commit 在远端存在 ⇒ 这是个完全独立的根。\n' +
+                '   本脚本只做「在已有历史上追加」，不做「凭空造根」。');
+        }
+        console.log('  远端已有的最深祖先        = ' + remoteHead +
+            '  (' + (await git('log', '-1', '--format=%s', remoteHead)) + ')');
+    } else {
+        remoteHead = ref.body.object.sha;
+        console.log('== 现状 ==');
+        console.log('  远端 refs/heads/' + BRANCH + ' = ' + remoteHead);
+        console.log('  本地 HEAD                 = ' + localHead);
+    }
+
     if (remoteHead === localHead) {
         console.log('\n✅ 已经一致，没什么要推的。');
         process.exit(0);
     }
 
-    // 远端必须是本地 HEAD 的祖先，否则不是快进 —— 先拉再推，别硬来
+    // 基准必须是本地 HEAD 的祖先，否则不是快进 —— 先拉再推，别硬来
     let ancestors;
     try {
         ancestors = (await git('rev-list', localHead)).split('\n');
     } catch (e) { die('读本地历史失败：' + e.message); }
     if (!ancestors.includes(remoteHead)) {
-        die('远端 HEAD 不是本地 HEAD 的祖先 ⇒ 不是快进。\n' +
+        die('基准 ' + remoteHead + ' 不是本地 HEAD 的祖先 ⇒ 不是快进。\n' +
             '   远端有本地没有的东西，或历史分叉了。**先 `git fetch` 看清楚**，别用 force。');
     }
 
@@ -208,10 +236,17 @@ function die(msg) { console.log('\n❌ ' + msg + '\n（远端 ref 未改动）')
         prevTree = wantTree;
     }
 
-    // ---------- 移动 ref（只有全部 sha 一致才走到这儿）----------
-    const up = await api(tok, '/repos/' + REPO + '/git/refs/heads/' + BRANCH, 'PATCH',
-        { sha: localHead, force: false });
-    if (up.status !== 200) die('移动 ref 失败 HTTP ' + up.status + ' ' + JSON.stringify(up.body));
+    // ---------- 移动 / 新建 ref（只有全部 sha 一致才走到这儿）----------
+    // ⚠ 新分支要用 POST `/git/refs` 建；已存在的分支才用 PATCH `/git/refs/heads/<b>`。
+    //   两者都**不带 force** —— 非快进交给 GitHub 自己拒掉。
+    const up = isNewBranch
+        ? await api(tok, '/repos/' + REPO + '/git/refs', 'POST',
+            { ref: 'refs/heads/' + BRANCH, sha: localHead })
+        : await api(tok, '/repos/' + REPO + '/git/refs/heads/' + BRANCH, 'PATCH',
+            { sha: localHead, force: false });
+    if (up.status !== 200 && up.status !== 201) {
+        die('移动/新建 ref 失败 HTTP ' + up.status + ' ' + JSON.stringify(up.body));
+    }
 
     const after = await api(tok, '/repos/' + REPO + '/git/ref/heads/' + BRANCH);
     const ok = after.status === 200 && after.body.object.sha === localHead;
