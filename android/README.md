@@ -49,6 +49,23 @@ SDK 不在默认位置就 `ANDROID_SDK=... bash build.sh`。
 aapt2 compile → aapt2 link → javac → d8 → 追加 classes.dex → zipalign → apksigner
 ```
 
+---
+
+## 下载
+
+APK **不进仓库**（是生成物），挂在这个分支对应的 **Release** 上：
+
+| tag | commit | 附件 | 说明 |
+|---|---|---|---|
+| [`apk-v1.1`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.1) | `9a187f3` | `YanSakiShed-1.0.apk` 2 705 463 字节<br>sha1 `a4f3ee2f6289469d29d4eb0a652cbaf8bfbe5c49` | **当前版**：字体内嵌 + 可直连 Vertex AI |
+| [`apk-v1.0`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.0) | `02a874a` | 1 083 285 字节 | 最早那版，只有内嵌页面 |
+
+⚠ **每次重建都要回头核对 Release 附件** —— 附件是 APK 的**第二份拷贝**，不会自己更新。
+它挂着一个旧版的时候最坑：别人从你给的链接下载，拿到的是旧 App，而且不报错。
+（`apk-v1.1` 上传后我把附件**下载回来核过 sha1**，与本地逐字节一致。）
+⚠ APK 内部的 `versionName` 仍是 `1.0`（没改）⇒ **`v1.0` 和 `v1.1` 两个包顶着同一个版本号**，
+只有 release tag 能区分它们。
+
 不引 Gradle 的三个理由：省 ~130MB 发行包和它要拉的一堆依赖；绕开「本机 JDK 24 与 AGP 的版本窗口」这个不确定性；这个 App 只有一个 Activity、零第三方依赖，用不上构建系统的任何能力。
 
 ---
