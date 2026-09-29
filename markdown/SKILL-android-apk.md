@@ -5,9 +5,9 @@ description: >
   with a WebView shell — no Gradle, no Android Studio, no third-party dependency.
   Trigger when the user says "打包成 APK", "做个安卓版", "封装成 app", "wrap this page in an APK",
   or wants an installable Android build of a local HTML project.
-  Covers the manual aapt2 → javac → d8 → zipalign → apksigner pipeline, the two failure modes that
-  cost the most time (opaque origin killing localStorage; javac version crashing d8), and how to
-  verify the result without a device.
+  Covers the manual aapt2 → javac → d8 → zipalign → apksigner pipeline, the failure modes that
+  cost the most time (opaque origin killing localStorage; javac version crashing d8; a WebView
+  origin being blocked by CORS on third-party APIs), and how to verify the result without a device.
 agent_created: true
 ---
 
@@ -25,7 +25,7 @@ dependency, resource shrinking, Kotlin, or Play Store AABs. Don't force it there
 
 ---
 
-## 0. The three things that decide success
+## 0. The four things that decide success
 
 Get these wrong and you will spend hours on symptoms that point nowhere near the cause.
 
@@ -131,6 +131,56 @@ and every download path goes through it.
 On the Java side, `@JavascriptInterface` + `MediaStore.Downloads` (API 29+) writes to the Downloads
 folder with **no runtime permission**.
 
+### 0.4 Cross-origin API calls need a `fetch` shim — and it must be desktop-testable
+
+If the page calls a third-party API (Google Vertex / Gemini, OpenAI, …) the request leaves fine but
+the response is **unreadable**: the service sends no `Access-Control-Allow-Origin` for a WebView
+origin. Symptom: `TypeError: Failed to fetch`, with only a vague console message.
+
+Two ways out. Prefer the second:
+
+| | `shouldInterceptRequest` | injected `fetch` shim |
+|---|---|---|
+| page changes | none | none (wrap the browser API) |
+| correctness depends on | three behaviours you cannot test off-device: whether your synthesized response needs CORS headers, whether preflight is also intercepted, whether streaming must return synchronously from the background thread | the browser's own `Response` / `ReadableStream` / `AbortSignal` |
+| testable without a device | no | **yes** — run the real shim under Node |
+
+The design rule that makes it testable:
+
+> **Put the forwarding core in classes that import no `android.*`.**
+
+Then the *same* source compiles and runs on a **desktop JVM**. A Node script replays the exact strings
+the Java side would hand to `evaluateJavascript`, while a local fake server records what it actually
+sent — so the assertion is a **round trip** (bytes out == bytes back), not a self-comparison.
+Guard the property with a class count: if someone adds an `android.*` import, the desktop compile
+fails and the assertion goes red.
+
+⚠ Write the callback→`evaluateJavascript` string builder as its **own** class too. Otherwise the test
+has to re-implement the escaping, and you end up testing the test.
+
+⚠ Inject via `onPageFinished`. Safe only if the page never stores `fetch` in a variable — grep for
+`window.fetch =`, `= fetch`, `const fetch`, `fetch.bind` before relying on it.
+
+Things that silently break streaming — each worth an assertion:
+
+- **`Accept-Encoding: identity`.** Otherwise `HttpURLConnection`'s transparent gzip buffers the whole
+  SSE into one block and "streaming" quietly disappears (no error).
+- **Non-2xx must not throw.** Read `getErrorStream()` and forward the body, or the page can only say
+  `HTTP 400` instead of *why* it was rejected.
+- **Emit the status line before the body**, so the page's `fetch` resolves immediately.
+
+⚠ Allow-list the hosts the shim may take over, and keep that list in **one** place. If the JS copies
+it, editing Java and forgetting JS shows up as "the shim took the request, then rejected it".
+
+⚠ Leave one method as the **seam** for "route through a local gateway instead":
+
+```java
+public static String upstream(String url) { return url; }   // change this one line only
+```
+
+That is what lets "native in-process forwarding" and "bundle a local open-source gateway" be
+fallbacks for each other — same seam, different downstream. Keep the loopback hosts in the allow-list.
+
 ---
 
 ## 1. Toolchain
@@ -198,7 +248,7 @@ Manifest notes:
 Then **assert** it, in the same script: `resources.arsc` must be `ZIP_STORED`, and `classes.dex`
 must appear exactly once. Fail loudly if not.
 
-## 4. Verify — and the two readings that look like failures but aren't
+## 4. Verify — and the three readings that look like failures but aren't
 
 ```bash
 aapt2 dump badging App.apk            # package / version / launchable-activity / icon
@@ -215,6 +265,36 @@ changing them.)
 ⚠ **`zipalign` misspells its own success message** — `Verification succesful` (one `s`). Never grep
 that string; use the exit code.
 
+⚠ **`zipalign WARNING: header mismatch`, one line per nested asset, is a false alarm — and its exit
+code is still 0.** Root cause: on Windows, `aapt2` writes the *Local File Header* name for an asset
+that lives in a subdirectory using the platform separator `\`, while the *Central Directory* entry
+uses `/`. `zipalign`'s `ZipEntry::compareHeaders()` ends with `strcmp(CD name, LFH name)`, hence one
+warning each. An asset at the archive root (`assets/index.html`) has no separator, so you see
+**zero** warnings until you add a subdirectory.
+
+Why it is harmless — and why the assertion must be on the **shipped** file, not on "were there
+warnings":
+
+| stage | entries with LFH name != CD name | zipalign warnings |
+|---|---|---|
+| `aapt2 link` output (`base.apk`) | N (the nested assets) | **N** |
+| after `zipalign` (`aligned.apk`) | 0 | **0** |
+| shipped (signed) APK | 0 | **0** |
+
+`zipalign` rebuilds the local headers **from the central directory**, so it normalises the
+backslashes on the way through — its own output is clean. And `apksigner` **hard-refuses** such an
+APK (`com.android.apksig.zip.ZipFormatException: Name mismatch between Local File Header and
+Central Directory`, rc=1), so the defect is structurally unable to ship.
+
+⇒ Assert it yourself, by parsing the EOCD + central directory and comparing each entry's LFH name to
+its CD name byte-for-byte. Do **not** assert "the build printed no warnings" — `zipalign` exits 0
+either way, and the warning scrolls past in a long build log.
+
+How to localise it if you hit a variant: pull `ZipEntry.cpp` / `ZipFile.cpp` / `ZipAlign.cpp` from
+`aosp-mirror/platform_build`, then rebuild each entry into a standalone zip **preserving its raw
+LFH+CD bytes** (rewriting only the 4-byte local-header offset) and feed each to `zipalign`. The hits
+name the culprits; a raw byte dump of LFH vs CD then shows the actual difference.
+
 Plus these content assertions, which are the ones that actually catch a bad build:
 
 - `assets/index.html` inside the APK is **byte-identical** to the source page (sha1), and its line
@@ -223,7 +303,26 @@ Plus these content assertions, which are the ones that actually catch a bad buil
   wrapper depends on (the reserved hostname, the JS bridge name).
 - `AndroidManifest.xml` is present; `classes.dex` appears exactly once.
 
-## 5. The false-green that costs the most
+⚠ **Assert symbol names as whole strings, not substrings.** `b'aiAbort' in dex` stays green when the
+method is renamed to `aiAbortZZZ` — and since the shim calls `native.aiAbort(...)` directly, **nothing
+in the chain reports the rename** until the feature silently no-ops on a device. Parse the dex
+`string_ids` table and require exact equality:
+
+```
+header: string_ids_size @56, string_ids_off @60
+each id: 4-byte offset -> string_data_item = uleb128 utf16_size + MUTF-8 bytes + 0x00
+         (MUTF-8 encodes U+0000 as C0 80, so no embedded NUL)
+```
+
+Method names and type descriptors (`Lpkg/Class;`) live in that table as whole strings, so exact
+matching works for them. Things that only exist as a *fragment* of a longer literal (e.g. a JS
+expression built at runtime) can only be matched as substrings — write those assertions separately
+and say in the message that they are the weak tier.
+
+⚠ **Always pair a "this is present" assertion with a "this is absent" control** (a type descriptor
+that does not exist must not be found), or the assertion may be **vacuously true**.
+
+## 5. The false-greens that cost the most
 
 **javac exits 0 even when it fails to compile anything, and d8 "succeeds" on an empty jar.**
 
@@ -246,6 +345,43 @@ N=$(find out -name '*.class' | wc -l)
 
 And put the same guard in the real build script (`NCLASS >= <expected>`), because the same trap is
 waiting there.
+
+**A harness that dies mid-run makes "0 red" indistinguishable from "all green".**
+
+Inject a deliberate defect to prove your assertions are not vacuous — then note that if the injection
+breaks the harness itself (a bad indent inside an embedded script is enough), it prints **no
+failures at all**. Counting red lines yields `0`, which is exactly what a clean run yields.
+
+⇒ Before comparing a red-line set, assert the harness **reached its summary line**:
+
+```python
+check('== PASS ==' in out or '== FAIL ==' in out, 'harness ran to completion')
+```
+
+Same family as "a driver bug disguised as a product bug" — but this one disguises itself as
+**success**, which is worse, because you never go looking.
+
+**A `rm`/cleanup failure can be silent, and the residue becomes next run's ground truth.**
+
+In a script using `set -uo pipefail` (**no `-e`**), a failing `rm -rf` does not stop anything. The
+same line under `set -e` aborts loudly — so the identical code is loud in one script and mute in
+another. Two things to know:
+
+- The failure can be a **race**, not a broken delete: if the directory was just written by a child
+  process you only `kill`ed (whose `EXIT` trap has not run yet), the file is still open and Windows
+  refuses the delete. It succeeds seconds later. Don't go spelunking in the delete tooling — **check
+  ordering first.**
+- What makes it worth fixing is the consequence: the residue is the previous run's recorded
+  fixtures, and the test compares against them **as ground truth**. A run that fails to produce one
+  will happily compare against last run's copy and pass.
+
+⇒ Stop the child (and `wait` for it to actually exit) → delete → **read back and confirm** → refuse
+to continue if it is still there. And reverse-test that gate: hold a file open from another process
+and check the gate really refuses.
+
+⚠ Any file a probe creates should be deleted unconditionally — register the cleanup with `atexit`
+(or equivalent) so it covers the normal exit, an assertion-failure `sys.exit`, **and** an exception.
+A single `rmtree` at the end of the script only covers the first.
 
 ## 6. Icons from an avatar image
 
@@ -273,8 +409,52 @@ phone gets a download URL. Upload via `POST https://uploads.github.com/repos/{o}
 rebuilds produce the same signature, so updates install over the old version instead of demanding
 an uninstall. Label it clearly as debug — it can never go to the Play Store.
 
+⚠⚠ **Re-check the release after every rebuild.** The release asset is a *second copy* of the APK, and
+it does not update itself. A release that still holds the pre-font / pre-feature build is the worst
+kind of stale: the user downloads from the URL you gave them and silently gets the old app.
+
+⚠⚠ **The check is a round trip, not a metadata comparison.** Download the asset back and compare it
+**byte for byte** (`Buffer.equals` / sha1) against the local file. Do *not* settle for `size` +
+`created_at` off the asset object — those describe the *upload*, not what a *download* returns.
+Hit for real: the upload was fine (`201`, `size` = 2 709 559) yet the download came back as
+**1514 bytes of asset-metadata JSON**, because the header was built as
+`Object.assign({ 'Accept': 'application/octet-stream' }, H)` — and `H` (carrying
+`Accept: application/vnd.github+json`) is **last**, so it silently overwrote the octet-stream value.
+⇒ Always `Object.assign({}, baseHeaders, { overrides })`: **overrides go last.**
+⚠ Keep the check **fail-closed**. It refused to certify that release even though the artifact turned
+out to be fine. A check that passes only "when you happen to be right" is an always-green assertion
+in disguise — and the way you find out it was broken is that it *fails*.
+
+⚠ **The version has exactly one source of truth: `versionName` in `AndroidManifest.xml`.** Derive the
+APK path from it everywhere (`build.sh`, `verify.sh`, any reverse-test tool) rather than hardcoding
+`App-1.0.apk`. Hardcoded names turn a version bump into something that *looks like a broken build*:
+every tool reports "APK not found" / "precondition failed" at once, and the failure points at the
+wrong thing. Also purge the previous version's artifact on rebuild — two APKs side by side means one
+of them is wrong.
+
+⚠ Make the publisher **refuse when the tag already exists** (no silent overwrite — overwriting erases
+"who downloaded the old one"), and give it a separate **verify-only mode** that re-checks an existing
+release without writing anything, since the publish path has no other way back. Default to dry-run;
+a script that writes to the remote should never do so as its default action.
+
+⚠ Say which build a release is, in the release notes: the in-app `versionName`, the embedded page's
+sha1, and the asset's sha1. If the `versionName` did not change between two builds, say that too —
+two different builds then carry the same version label.
+
 ## 8. State the limits honestly
 
 Without a device or emulator you have **not** verified that the app installs and runs. Say so.
 Static verification (manifest, signature, alignment, dex contents, byte-identical assets) is strong
 evidence, but it is not the same claim. Don't let a green checklist imply "it works on a phone".
+
+Name the specific gaps rather than one vague disclaimer. For a wrapper with a JS bridge and an API
+forwarder, the honest list is:
+
+1. **The actual delivery timing of `evaluateJavascript`.** A desktop test hands the strings to the
+   shim directly; in a real WebView they are posted asynchronously to the JS thread. It should be
+   order-preserving (same thread, FIFO), but that was **not measured**.
+2. **Actually reaching the remote service.** If the build machine cannot resolve or connect to it
+   (a blocked proxy, for instance), the end-to-end path is unverified no matter how many local
+   assertions pass.
+3. **No device / emulator run at all** — so "installs, launches, and streams" is still an open
+   question, not a verified fact.
