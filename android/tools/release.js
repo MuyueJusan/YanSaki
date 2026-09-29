@@ -75,10 +75,50 @@ function die(msg) { console.error('❌ ' + msg); process.exit(1); }
 
     // 把附件下回来（不比对，只取字节）。⚠ 跨域重定向到 objects.githubusercontent.com 时
     // fetch 会按规范丢掉 Authorization —— 那是**对的**，签名 URL 自带凭据。
-    const fetchAsset = async (url) => {
-        const r = await fetch(url, { headers: dlHeaders });
-        if (r.status !== 200) die('下载附件失败 HTTP ' + r.status);
-        return Buffer.from(await r.arrayBuffer());
+    // 把附件下回来（不比对，只取字节）。
+    // ⚠⚠ 必须带**超时**：2026-09-30 实测 —— `--go` 会在这一步**静默挂死**：
+    //   输出停在「== 回读核对（往返判据）==」之后**一行都没有**，然后被外部掐掉（SIGTERM）。
+    //   ⇒ 后果是**发布路径的往返判据从来没跑完过**，只能靠事后再跑一次 `--verify` 补。
+    //   ⇒ 没有超时的请求 = 把「失败」伪装成「卡住」。超时 + 重试，让它要么成、要么报错。
+    // ⚠ 跨域重定向到 objects.githubusercontent.com 时 fetch 会按规范丢掉 Authorization
+    //   —— 那是**对的**，签名 URL 自带凭据。
+    const fetchAsset = async (url, tries = 3) => {
+        let lastErr = null;
+        for (let i = 1; i <= tries; i++) {
+            try {
+                const r = await fetch(url, { headers: dlHeaders, signal: AbortSignal.timeout(60000) });
+                if (r.status !== 200) { lastErr = new Error('HTTP ' + r.status); continue; }
+                return Buffer.from(await r.arrayBuffer());
+            } catch (e) {
+                lastErr = e;
+                console.log('   ⚠ 第 ' + i + ' 次取附件失败：' + (e && e.message ? e.message : e) + '，重试…');
+            }
+        }
+        die('下载附件失败（试了 ' + tries + ' 次）：' + (lastErr && lastErr.message ? lastErr.message : lastErr));
+    };
+
+    const sha1Of = (b) => crypto.createHash('sha1').update(b).digest('hex');
+
+    // ⚠⚠ 往返判据**只有这一份实现**，`--go` 和 `--verify` 都调它。
+    //   为什么必须共用：`--go` 原来用的是**上传响应**里的 `asset.url`，而 `--verify` 用的是
+    //   「重新列资产」拿到的 `hit.url` —— 两条路看着一样，实际不是同一段代码，
+    //   于是「`--verify` 能跑完」证明不了「`--go` 能跑完」（实测确实不能）。
+    //   ⇒ 判据只能有一份实现，才谈得上「验过就是验过」。
+    const roundTrip = async (relId, name, local, sha1) => {
+        const assets = await api('/repos/' + REPO + '/releases/' + relId + '/assets');
+        if (assets.status !== 200) die('列资产失败 HTTP ' + assets.status);
+        const hit = (assets.json || []).find(a => a.name === name);
+        if (!hit) die('release ' + relId + ' 里没有 ' + name +
+            '（现有：' + ((assets.json || []).map(a => a.name).join(', ') || '一个都没有') + '）');
+        console.log('  asset id = ' + hit.id + '   远端登记大小 ' + hit.size + ' 字节');
+        const back = await fetchAsset(hit.url);
+        console.log('  下载回来     ' + back.length + ' 字节  sha1 ' + sha1Of(back));
+        console.log('  本地 APK     ' + local.length + ' 字节  sha1 ' + sha1);
+        if (!back.equals(local)) {
+            die('⚠⚠ 附件与本地 APK **不一致** —— 这个 release 不能对外说「就是它」。\n' +
+                '   （release id=' + relId + '，去网页上删掉重来）');
+        }
+        console.log('  ✅ 逐字节一致');
     };
 
     // ---- 1. 这一版叫什么、在哪 ----
@@ -109,21 +149,8 @@ function die(msg) { console.error('❌ ' + msg); process.exit(1); }
         console.log('\n== 校验已有 release（不写远端）==');
         const rel = await api('/repos/' + REPO + '/releases/tags/' + TAG);
         if (rel.status !== 200) die('release ' + TAG + ' 不存在（HTTP ' + rel.status + '）—— 还没发过');
-        const assets = await api('/repos/' + REPO + '/releases/' + rel.json.id + '/assets');
-        if (assets.status !== 200) die('列资产失败 HTTP ' + assets.status);
-        const list = assets.json || [];
-        const name = path.basename(apkPath);
-        const hit = list.find(a => a.name === name);
-        if (!hit) die('release ' + TAG + ' 里没有 ' + name +
-            '（现有：' + (list.map(a => a.name).join(', ') || '一个都没有') + '）');
-        console.log('  release id = ' + rel.json.id + '   asset id = ' + hit.id);
-        console.log('  远端登记大小 ' + hit.size + ' 字节');
-        const back = await fetchAsset(hit.url);
-        const backSha = crypto.createHash('sha1').update(back).digest('hex');
-        console.log('  下载回来     ' + back.length + ' 字节  sha1 ' + backSha);
-        console.log('  本地 APK     ' + local.length + ' 字节  sha1 ' + sha1);
-        if (!back.equals(local)) die('⚠⚠ 附件与本地 APK **不一致** —— 这个 release 挂的不是这个包');
-        console.log('  ✅ 逐字节一致');
+        console.log('  release id = ' + rel.json.id);
+        await roundTrip(rel.json.id, path.basename(apkPath), local, sha1);
         console.log('\n  https://github.com/' + REPO + '/releases/tag/' + TAG);
         process.exit(0);
     }
@@ -192,16 +219,10 @@ function die(msg) { console.error('❌ ' + msg); process.exit(1); }
     console.log('  asset id = ' + asset.id + '   ' + asset.size + ' 字节');
 
     // ---- 6. ⚠⚠ 下载回来核 sha1（判据是往返，不是「上传成功」）----
+    // ⚠ 走**和 `--verify` 同一份** roundTrip：不再用上传响应里的 `asset.url`
+    //   （那条路 2026-09-30 实测会静默挂死，见 fetchAsset 的注释）。
     console.log('\n== 回读核对（往返判据）==');
-    const back = await fetchAsset(asset.url);
-    const backSha = crypto.createHash('sha1').update(back).digest('hex');
-    console.log('  远端附件 ' + back.length + ' 字节  sha1 ' + backSha);
-    console.log('  本地 APK ' + local.length + ' 字节  sha1 ' + sha1);
-    if (!back.equals(local)) {
-        die('⚠⚠ 附件与本地 APK **不一致** —— 这个 release 不能对外说「就是它」。\n' +
-            '   （release id=' + relId + ' asset id=' + asset.id + '，去网页上删掉重来）');
-    }
-    console.log('  ✅ 逐字节一致');
+    await roundTrip(relId, name, local, sha1);
 
     console.log('\n== 完成 ==');
     console.log('  https://github.com/' + REPO + '/releases/tag/' + TAG);
