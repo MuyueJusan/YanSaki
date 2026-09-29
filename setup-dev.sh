@@ -77,7 +77,8 @@ echo "== 技能  ->  $DEST_SKILLS =="
 # 「一份镜像文件 -> 一个技能目录」，路径对不上，所以这里显式映射。
 for pair in \
   "SKILL.md:verify-single-file-html-app" \
-  "SKILL-git-push.md:git-push-existing-github-repo" ; do
+  "SKILL-git-push.md:git-push-existing-github-repo" \
+  "SKILL-android-apk.md:wrap-html-in-android-apk" ; do
   install "$MIRROR/${pair%%:*}" "$DEST_SKILLS/${pair##*:}/SKILL.md" "${pair##*:}/SKILL.md"
 done
 

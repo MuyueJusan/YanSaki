@@ -13,3 +13,11 @@ _reverse*.bak
 *~
 Thumbs.db
 desktop.ini
+
+# Android 封装版（apk 分支）的构建产物 —— **不进仓库**。
+# android/assets/index.html 是 build.sh 从仓库根的 ../saki.html 复制来的。
+# ⚠ 它**必须**是生成物：一旦入库就有两份 HTML，「哪份是新的」这个问题会立刻出现 ——
+#   仓库根的 index.html 已经因为这个坑过一次（见 README 的「生成物」一节）。
+android/build/
+android/assets/
+
