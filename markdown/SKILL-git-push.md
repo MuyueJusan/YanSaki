@@ -510,6 +510,39 @@ const line = fs.readFileSync(credPath, 'utf8').split(/\r?\n/).find(l => l.trim()
 const TOKEN = line.match(/^https:\/\/[^:]+:([^@]+)@/)[1];   // never log TOKEN
 ```
 
+### The mirror-image trap: a green deploy where the live bytes *should not* change
+
+Not every "the live sha1 didn't move" is a failure. If the commit **didn't touch the file the site
+serves**, the live bytes are *supposed* to stay identical — and a naive check reads that as "deploy
+didn't land".
+
+Observed (2026-09-29, `MuyueJusan/YanSaki`): the pushed commit changed only `markdown/*.md`
+(notes and memory mirrors). `index.html` — the file Pages actually serves — was untouched. So:
+
+```
+本地  index.html  1682949 字节  sha1 76e617dc…
+线上  1682949 字节  sha1 76e617dc…     <- identical, and that is CORRECT here
+```
+
+The check that *does* prove the deploy ran is the run's `head_sha`, not the live hash:
+
+```js
+GET /repos/<o>/<r>/actions/workflows/static.yml/runs?per_page=5
+// 2026-09-29T09:47:29Z  completed/success  sha=43cf94f   <- the docs-only commit
+```
+
+So verify **both**, and read them together:
+
+| commit touches | live sha1 | correct conclusion |
+|---|---|---|
+| the served file | must change to the new local sha1 | ✅ deployed |
+| only docs / config | **must stay the same** | ✅ deployed, nothing to serve |
+| the served file, but sha1 unchanged | unchanged | ❌ deploy did **not** land |
+
+⚠ Don't "fix" the second row by re-pushing or re-dispatching — there is nothing wrong, and a
+needless `workflow_dispatch` just burns a concurrency slot. The distinguishing question is always
+**"did this commit touch the deployed path?"**, answered by `git show --stat`, not by the hash alone.
+
 ## 10. Windows: "the file vanished" — check the Recycle Bin
 
 Deletions in some sandboxed / agent environments are redirected to the Recycle Bin instead of being
@@ -537,5 +570,5 @@ nothing external is deleting things — the deletions are yours.
 - [ ] Remote verified via `ls-remote` + tree blob shas
 - [ ] No secrets in `git grep`; credential file untracked
 - [ ] **The credential can actually write** — a read-only token passes every read probe; prove it with a non-destructive write (`POST /git/blobs`), not by inference from `permissions.push`
-- [ ] **Deploy actually landed** — the site's live bytes/sha1 match the local file, not just "the push succeeded"
+- [ ] **Deploy actually landed** — the site's live bytes/sha1 match the local file, not just "the push succeeded". ⚠ But if the commit didn't touch the served file, the live sha1 **should** stay put — cross-check the run's `head_sha` instead of "fixing" a non-problem (§9)
 - [ ] Only **one** workflow deploys to the `pages` environment (no Hugo/Jekyll starter workflows fighting it for the concurrency group)
