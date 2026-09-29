@@ -342,6 +342,46 @@ git ls-files | grep -c credentials        # must be 0
 **A PAT pasted into the conversation must never reach a committed file.** Recommend revoking it once
 the session is over.
 
+### The token "has push access" — right up until you actually push
+
+A freshly rotated fine-grained PAT can look completely healthy on every read probe while being unable
+to write a single byte:
+
+| probe | result |
+|---|---|
+| `GET /user` | 200, correct login |
+| `GET /repos/{o}/{r}` | 200, **`permissions.push: true`** |
+| `GET …/git/ref/heads/main` | 200 |
+| `GET …/actions/runs` | 200 |
+| `GET …/contents/{file}` | 200 |
+| **`POST …/git/blobs`** | **403 `Resource not accessible by personal access token`** |
+
+⚠ **`permissions` on the repo object describes the *user's role* on that repo, not the *token's
+granted scopes*.** Own the repo and it reports `push: true` even when the token was minted read-only.
+So a wall of green read probes proves nothing about writing — the two go through different
+authorisation checks.
+
+**Probe the write — and make the probe non-destructive.** `POST /repos/{o}/{r}/git/blobs` creates a
+**dangling** blob: attached to no ref, no branch moves, GitHub garbage-collects it. That is the
+cheapest honest answer to "can this token push?", and far better than pushing a throwaway commit,
+which pollutes history and can leave a half-applied state when it fails.
+
+**Let the failure tell you what is missing** instead of guessing at it:
+
+```
+x-accepted-github-permissions: contents=write
+```
+
+That header rides on the 403 response. So the fix is exact — Repository permissions → **Contents:
+Read and write** — not "it's probably Contents".
+
+Finally, keep these two failure modes apart, because their messages look nothing alike:
+
+- `CONNECT tunnel failed, response 502` → a **proxy** is blocking the transport; credentials are irrelevant
+- `remote: Permission to <o>/<r>.git denied to <u>` + `403` → the **credential** lacks the scope
+
+Explaining one failure with the other's cause burns a lot of time.
+
 ## 8. Private repos lose GitHub Pages — and it does NOT come back by itself
 
 On a free plan, Pages requires a **public** repo. Flipping a working Pages repo to private:
@@ -496,5 +536,6 @@ nothing external is deleting things — the deletions are yours.
 - [ ] Regenerated artifacts gitignored **and** un-staged
 - [ ] Remote verified via `ls-remote` + tree blob shas
 - [ ] No secrets in `git grep`; credential file untracked
+- [ ] **The credential can actually write** — a read-only token passes every read probe; prove it with a non-destructive write (`POST /git/blobs`), not by inference from `permissions.push`
 - [ ] **Deploy actually landed** — the site's live bytes/sha1 match the local file, not just "the push succeeded"
 - [ ] Only **one** workflow deploys to the `pages` environment (no Hugo/Jekyll starter workflows fighting it for the concurrency group)
