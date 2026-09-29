@@ -47,7 +47,8 @@ ap.add_argument('--unsigned', default=os.path.join(ANDROID, 'build', 'aligned.ap
 ap.add_argument('--bt', default=os.environ.get(
     'BT', 'C:/Users/YanSaki/.workbuddy-ai/android-sdk/build-tools/34.0.0'))
 ap.add_argument('--keystore', default=os.path.join(ANDROID, 'keystore', 'debug.jks'))
-ap.add_argument('--target', default=TARGET.decode())
+ap.add_argument('--target', default=None,
+                help='要注入的条目名；不给就从 APK 的中央目录里**自己挑**一个带子目录的')
 args = ap.parse_args()
 
 fails = []
@@ -84,6 +85,30 @@ def mismatched_entries(path):
             bad.append(d[p + 46:p + 46 + nl].decode('utf-8', 'replace'))
         p += 46 + nl + el + cl
     return bad
+
+
+def pick_nested_entry(path):
+    """从中央目录里挑一个**名字里带 `/`** 的条目当注入目标。
+
+    ⚠⚠ 原来这里写死的是 `assets/fonts/web/Cubic_11_1.100_R.woff2`。
+       2026-09-29 把 `assets/fonts/` 瘦身成「只装页面引用的那 1 个」之后，
+       那个 woff2 就不在 APK 里了 —— 脚本会直接 `sys.exit(1)`，
+       而**报的是「在中央目录里找不到 <那个名字>」**，看着像产品坏了。
+       ⇒ 写死的目标每次产品一改就会来收账（跟写死的清单同一个坑）。
+       现在改成**从 APK 自己身上挑**：任何带子目录的条目都能触发同一个缺陷
+       （aapt2 只对带分隔符的名字用平台分隔符）。
+    """
+    d = open(path, 'rb').read()
+    eocd = d.rfind(b'PK\x05\x06')
+    n, _cs, co = struct.unpack('<HII', d[eocd + 10:eocd + 20])
+    p = co
+    for _ in range(n):
+        nl, el, cl = struct.unpack('<HHH', d[p + 28:p + 34])
+        name = bytes(d[p + 46:p + 46 + nl])
+        if b'/' in name:
+            return name.decode('utf-8')
+        p += 46 + nl + el + cl
+    return None
 
 
 def find_bash():
@@ -126,6 +151,14 @@ for f in (args.apk, args.unsigned, args.keystore):
 if fails:
     print('\n== ❌ 前置不满足，中止 ==')
     sys.exit(1)
+
+if args.target is None:
+    args.target = pick_nested_entry(args.unsigned)
+    check(args.target is not None, '从 APK 的中央目录里挑到一个带子目录的条目当注入目标')
+    if args.target is None:
+        print('\n== ❌ 这个 APK 里没有任何带 `/` 的条目，这条反向测试无从下手 ==')
+        sys.exit(1)
+    print('   自动选中注入目标：%s' % args.target)
 
 print()
 print('== 1. 对照组：出货 APK 上这条断言应当是绿的 ==')

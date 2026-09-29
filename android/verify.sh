@@ -116,7 +116,19 @@ if 'classes.dex' in names:
 #   正确做法是**从页面正文里把引用的字体路径抽出来**，再逐条问「APK 里有没有它」。
 #   这样「CSS 说要用的字体」和「真的装进去的字体」之间不可能出现缝。
 if html is not None:
-    refs = sorted(set(re.findall(rb'url\(\s*[\'"]?\.?/?(fonts/[^\'")]+)', html)))
+    # ⚠⚠ 清单用**与 build.sh 同一个脚本**抽（`tools/pick-fonts.py`），这里不再写一遍正则。
+    #   两份实现的话，改了一处忘了另一处 ⇒「构建挑的是 A、验证核的是 B」，
+    #   两边都绿，而装进 APK 的是别的东西。
+    #   `--list-only` = 只要清单、不要它那两道闸门（闸门在 build.sh 那边，
+    #   这里的报告更细：逐条说「APK 里有没有」「与源文件一不一致」）。
+    #   HTML 走 stdin —— 用的是 **APK 里那一份**，与上面那条「内嵌页面 == saki.html」
+    #   是同一批字节，所以「抽出来的清单」和「实际会渲染的 CSS」不会错位。
+    import subprocess
+    _picker = os.path.join(os.path.dirname(os.path.dirname(shim_path)), 'tools', 'pick-fonts.py')
+    _pr = subprocess.run([sys.executable, _picker, '--list-only', '-', fonts_dir or '.'],
+                         input=html, capture_output=True)
+    chk(_pr.returncode == 0, '用 tools/pick-fonts.py 抽字体清单（rc=%d）' % _pr.returncode)
+    refs = [l.encode('utf-8') for l in _pr.stdout.decode('utf-8').splitlines() if l.strip()]
     print('   --- 页面引用的字体 %d 条（从 HTML 里抽的，不是写死的清单）---' % len(refs))
     for r in refs:
         p = r.decode('utf-8', 'replace')
@@ -140,8 +152,16 @@ if html is not None:
     unused = [n for n in packed if n[len('assets/'):] not in {r.decode() for r in refs}]
     if unused:
         print('   ℹ️  装了但页面没引用（可考虑删掉瘦身）：')
+        tot_u = tot_c = 0
         for n in unused:
-            print('        %-58s %8d 字节' % (n, z.getinfo(n).file_size))
+            i = z.getinfo(n)
+            tot_u += i.file_size
+            tot_c += i.compress_size
+            print('        %-58s %8d 字节' % (n, i.file_size))
+        # ⚠ 合计**算出来**，不写死。
+        #   README 里原来那句「合计 3 667 028 字节」就是写死的，而正确值是 6 577 028
+        #   （4 个文件的未压缩之和）—— 写死的数字不会自己更正，也没人会去核。
+        print('        合计 %d 字节未压缩 / %d 字节在 APK 里（含已压缩的）' % (tot_u, tot_c))
 
 # ---- AI 跨域转发（垫片 + 原生转发核心）----
 # 这一节回答的问题是：「APK 里真的带着那套能让页面直连 Vertex AI 的东西吗？」

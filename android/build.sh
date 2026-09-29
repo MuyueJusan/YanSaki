@@ -53,6 +53,10 @@ DEX="$OUT/dex"
 GEN="$OUT/gen"
 ASSETS="$HERE/assets"
 
+# ⚠ 提前到这里定义：第 1b 步（挑字体）就要用它，而它原来定义在第 5 步旁边。
+PYBIN="${PYBIN:-/c/Users/YanSaki/.workbuddy-ai/binaries/python/envs/default/Scripts/python.exe}"
+[ -x "$PYBIN" ] || { echo "❌ 找不到 python：$PYBIN（设 PYBIN=... 指过来）"; exit 1; }
+
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
 # ---------- 0. 检查工具 ----------
@@ -101,10 +105,34 @@ say "1b. 取字体"
 # **产品源码一个字都不用改**，也不用给它换绝对路径。
 FONTS_SRC="$ROOT/fonts"
 [ -d "$FONTS_SRC" ] || { echo "❌ 找不到 $FONTS_SRC"; exit 1; }
+
+# ⚠⚠ 只拷**页面真的引用到的**那些，不是整个 ../fonts。
+#   `../fonts` 一共 5 个文件 13MB，而页面只引用 1 个（7MB）—— 另外 4 个（3 667 028 字节）
+#   全仓库任何地方都没引用过，其中 `myFont.ttf` 与 `ttf/Cubic_11_1.100_R.ttf` 还是
+#   **同一份文件的两个副本**（crc32 都是 733b9c8b）。整个拷进去 = APK 白胖 3.5MB。
+#   （用户 2026-09-29 明确选了「只装页面真正引用的那 1 个」。）
+#
+# ⚠⚠ 清单**从页面正文里抽**，不写死 —— 与 verify.sh 调的是**同一个脚本**
+#   （`tools/pick-fonts.py`），所以那条正则只有**一份实现**。
+#   各写一份的话，改了一处忘了另一处，表现是「构建挑的是 A、验证核的是 B」——
+#   两边都绿，而装进 APK 的是别的东西。
+#   ⚠ 脚本自己会在两种情况下非零退出并说明原因：① 一个引用都抽不到；
+#     ② 页面引用了某个字体但源文件不存在。**这两种失败在手机上都是静默的**
+#     （只表现为「字体悄悄退化成系统字体」），所以必须在这里就拦住。
+FONT_LIST=$("$PYBIN" "$HERE/tools/pick-fonts.py" "$ROOT/saki.html" "$FONTS_SRC") \
+    || { echo "❌ 挑字体失败（原因见上）—— 不会出一个没有字体的 APK"; exit 1; }
+
 rm -rf "$ASSETS/fonts"
 mkdir -p "$ASSETS/fonts"
-cp -R "$FONTS_SRC/." "$ASSETS/fonts/"
-echo "   fonts/ → assets/fonts/  ($(find "$ASSETS/fonts" -type f | wc -l) 个文件, $(du -sh "$ASSETS/fonts" | cut -f1))"
+NFONT=0
+while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    src="$FONTS_SRC/${rel#fonts/}"
+    mkdir -p "$(dirname "$ASSETS/$rel")"
+    cp -f "$src" "$ASSETS/$rel"
+    NFONT=$((NFONT + 1))
+done <<< "$FONT_LIST"
+echo "   fonts/ → assets/fonts/  ($NFONT 个文件, $(du -sh "$ASSETS/fonts" | cut -f1))"
 find "$ASSETS/fonts" -type f | sed "s|$ASSETS/|     |" | sort
 
 # ---------- 2. 资源 ----------
@@ -159,7 +187,7 @@ say "6. 装入 classes.dex 并自查"
 # ⚠ 本机没有 `zip` 命令（Git Bash 自带 unzip 却没带 zip）⇒ 走 tools/add-dex.py。
 #   它用 ZipFile 的追加模式，已有条目字节原样不动，并**当场验** resources.arsc 没被重压；
 #   验不过就非零退出，不产出半成品 APK。
-PYBIN="${PYBIN:-/c/Users/YanSaki/.workbuddy-ai/binaries/python/envs/default/Scripts/python.exe}"
+#   （PYBIN 定义在第 0 步之前的变量区 —— 第 1b 步也要用。）
 "$PYBIN" "$HERE/tools/add-dex.py" "$APK_DIR/base.apk" "$DEX/classes.dex"
 
 # ---------- 7. 签名 ----------
