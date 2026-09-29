@@ -246,6 +246,16 @@ check(m is not None and int(m.group(1)) > 5000,
       '字节一致那条报的是真实体积（%s 字节，不是 0）' % (m.group(1) if m else '未匹配'))
 # ⚠ build.sh 里 `command -v node` 找不到 node 会**静默跳过**语法检查 ⇒ 得看它真的跑了。
 bout, brc = build()
+if brc != 0 or 'node --check 通过' not in bout:
+    # ⚠⚠ **别只报一句「退出码不是 0」** —— 那等于把 build.sh 真正的报错吞掉，
+    #   然后人会去猜「产品哪里坏了」。本轮的第一次失败就吃了这个亏：
+    #   日志里只有 `❌ build.sh 退出码 0`，真正的原因一个字都没有，
+    #   于是同一套脚本跑了两遍才拿到现场。（同族：六之五十「harness 自己的结构
+    #   缺陷会伪装成产品坏了」）
+    print('   --- build.sh 输出全文（rc=%d）---' % brc)
+    for line in bout.splitlines():
+        print('       | ' + line)
+    print('   --- build.sh 输出结束 ---')
 check(brc == 0, 'build.sh 退出码 0')
 check('node --check 通过' in bout,
       'build.sh 真的做了垫片语法检查（不是静默跳过）')

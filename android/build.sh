@@ -215,21 +215,61 @@ say "6. 装入 classes.dex 并自查"
 
 # ---------- 7. 签名 ----------
 say "7. 签名"
-KS="$HERE/keystore/debug.jks"
-if [ ! -e "$KS" ]; then
-    echo "   生成 debug 密钥库（首次）"
-    mkdir -p "$(dirname "$KS")"
-    "$KEYTOOL" -genkeypair -v \
-        -keystore "$KS" -storetype PKCS12 \
-        -storepass android -keypass android \
-        -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
-        -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2 | sed 's/^/   /'
+# ⚠⚠ 签名身份 = App 的身份。**换密钥 ⇒ 证书 SHA-256 变了 ⇒ 新旧包不是同一个 App**，
+#   手机上装过旧版的必须先卸载才能装新的（INSTALL_FAILED_UPDATE_INCOMPATIBLE）。
+#   ⇒ 所以判据不在这儿，而在 `verify.sh` 那条「APK 的签名者证书 == 密钥库里的那张证书」。
+#
+# ⚠⚠ 密钥与口令**都不进仓库**（本仓库公开）：
+#   密钥 → `android/keystore/*.jks`（.gitignore 挡住，只放行口令公开的 `debug.jks`）
+#   口令 → `android/keystore/signing.env`（同样被挡）；空模板见 `signing.env.example`
+KS_DIR="$HERE/keystore"
+if [ -f "$KS_DIR/signing.env" ]; then
+    # shellcheck disable=SC1091
+    . "$KS_DIR/signing.env"
+fi
+
+# ⚠⚠ 一律写 `${VAR:-}`：本脚本开着 `set -u`，直接引未设的变量会**当场崩**，
+#   而不是走到下面的回落分支 —— 那会把「没配密钥」伪装成「脚本有 bug」。
+if [ -n "${YS_KS_FILE:-}" ]; then
+    # 绝对路径原样用；否则当成本目录下的文件名
+    case "$YS_KS_FILE" in
+        /*|[A-Za-z]:[\\/]*) KS="$YS_KS_FILE" ;;
+        *)                 KS="$KS_DIR/$YS_KS_FILE" ;;
+    esac
+    [ -e "$KS" ] || { echo "❌ signing.env 的 YS_KS_FILE 指向不存在的文件：$KS"; exit 1; }
+    # ⚠ 这三条**必须**在，缺一个就拒绝构建。
+    #   静默退回 debug 密钥是这里最坏的失败方式：包照样打出来、照样能装，
+    #   只是**签名身份悄悄换了一个** —— 而「装不上去」这件事要到手机上才发现。
+    [ -n "${YS_KS_ALIAS:-}" ] || { echo "❌ signing.env 里没写 YS_KS_ALIAS"; exit 1; }
+    [ -n "${YS_KS_PASS:-}" ]  || { echo "❌ signing.env 里没写 YS_KS_PASS"; exit 1; }
+    # ⚠ 口令走**环境变量**（apksigner 的 `env:` 形式），不走 argv：
+    #   `pass:xxx` 会把口令明文放进进程参数表，同机任何进程都读得到。
+    export YS_KS_PASS
+    export YS_KEY_PASS="${YS_KEY_PASS:-$YS_KS_PASS}"
+    echo "   密钥库：$KS"
+    echo "   别名  ：$YS_KS_ALIAS"
+else
+    echo "   ⚠⚠ 没有 signing.env ⇒ 退回 **debug 密钥**（口令是公开的 android）"
+    echo "      打出来的包签名身份与正式版**不同**，自己测可以，别往外发"
+    KS="$KS_DIR/debug.jks"
+    if [ ! -e "$KS" ]; then
+        echo "   生成 debug 密钥库（首次）"
+        mkdir -p "$(dirname "$KS")"
+        "$KEYTOOL" -genkeypair -v \
+            -keystore "$KS" -storetype PKCS12 \
+            -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2 | sed 's/^/   /'
+    fi
+    YS_KS_ALIAS="androiddebugkey"
+    export YS_KS_PASS="android"
+    export YS_KEY_PASS="android"
 fi
 
 "$BT/zipalign.exe" -p -f 4 "$APK_DIR/base.apk" "$OUT/aligned.apk"
 "$BT/apksigner.bat" sign \
-    --ks "$KS" --ks-pass pass:android --key-pass pass:android \
-    --ks-key-alias androiddebugkey \
+    --ks "$KS" --ks-pass env:YS_KS_PASS --key-pass env:YS_KEY_PASS \
+    --ks-key-alias "$YS_KS_ALIAS" \
     --v1-signing-enabled true --v2-signing-enabled true \
     --out "$OUT/$PKG_NAME-$VER_NAME.apk" "$OUT/aligned.apk"
 

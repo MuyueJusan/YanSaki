@@ -6,6 +6,122 @@
 
 ---
 
+## 2026-09-30（第二十四段）· 换成**真密钥**签名（`YanSaki-13.jks`）+ 清空重来重发 `apk-v1.0`
+
+**类型**：签名/发布 + 扩断言（`verify.sh` §2b）+ 文档。
+**产品文件零改动**（`saki.html` / `index.html` 仍是 `a36fe8ac…`，1 688 840 字节 / 32 536 行）。
+
+### 一、签名身份从 debug 换成真密钥
+
+- 密钥库 `D:\YanSaki-13.jks` → `android/keystore/YanSaki-13.jks`（`cmp` 逐字节一致），
+  并写进 `.gitignore`（`android/keystore/*.jks` + `!android/keystore/debug.jks` + `signing.env`）。
+- 口令走 `android/keystore/signing.env`（**被忽略**，仓库里只留 `signing.env.example` 空模板）。
+- 证书 `CN=YanSaki, OU=YanSaki, O=YanSaki, L=YanSaki, ST=YanSaki, C=YanSaki`，
+  2048-bit RSA，`SHA512withRSA`，有效期 2026-09-30 → 2125-09-06。
+  **证书 SHA-256 = `797f33fa4513c5d707626489d608a9c48e52a2fb1b9bb685aa87f4dc9ada2793`**。
+- ⚠ 这是**真 JKS**（头 `FE ED FE ED`），别名与证书是**明文**，只有私钥材料加密
+  ⇒ 指纹不填口令也能读出来（当时就是靠这点先认出它是谁的）。
+- ⚠ 口令一律走**环境变量**（`apksigner --ks-pass env:VAR` / `keytool -storepass:env VAR`），
+  **不进 argv** —— argv 会出现在进程列表里。两种写法都实测可用。
+- ⚠ `debug.jks` 是 **PKCS12**（`build.sh` 用 `-storetype PKCS12` 生成），不是 JKS
+  —— 所以「读证书」不能自己写 JKS 解析器，`keytool` 一份实现两种库都能读。
+
+### 二、⚠⚠ 判据是「签名者 == 密钥库里那张证书」，不是「签名验证通过」
+
+`verify.sh` 原来那段只查 `^Verifies` + v1/v2/v3 —— 但**「签名验证通过」对任何一张证书都为真**：
+换个密钥、甚至换成攻击者自签的密钥，它照样全绿。**这是一条永真断言。**
+
+⇒ 新增 **§2b**，判据改成**往返**：
+
+- `WANT` = 从**密钥库**读出的证书 SHA-256（`keytool -list -v`）
+- `GOT` = 从**APK** 读出的签名者 SHA-256（`apksigner verify --print-certs`）
+- 断言 `WANT == GOT`
+
+三个必须配套的细节：
+
+- **期望值必须当场从密钥库推**，不能写死 —— 写死的指纹是「过时断言」，换密钥后它永远红
+  （更坏的是它可能永远绿）。
+- **两边都先做形状检查**（`^[0-9a-f]{64}$`）再比 —— 否则「两次解析都失败」会变成 `空 == 空` ⇒ **绿**，
+  照样是一条永真断言（换个工具、改个输出格式就静默失效）。
+- **`keytool` 的输出会跟着 locale 变** —— 中文环境打的是「所有者:」不是 `Owner:`，
+  所以必须 `-J-Duser.language=en`，否则 `grep` 静默返回空串。
+
+**两个方向都验过**（缺一不可）：
+
+- 用 **debug 密钥**签同一个包 ⇒ 身份行**红**、退出码 1；
+- 把口令**改错** ⇒ 形状行**红**（打印「（空）」）、退出码 1。
+
+两条都不会静默放过。
+
+### 三、⚠⚠ `set -euo pipefail` 下的两个陷阱
+
+- 两个脚本都开着 `-u` ⇒ **引用未设的变量会当场中止脚本**，
+  所以新写的每一处引用都得是 `${VAR:-}` —— 否则「没配密钥」（本该走 debug 回落）
+  会被伪装成「脚本崩了」，报错方向全歪。
+- ⚠⚠ **`set -e` 会豁免 AND-OR 列表里的「非最后一项」** —— 这条**实测过**（因为我差点把它写反）：
+
+  ```
+  $ bash -c 'set -euo pipefail; false && echo A; echo B'
+  B                                  ← 不中止！rc=0
+  $ bash -c 'set -euo pipefail; node --check 坏文件 && echo 通过; echo 后续'
+  后续                                ← 不中止！rc=0
+  $ bash -c 'set -euo pipefail; node --check 坏文件; echo 后续'
+  （报错，没有「后续」）              ← **裸调用**才中止，rc=1
+  ```
+
+  ⇒ 真坑在 `build.sh:119`：`node --check "$ASSETS/ys-ai-shim.js" && echo "   node --check 通过"`
+  —— **垫片语法检查失败时，构建不会停**，只是少打印一行。
+  而垫片语法错的表现是「页面上什么都没发生」，**正好是最需要拦住的那一类错**。
+  ⇒ 所以「这条检查做过」必须由**独立断言**盯着（`tools/reverse-ai.py` 里那句
+  `check('node --check 通过' in bout, …)` 就是为它存在的），**不能指望 `set -e`**。
+  ⇒ 通用形态：**「喊一声」不是「拦一道」**。
+  ⇒ 同一个豁免的另一面：`[ cond ] && cmd` 当**脚本 / `if` 块的最后一条语句**时整体返回 1
+  ⇒ **退出码变成失败**（假红）。所以「有则执行」写成 `if` 更好 ——
+  不是因为它会中止（**中间位置不会**），而是不想让读者去记这条冷知识。
+
+### 四、清空重来：撤掉三个旧 release，重发 `apk-v1.0`
+
+- ⚠⚠ **删 release 不会删 tag** —— `release.js` 用 `target_commitish` 在**建 tag 时**定位，
+  留着的旧 tag 会让新 release 指到旧 commit ⇒ **tag 也得显式删**
+  （`DELETE /repos/{o}/{r}/git/refs/tags/{t}`）。
+- 实测：删完 release 后 `git/ref/tags/apk-v1.2` 仍 HTTP 200 ⇒ 确认了上面这条。
+- 三个旧 release（v1.0 / v1.1 / v1.2）与三个 tag **全部删除**，远端 release 归 **0**。
+- 重发：tag `apk-v1.0` @ `apk` 头 `9b9be59`，附件 `YanSakiShed-1.0.apk` **2 709 559 字节**，
+  sha1 `924950d889d91b94f550dd59145adbec014370c2`，**真密钥签名**，`prerelease=true`（脚本写死，与历史一致）。
+- ⚠⚠ **`apk-v1.0` 这个名字被复用，新旧内容完全不同**（旧 `02a874a` / 1 083 285 字节 / debug；
+  新 `9b9be59` / 2 709 559 字节 / 真密钥）⇒ 老链接会**静默**指到另一份包。已写进下载表。
+  ⇒ 这也让 CHANGELOG 第二十三段那条「历史那两个不改（改了更乱）」**作废**。
+- ⚠⚠ **换签名身份 = 换 App 身份**：装过 debug 签名版本的手机装不上这一版
+  （`INSTALL_FAILED_UPDATE_INCOMPATIBLE`），反过来也一样，**必须先卸载**。
+  这个只有真机能发现，**任何静态检查都测不出来**。
+
+### 五、版本号回退到 1.0
+
+- `AndroidManifest.xml`：`versionCode 2 → 1`、`versionName 1.2 → 1.0`（用户指定「回归到 1.0」）。
+- 三处构建/测试的 APK 路径全部从 `versionName` 现推（`tools/apk_path.py`），跟着自动走。
+
+### 六、验证
+
+- 三次独立构建 ⇒ **sha1 完全一致**（`924950d8…`，2 709 559 字节），可复现。
+- `verify.sh` **全部通过**，含 §2b：`797f33fa…` == `797f33fa…`。
+- `tools/release.js --verify` 往返：下载回来 **2 709 559 字节 / sha1 `924950d8…`** = 本地，**逐字节一致**。
+- `tools/reverse-lfhname.py` ✅ 全绿（对照组绿 → 注入后红 → 注入的包签不出名）。
+- `tools/reverse-ai.py` ✅ 全绿（5 针；APK 恢复回基线 sha1）。
+  ⚠ 它中途失败过两次、且**没打印原因**，而 `build.sh` 步骤 0a 会先清掉上一个 APK
+  ⇒ 失败后**连 APK 都没有**，下一个套件直接「前置不满足，中止」。已补上「失败时打印 build.sh 全文」。
+
+### 七、文档
+
+- `android/README.md`：签名段重写（密钥身份表、`env:` 而非 argv、回落行为、§2b 的往返理由）；
+  下载表改成只有现行 `apk-v1.0` 一行 + **同名 tag 新旧对照**；版本号那段跟上现实。
+- `markdown/RULES.md`：新增 **六之七十二**（签名身份的往返判据）与 **六之七十三**
+  （`set -e` 不拦 AND-OR 的非最后一项 —— `cmd && echo` 里 `cmd` 失败是静默的），
+  同步到 `.workbuddy-ai/memory/RULES.md`，逐字节一致。
+- 技能 `wrap-html-in-android-apk` §7 补上真密钥 / gitignore / `env:` / 往返断言 / locale 这几条
+  （同步到 `markdown/SKILL-android-apk.md`）。
+
+---
+
 ## 2026-09-29（第二十三段）· 发布 `apk-v1.2`（**往返校验当场抓到「取附件」请求头被覆盖**）+ lint 闸门扩到 `android/` 并改成**从 git 推导清单**
 
 > 这一段跨了零点（提交时间 `23:48 → 00:12`），按 release 落地的日期记在 09-29。

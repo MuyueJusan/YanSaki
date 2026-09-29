@@ -27,6 +27,18 @@ saki.__rev.html
 android/build/
 android/assets/
 
+# ⚠⚠ **真签名密钥绝不入库**（本仓库是**公开**的）。
+#   `debug.jks` 是例外 —— 它口令就是公开的 `android`，和 Android Studio 默认那份同性质，
+#   入库反而有用（保证每次重建签名一致、能原地升级）。**真密钥没有这个性质。**
+#   ⇒ 默认忽略 keystore 下所有 .jks，只把 debug.jks 放行。
+#     ⚠ `debug.jks` 已经被跟踪，所以这条**不会**把它踢出仓库；显式 `!` 是为了防止
+#       「哪天它被删了重新生成，就再也 add 不回来」。
+android/keystore/*.jks
+!android/keystore/debug.jks
+# 口令与别名（`YS_KS_FILE` / `YS_KS_ALIAS` / `YS_KS_PASS` / `YS_KEY_PASS`）。
+# 形状见同目录的 `signing.env.example`（那份是**空模板**，可以入库）。
+android/keystore/signing.env
+
 # 桌面契约测试（tools/test-aiproxy）的中间产物：临时服务器录的字节、编译出的 class。
 # ⚠ 只排除这个 .work/；同目录下的 server.py / Harness.java / contract.test.js / run.sh
 #   是**测试本体，要进仓库** —— 否则「这条链路验过」就成了一句没有凭据的话。

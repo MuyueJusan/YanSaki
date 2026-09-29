@@ -57,11 +57,28 @@ aapt2 compile → aapt2 link → javac → d8 → 追加 classes.dex → zipalig
 
 APK **不进仓库**（是生成物），挂在这个分支对应的 **Release** 上：
 
-| tag                                                                       | commit    | 附件                                                                                      | 说明                                                                                  |
-| ------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| [`apk-v1.2`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.2) | `c9a900a` | `YanSakiShed-1.2.apk` 2 709 559 字节<br />sha1 `7ac49b09b61095155ab8c9c3c0f34910049578a2` | **当前版**：`versionName` 提到 `1.2`；修【ai对话】完整模式点「应用」被空 Key 拦住 + 【API 全局配置】标题栏跟着正文滚 |
-| [`apk-v1.1`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.1) | `9a187f3` | `YanSakiShed-1.0.apk` 2 705 463 字节<br />sha1 `a4f3ee2f6289469d29d4eb0a652cbaf8bfbe5c49` | 字体内嵌 + 可直连 Vertex AI（⚠ 附件名顶着 `1.0`，见下）                                |
-| [`apk-v1.0`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.0) | `02a874a` | 1 083 285 字节                                                                            | 最早那版，只有内嵌页面                                                                  |
+| tag                                                                       | commit    | 附件                                                                                                     | 说明                                                                    |
+| ------------------------------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [`apk-v1.0`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.0) | `9b9be59` | `YanSakiShed-1.0.apk` 2 709 559 字节<br />sha1 `924950d889d91b94f550dd59145adbec014370c2`                | 字体内嵌 + 可直连 Vertex AI，**真密钥签名**（证书 SHA-256 `797f33fa…`） |
+
+⚠⚠ **2026-09-30 清空重来**：旧的 `apk-v1.0` / `apk-v1.1` / `apk-v1.2` 三个 release
+**连同它们的 tag 一起删掉**（远端 release 归 0），重发了上面这一个 `apk-v1.0`。
+⚠⚠ **`apk-v1.0` 这个名字被复用，新旧内容完全不同**：
+
+| 同名 tag              | commit    | 附件大小       | 签名                               |
+| --------------------- | --------- | -------------- | ---------------------------------- |
+| 旧 `apk-v1.0`（已删） | `02a874a` | 1 083 285 字节 | debug                              |
+| 新 `apk-v1.0`（现行） | `9b9be59` | 2 709 559 字节 | 真密钥 `YanSaki-13`（`797f33fa…`） |
+
+⇒ **任何还指着旧 `apk-v1.0` 的链接，现在会静默指到另一份包上**，而且不报错。
+换掉的理由：旧包是 **debug 密钥**签的，签名身份换成真密钥之后，
+「同一个版本号挂两份不同签名的包」是最坏的情况 —— 谁也分不清下载到的是哪一份。
+
+⚠⚠ **换签名身份 = 换 App 身份**：装过 debug 签名版本
+（就是仓库里 `keystore/debug.jks` 那一张，证书 SHA-256 `ef08699c…`）的手机
+**装不上**这一版，反过来也一样 —— `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，**必须先卸载**。
+这是固有代价，不是 bug；这道判断落在 `verify.sh` 的 §2b（签名者 == 密钥库里那张证书）。
+⚠ 旧的三个包已经删掉、**无从复量**它们各自的签名指纹，上面「debug」是按当时的构建配置记的。
 
 ⚠ **每次重建都要回头核对 Release 附件** —— 附件是 APK 的**第二份拷贝**，不会自己更新。  
 它挂着一个旧版的时候最坑：别人从你给的链接下载，拿到的是旧 App，而且不报错。  
@@ -79,8 +96,9 @@ APK **不进仓库**（是生成物），挂在这个分支对应的 **Release**
 （`tools/apk_path.py`）。它们原来各自写死 `YanSakiShed-1.0.apk` ⇒ 一提版本
 四处一起过时，报「找不到 APK」/「前置不满足，中止」——**看着像构建没产出，其实只是那几行旧了**。
 ⚠ 从 `apk-v1.2` 起 **tag 与 `versionName` 对齐**（`apk-v1.2` ⇔ `1.2`）。
-`apk-v1.0` 与 `apk-v1.1` 那两个包**顶着同一个 `versionName`「1.0」**（当时忘了提），
-只有 tag 能区分；历史那两个不改（改了反而更乱）。
+⚠⚠ 但现行的 `apk-v1.0` 是 **2026-09-30「版本号回退到 1.0」** 的结果 ——
+`versionCode` 由 `2` 退回 `1`、`versionName` 由 `1.2` 退回 `1.0`，tag 与它对齐，
+**不是**同名的那个旧 `apk-v1.0` 的延续（见上面的同名 tag 对照）。
 
 不引 Gradle 的三个理由：省 ~130MB 发行包和它要拉的一堆依赖；绕开「本机 JDK 24 与 AGP 的版本窗口」这个不确定性；这个 App 只有一个 Activity、零第三方依赖，用不上构建系统的任何能力。
 
@@ -228,7 +246,10 @@ tools/reverse-lfhname.py            坑三的反向测试（证明那条断言�
 tools/reverse-ai.py                 AI 那一节的反向测试（5 根针，见「AI 跨域转发」）
 tools/test-aiproxy/                 桌面契约测试：真 JVM + 真垫片，不需要手机/模拟器/联网
   server.py / Harness.java / contract.test.js / run.sh
-keystore/debug.jks                  ⚠ 签名密钥，见「签名」一节
+keystore/debug.jks                  ⚠ 调试密钥（口令是公开的 android，**故意入库**，见「签名」）
+keystore/YanSaki-13.jks             ⚠⚠ 真签名密钥 —— **不在仓库里**（`.gitignore` 挡住）
+keystore/signing.env                别名与口令 —— 同样不在仓库里
+keystore/signing.env.example        空模板（**这个可以入库**）
 build.sh / verify.sh                构建 / 验证
 ```
 
@@ -456,11 +477,44 @@ python tools/reverse-ai.py          # 反向测试：证明 verify.sh 那一节�
 
 ## 签名
 
-`keystore/debug.jks` 是**调试密钥**（口令就是公开的 `android`，和 Android Studio 默认那份同性质），
-**故意入库** —— 这样每次重新构建的签名一致，可以直接覆盖安装升级，不用先卸载。
+⚠⚠ **从 2026-09-30 起用真密钥签名**：`keystore/YanSaki-13.jks`，别名 `yansaki-13`。
+密钥和口令**都不进仓库** —— 本仓库是**公开**的。
 
-⚠ 它是 debug 密钥，**不能用来上架应用商店**。真要发布就自己生成一份 release key，
-并把 `build.sh` 里的 `--ks` 指过去。
+| 项 | 值 |
+|---|---|
+| 密钥库 | `keystore/YanSaki-13.jks`（JKS v2，1 个私钥条目） |
+| 别名 | `yansaki-13` |
+| 证书主体 | `CN=YanSaki, OU=YanSaki, O=YanSaki, L=YanSaki, ST=YanSaki, C=YanSaki`（自签名） |
+| 有效期 | 2026-09-30 → 2125-09-06 |
+| 证书 SHA-256 | `797f33fa4513c5d707626489d608a9c48e52a2fb1b9bb685aa87f4dc9ada2793` |
+| 密钥/算法 | 2048 位 RSA / `SHA512withRSA` |
+
+配置：把 `keystore/signing.env.example` 拷成 `keystore/signing.env` 再填（`YS_KS_FILE` /
+`YS_KS_ALIAS` / `YS_KS_PASS` / `YS_KEY_PASS`）。`build.sh` 会自动 source 它。
+⚠ 口令走 **`apksigner --ks-pass env:…`**（环境变量），不走 `pass:…` ——
+后者会把口令明文放进进程参数表，同机任何进程都读得到。
+
+⚠ **没配 `signing.env` 时 `build.sh` 会退回 debug 密钥并打印警告**。这不是「静默降级」：
+退回落在了**明确的提示**上，而 `verify.sh` 的 §2b 会按**同一处配置**去核对签名者 ⇒ 两边不会分叉。
+
+⚠⚠ **签名身份 = App 的身份。换密钥 ⇒ 证书 SHA-256 变了 ⇒ 新旧包不是同一个 App**：
+手机上装过旧版的**必须先卸载**才能装新的（`INSTALL_FAILED_UPDATE_INCOMPATIBLE`）。
+这条没法绕过，只能提前说清楚 —— 所以历史上那些 debug 签名的包和现在这份**不能互相覆盖安装**。
+
+⚠⚠ **「签名成功」不是判据** —— **用任何一张证书签都会成功**。
+真正的判据是 `verify.sh` 的 **§2b：`APK 的签名者证书 == 密钥库里那张证书`**（往返判据）。
+期望值**从密钥库现读**，不写死（写死就成了「过时断言」，换密钥那天会一直红）。
+⚠ 两个读数都**先断言形状**（64 位十六进制）再比 —— 否则「两边都解析失败 ⇒ 空串 == 空串 ⇒ 绿」
+就是一条永真断言。实测两条反向：**用 debug 密钥签同一份包** ⇒ 身份那条红、退出码 1；
+**把口令改错** ⇒ 形状那条红（打印「（空）」）、退出码 1。都不会假绿。
+
+⚠ `keytool` 的输出**跟着 locale 走**（中文环境下打「所有者:」而不是 `Owner:`）⇒
+`verify.sh` 里那处必须带 `-J-Duser.language=en`，否则 grep **静默取到空**。
+
+`keystore/debug.jks` 仍然保留：它是**调试密钥**（口令就是公开的 `android`，和 Android Studio
+默认那份同性质），**故意入库**，供没配真密钥的机器兜底。
+⚠ 它签出来的包**签名身份与正式版不同**，装过正式版的手机装不上它；自己测可以，别往外发。
+⚠ 它是 **PKCS12** 格式（`build.sh` 用 `-storetype PKCS12` 生成的），不是 JKS。
 
 ⚠ `apksigner verify --verbose` 在不给 `--min-sdk-version` 时，会按 APK 自己的 minSdk(29) 校验，
 而它**只校验该 minSdk 需要的方案** —— 于是 v1/v2 一律打印 `false`。

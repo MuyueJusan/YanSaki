@@ -74,6 +74,60 @@ for s in v1 v2 v3; do
     chk "$(echo "$SIG" | grep -q "Verified using $s scheme.*: true" && echo 1 || echo 0)" "$s 方案有效"
 done
 
+# ---------- 2b. 签名**身份**：不只是「签了」，而是「**谁**签的」 ----------
+# ⚠⚠ 上面那几条只证明「签名方案有效」—— **用任何一张证书签都有效**。
+#   而签名身份 = App 的身份：签错钥匙的包照样「校验通过」，只是
+#   **装不上任何已经装过旧版的手机**（INSTALL_FAILED_UPDATE_INCOMPATIBLE），
+#   而且这件事**只有到手机上才会发现**。
+#   ⇒ 判据 = 「APK 的签名者证书 == 我们配置的那个密钥库里的证书」（往返判据，
+#     不是「签名成功」这种从上传/构建那一侧看不出来的东西）。
+echo
+echo "== 2b. 签名身份（APK 的签名者 vs 密钥库里的证书）=="
+# ⚠ 期望值**从密钥库现读**，不写死 —— 写死就成了「过时断言」：
+#   换密钥时忘了改它，套件会一直红（或更糟：红久了没人看）。指纹的唯一真相源是密钥库。
+# ⚠ 口令来源与 build.sh **同一处**（keystore/signing.env），否则两边会分叉。
+KS_DIR="$HERE/keystore"
+if [ -f "$KS_DIR/signing.env" ]; then . "$KS_DIR/signing.env"; fi
+if [ -n "${YS_KS_FILE:-}" ]; then
+    case "$YS_KS_FILE" in
+        /*|[A-Za-z]:[\\/]*) KS="$YS_KS_FILE" ;;
+        *)                 KS="$KS_DIR/$YS_KS_FILE" ;;
+    esac
+    ALIAS="${YS_KS_ALIAS:-}"
+    export YS_KS_PASS="${YS_KS_PASS:-}"
+    echo "   密钥库：$KS   （别名 ${ALIAS:-未指定}）"
+else
+    KS="$KS_DIR/debug.jks"
+    ALIAS="androiddebugkey"
+    export YS_KS_PASS="android"
+    echo "   ⚠ 没有 signing.env ⇒ 按 **debug 密钥**核对（口令是公开的 android）"
+fi
+
+# ⚠ `-J-Duser.language=en` 不能省：keytool 的输出**跟着 locale 走**
+#   （中文环境下打「所有者:」而不是「Owner:」）⇒ 不加它，下面的 grep 会**静默取到空**。
+# ⚠ 口令走 `-storepass:env`（不进 argv）。keytool 自 Java 9 起支持这个形式。
+KT_ARGS=(-J-Duser.language=en -list -v -keystore "$KS" -storepass:env YS_KS_PASS)
+# ⚠ 写成 `if` 而不是 `[ -n "$ALIAS" ] && KT_ARGS+=(...)`：
+#   两者**功能等价** —— 别搞错方向：`set -e` **不**因为 `[ ]` 为假就中止脚本
+#   （POSIX：`-e` 对 AND-OR 列表里「非最后一项」的命令失效；实测 `false && echo A; echo B`
+#    照样打印 B、rc=0）。真正的尾巴是：这条 `[ ] &&` 若成为**脚本/函数的最后一条语句**，
+#   整个列表返回 1 ⇒ **退出码变成失败**（假红）。
+#   写成 `if` 就不用让每个读者都记住「豁免只对非最后一项生效」这条冷知识。
+if [ -n "$ALIAS" ]; then KT_ARGS+=(-alias "$ALIAS"); fi
+WANT=$("$JAVA_HOME/bin/keytool.exe" "${KT_ARGS[@]}" 2>/dev/null \
+       | grep -m1 "SHA256:" | awk '{print $2}' | tr -d ':\r' | tr 'A-Z' 'a-z')
+GOT=$("$BT/apksigner.bat" verify --print-certs "$APK" 2>/dev/null \
+      | grep -m1 "certificate SHA-256 digest" | awk '{print $NF}' | tr -d ':\r' | tr 'A-Z' 'a-z')
+
+# ⚠⚠ 两个读数都**先断言形状**（64 位十六进制）再比。
+#   不这么做的话，「两边都解析失败」⇒ 空串 == 空串 ⇒ **绿** ——
+#   而那是永真断言：换密钥、改 keytool 输出格式、甚至把密钥库删了，它都不会红。
+#   （同族：RULES 六之三十九「`.every()` 对空数组有定义好的返回值」）
+is_fp() { [ "$(printf '%s' "$1" | grep -cE '^[0-9a-f]{64}$')" = "1" ]; }
+chk "$(is_fp "$WANT" && echo 1 || echo 0)" "从密钥库读出的指纹形状合法（${WANT:-空}）"
+chk "$(is_fp "$GOT"  && echo 1 || echo 0)" "从 APK 读出的指纹形状合法（${GOT:-空}）"
+chk "$(is_fp "$WANT" && [ "$WANT" = "$GOT" ] && echo 1 || echo 0)" "APK 的签名者 == 密钥库里的那张证书"
+
 # ---------- 3. 对齐 ----------
 echo
 echo "== 3. 对齐（zipalign -c 4）=="
