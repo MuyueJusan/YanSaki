@@ -5,12 +5,22 @@
 #   不说明 classes.dex 进去了、不说明 assets 里是**当前**的页面、不说明签名有效。
 #   这里逐条量，任何一条不过就非零退出。
 #
-# 用法：bash verify.sh [APK路径]     默认 build/YanSakiShed-1.0.apk
+# 用法：bash verify.sh [APK路径]
+#      默认 = `build/YanSakiShed-<versionName>.apk`，版本号**从 AndroidManifest.xml 现读**
+#      （写死过一次 1.0，提版本那天就会报「找不到 APK」—— 而那是断言过时，不是产品坏了）
 
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APK="${1:-$HERE/build/YanSakiShed-1.0.apk}"
+# ⚠ 读不出来就**当场退出**，别退回一个写死的旧名字 ——
+#   那样提完版本它会说「找不到 YanSakiShed-1.0.apk」，
+#   看起来像「构建没产出」，其实是这一行过时了
+_VER=$(grep -o 'android:versionName="[^"]*"' "$HERE/AndroidManifest.xml" | head -1 | sed 's/.*="//;s/"$//')
+if [ -z "$_VER" ]; then
+    echo "❌ 从 $HERE/AndroidManifest.xml 读不出 android:versionName —— 不知道默认该验哪个 APK"
+    exit 1
+fi
+APK="${1:-$HERE/build/YanSakiShed-$_VER.apk}"
 ANDROID_SDK="${ANDROID_SDK:-C:/Users/YanSaki/.workbuddy-ai/android-sdk}"
 BT="$ANDROID_SDK/build-tools/34.0.0"
 PYBIN="${PYBIN:-/c/Users/YanSaki/.workbuddy-ai/binaries/python/envs/default/Scripts/python.exe}"
@@ -29,7 +39,22 @@ echo
 echo "== 1. 清单（aapt2 dump badging）=="
 BADGING=$("$BT/aapt2.exe" dump badging "$APK" 2>&1)
 echo "$BADGING" | grep -E "^(package|sdkVersion|targetSdkVersion|application-label|launchable-activity|uses-permission)" | sed 's/^/   /'
-chk "$(echo "$BADGING" | grep -c "package: name='top.yansaki.shed' versionCode='1' versionName='1.0'" | sed 's/^0$/0/;s/^[1-9].*/1/')" "包名/版本正确"
+# ⚠⚠ 版本号**从 AndroidManifest.xml 现读**，不要写死在这句里。
+#   写死的话每次提版本都会来收账：这一轮把 1.0 提到 1.2，那句写死的断言会报
+#   「包名/版本正确」失败 —— 而失败原因是**断言自己过时了**，不是产品坏了。
+#   「过时断言」是「永真断言」的镜像：一个是永远红、一个是永远绿，
+#   但都会让人不再看它（RULES 六之四十八）。
+# ⚠ 读不出来就**当场退出**，别拿空串去比 —— 那样这条会永远红，
+#   而红久了没人看，等于没有（同一类「把失败伪装成别的东西」）。
+VC=$(grep -o 'android:versionCode="[0-9]*"' "$HERE/AndroidManifest.xml" | head -1 | grep -o '[0-9]*')
+VN=$(grep -o 'android:versionName="[^"]*"' "$HERE/AndroidManifest.xml" | head -1 | sed 's/.*="//;s/"$//')
+if [ -z "$VC" ] || [ -z "$VN" ]; then
+    echo "❌ 从 $HERE/AndroidManifest.xml 读不出 versionCode / versionName —— 拒绝用空串去比"
+    exit 1
+fi
+echo "   清单声明：versionCode=$VC  versionName=$VN"
+chk "$(echo "$BADGING" | grep -q "package: name='top.yansaki.shed' versionCode='$VC' versionName='$VN'" && echo 1 || echo 0)" \
+    "包名/版本正确（与 AndroidManifest.xml 一致：$VC / $VN）"
 chk "$(echo "$BADGING" | grep -q "sdkVersion:'29'" && echo 1 || echo 0)" "minSdk = 29"
 chk "$(echo "$BADGING" | grep -q "targetSdkVersion:'34'" && echo 1 || echo 0)" "targetSdk = 34"
 chk "$(echo "$BADGING" | grep -q "launchable-activity: name='top.yansaki.shed.MainActivity'" && echo 1 || echo 0)" "启动 Activity 存在"

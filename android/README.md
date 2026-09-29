@@ -2,11 +2,13 @@
 
 把仓库根那个单文件页面（`saki.html`）套一层 WebView，打成可以直接装在手机上的 APK。
 
-> **这一支为什么存在**：原本想 fork 一个库来做实验，但 GitHub **不允许 fork 自己拥有的库**
-> （实测 `POST /repos/MuyueJusan/YanSaki/forks` 返回 **202**，看着像成功，其实什么都没建 ——
-> 返回体里的 id 就是源库自己的 id，`forks_count` 仍是 0）。所以改用**同库的一个分支** `apk`
-> 来达到同样的隔离效果：站点只从 `main` 部署（`.github/workflows/static.yml` 的
+> **这一支为什么存在**：原本想 fork 一个库来做实验，但 GitHub **不允许 fork 自己拥有的库**  
+> （实测 `POST /repos/MuyueJusan/YanSaki/forks` 返回 **202**，看着像成功，其实什么都没建 ——  
+> 返回体里的 id 就是源库自己的 id，`forks_count` 仍是 0）。所以改用**同库的一个分支** `apk`  
+> 来达到同样的隔离效果：站点只从 `main` 部署（`.github/workflows/static.yml` 的  
 > `on: push: branches: ["main"]`），这个分支上的任何东西都不会影响线上。
+
+
 
 ---
 
@@ -14,7 +16,7 @@
 
 ```bash
 cd android
-bash build.sh        # → build/YanSakiShed-1.0.apk
+bash build.sh        # → build/YanSakiShed-<版本>.apk（版本号读自 AndroidManifest.xml）
 bash verify.sh       # 只读核对：清单 / 签名 / 对齐 / 内容 / 字体 / AI 转发
 ```
 
@@ -34,12 +36,12 @@ bash tools/test-aiproxy/run.sh       # 真 javac + 真 JVM + 真垫片，本地�
 
 前置（本机已装好，换机器要重来）：
 
-| 需要 | 位置 / 说明 |
-|---|---|
-| Android SDK | `C:\Users\YanSaki\.workbuddy-ai\android-sdk`，含 `build-tools;34.0.0` + `platforms;android-34` |
-| **JDK 11**（编译用） | `C:\Program Files\Java\jdk-11` —— ⚠ **必须 11/17，见下面「坑二」** |
-| JDK 21（跑 d8/apksigner 用） | `C:\Program Files\Java\jdk-21` |
-| Python（图标 / 装 dex 用） | 只用标准库，不需要第三方包 |
+| 需要                       | 位置 / 说明                                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| Android SDK              | `C:\Users\YanSaki\.workbuddy-ai\android-sdk`，含 `build-tools;34.0.0` + `platforms;android-34` |
+| **JDK 11**（编译用）          | `C:\Program Files\Java\jdk-11` —— ⚠ **必须 11/17，见下面「坑二」**                                     |
+| JDK 21（跑 d8/apksigner 用） | `C:\Program Files\Java\jdk-21`                                                               |
+| Python（图标 / 装 dex 用）     | 只用标准库，不需要第三方包                                                                                |
 
 SDK 不在默认位置就 `ANDROID_SDK=... bash build.sh`。
 
@@ -55,16 +57,21 @@ aapt2 compile → aapt2 link → javac → d8 → 追加 classes.dex → zipalig
 
 APK **不进仓库**（是生成物），挂在这个分支对应的 **Release** 上：
 
-| tag | commit | 附件 | 说明 |
-|---|---|---|---|
-| [`apk-v1.1`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.1) | `9a187f3` | `YanSakiShed-1.0.apk` 2 705 463 字节<br>sha1 `a4f3ee2f6289469d29d4eb0a652cbaf8bfbe5c49` | **当前版**：字体内嵌 + 可直连 Vertex AI |
-| [`apk-v1.0`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.0) | `02a874a` | 1 083 285 字节 | 最早那版，只有内嵌页面 |
+| tag                                                                       | commit    | 附件                                                                                      | 说明                           |
+| ------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------- | ---------------------------- |
+| [`apk-v1.1`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.1) | `9a187f3` | `YanSakiShed-1.0.apk` 2 705 463 字节<br />sha1 `a4f3ee2f6289469d29d4eb0a652cbaf8bfbe5c49` | **当前版**：字体内嵌 + 可直连 Vertex AI |
+| [`apk-v1.0`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.0) | `02a874a` | 1 083 285 字节                                                                            | 最早那版，只有内嵌页面                  |
 
-⚠ **每次重建都要回头核对 Release 附件** —— 附件是 APK 的**第二份拷贝**，不会自己更新。
-它挂着一个旧版的时候最坑：别人从你给的链接下载，拿到的是旧 App，而且不报错。
-（`apk-v1.1` 上传后我把附件**下载回来核过 sha1**，与本地逐字节一致。）
-⚠ APK 内部的 `versionName` 仍是 `1.0`（没改）⇒ **`v1.0` 和 `v1.1` 两个包顶着同一个版本号**，
-只有 release tag 能区分它们。
+⚠ **每次重建都要回头核对 Release 附件** —— 附件是 APK 的**第二份拷贝**，不会自己更新。  
+它挂着一个旧版的时候最坑：别人从你给的链接下载，拿到的是旧 App，而且不报错。  
+（每个 release 上传后都要把附件**下载回来核 sha1**，与本地逐字节一致才算数。）  
+⚠⚠ **版本号只有一个真相源：`AndroidManifest.xml` 的 `versionName`。**
+`build.sh` / `verify.sh` / 两个反向测试的 APK 路径**全部从它现推**
+（`tools/apk_path.py`）。它们原来各自写死 `YanSakiShed-1.0.apk` ⇒ 一提版本
+四处一起过时，报「找不到 APK」/「前置不满足，中止」——**看着像构建没产出，其实只是那几行旧了**。
+⚠ 从 `apk-v1.2` 起 **tag 与 `versionName` 对齐**（`apk-v1.2` ⇔ `1.2`）。
+`apk-v1.0` 与 `apk-v1.1` 那两个包**顶着同一个 `versionName`「1.0」**（当时忘了提），
+只有 tag 能区分；历史那两个不改（改了反而更乱）。
 
 不引 Gradle 的三个理由：省 ~130MB 发行包和它要拉的一堆依赖；绕开「本机 JDK 24 与 AGP 的版本窗口」这个不确定性；这个 App 只有一个 Activity、零第三方依赖，用不上构建系统的任何能力。
 
@@ -74,35 +81,35 @@ APK **不进仓库**（是生成物），挂在这个分支对应的 **Release**
 
 ### 坑一：页面必须跑在**真实 origin** 上，不能用 `file://`
 
-产品里 `localStorage` 用了 **76 处**（选项卡状态、卡片草稿、状态栏、主题…）。而 `file://` 是
-**opaque origin**，`localStorage` 一访问就抛 `SecurityError` —— 表现是「设置全部存不住」，
+产品里 `localStorage` 用了 **76 处**（选项卡状态、卡片草稿、状态栏、主题…）。而 `file://` 是  
+**opaque origin**，`localStorage` 一访问就抛 `SecurityError` —— 表现是「设置全部存不住」，  
 界面上不报错，非常难查。
 
-所以 `MainActivity` 学 androidx 的 `WebViewAssetLoader`：用一个保留域名
-`appassets.androidplatform.net`，在 `shouldInterceptRequest` 里把请求换成读 `assets/`。
-页面于是跑在真正的 `https://` origin 上，`localStorage` / `fetch` / `FileReader` 全部正常。
+所以 `MainActivity` 学 androidx 的 `WebViewAssetLoader`：用一个保留域名  
+`appassets.androidplatform.net`，在 `shouldInterceptRequest` 里把请求换成读 `assets/`。  
+页面于是跑在真正的 `https://` origin 上，`localStorage` / `fetch` / `FileReader` 全部正常。  
 **纯 framework API，零依赖。**
 
 ### 坑二：javac 必须用 JDK 11/17，**不能用 21+**
 
 | javac 来自 | d8（R8 8.2.2）结果 |
-|---|---|
-| JDK 11 | ✅ |
-| JDK 21 | ❌ 内部 NPE |
-| JDK 24 | ❌ 内部 NPE |
+| -------- | -------------- |
+| JDK 11   | ✅              |
+| JDK 21   | ❌ 内部 NPE       |
+| JDK 24   | ❌ 内部 NPE       |
 
-JDK 21/24 的 javac 在 `-target 8` 下，对**带 `this$0` 合成外部引用的内部类**（也就是任何写在
+JDK 21/24 的 javac 在 `-target 8` 下，对**带 `this$0` 合成外部引用的内部类**（也就是任何写在  
 实例方法里的匿名类 / 非静态内部类）写出的 class 文件，d8 解析不了：
 
 ```
 java.lang.NullPointerException: Cannot invoke "String.length()" because "<parameter1>" is null
 ```
 
-两边产出的 class 文件主版本号**都是 52**，`-g:none` 也去不掉 ⇒ **看字节看不出来**。
+两边产出的 class 文件主版本号**都是 52**，`-g:none` 也去不掉 ⇒ **看字节看不出来**。  
 最小复现在 `tools/repro-d8-javac/`，`bash tools/repro-d8-javac/run.sh` 可以直接跑出这个对照。
 
-> 附带一条：`-bootclasspath android.jar` **只允许配 `-target 8`**（11 以上报
-> 「目标 11 不允许选项 --boot-class-path」）。所以「改成 target 11 绕开」这条路是堵死的，
+> 附带一条：`-bootclasspath android.jar` **只允许配 `-target 8`**（11 以上报  
+> 「目标 11 不允许选项 --boot-class-path」）。所以「改成 target 11 绕开」这条路是堵死的，  
 > 唯一正解就是换 JDK。
 
 ### 坑三：`zipalign` 的 `WARNING: header mismatch` 是**假警报**，而且它**退出码是 0**
@@ -113,17 +120,17 @@ java.lang.NullPointerException: Cannot invoke "String.length()" because "<parame
 zip W 09-29 19:17:11  2808 22460] WARNING: header mismatch
 ```
 
-正好等于字体文件个数 —— 但那**不是**压缩、对齐或内容出了问题。
-（后来 `assets/fonts/` 瘦身成「只装页面引用的那 1 个」之后，这里就只剩 **1 行** ——
+正好等于字体文件个数 —— 但那**不是**压缩、对齐或内容出了问题。  
+（后来 `assets/fonts/` 瘦身成「只装页面引用的那 1 个」之后，这里就只剩 **1 行** ——  
 **警告条数 = 带子目录的资产个数**，这个关系本身就是最好的旁证。）查清的过程和结论：
 
-| 阶段 | 项数 | 「本地头名字 ≠ 中央目录名字」的条目 | zipalign 警告 |
-|---|---|---|---|
-| `build/apk/base.apk`（aapt2 输出） | 26 | **5**（就是那 5 个字体） | **5 条** |
-| `build/aligned.apk`（zipalign 输出） | 26 | 0 | **0 条** |
-| 出货 APK（签名后） | 29 | 0 | **0 条** |
+| 阶段                               | 项数 | 「本地头名字 ≠ 中央目录名字」的条目 | zipalign 警告 |
+| -------------------------------- | -- | ------------------- | ----------- |
+| `build/apk/base.apk`（aapt2 输出）   | 26 | **5**（就是那 5 个字体）    | **5 条**     |
+| `build/aligned.apk`（zipalign 输出） | 26 | 0                   | **0 条**     |
+| 出货 APK（签名后）                      | 29 | 0                   | **0 条**     |
 
-根因是 **aapt2 在 Windows 上给「带子目录的资产」写本地文件头(LFH)时，路径用的是平台分隔符 `\`**，
+根因是 **aapt2 在 Windows 上给「带子目录的资产」写本地文件头(LFH)时，路径用的是平台分隔符 `\`**，  
 而中央目录(CD)里是 `/`：
 
 ```
@@ -131,7 +138,7 @@ LFH: assets\fonts\web\Cubic_11_1.100_R.woff2
 CD : assets/fonts/web/Cubic_11_1.100_R.woff2
 ```
 
-zipalign 的 `ZipEntry::compareHeaders()` 最后一条正是 `strcmp(CD 名字, LFH 名字)`，于是每条打一行警告。
+zipalign 的 `ZipEntry::compareHeaders()` 最后一条正是 `strcmp(CD 名字, LFH 名字)`，于是每条打一行警告。  
 `assets/index.html` 路径里没有分隔符，所以**加字体之前从来没报过**。
 
 为什么可以判定无害：
@@ -145,16 +152,16 @@ zipalign 的 `ZipEntry::compareHeaders()` 最后一条正是 `strcmp(CD 名字, 
    ⇒ 这个缺陷**在结构上不可能进入出货产物**，签名那一步就是闸门。
 3. 但 zipalign **只打警告、退出码照样 0**，光看 `build.sh` 成没成功是**看不出来**的。
 
-所以 `verify.sh` 加了一条断言：**出货 APK 里每个条目的本地头名字都要与中央目录逐字节一致**。
+所以 `verify.sh` 加了一条断言：**出货 APK 里每个条目的本地头名字都要与中央目录逐字节一致**。  
 配了反向测试 `tools/reverse-lfhname.py`（注入反斜杠 → 断言必须变红；对照真实 APK → 必须为绿）：
 
 ```bash
 python tools/reverse-lfhname.py     # == 全部符合预期 == 才算过
 ```
 
-> ⚠ 这个反向测试自己踩过两个坑，都写进脚本注释了，因为**两者都会伪装成「产品坏了」**：
-> ① Windows PATH 里的 `bash` 是 **WSL 启动器**，没装发行版时只打印一行中文就 `rc=1` 退出 ——
-> 脚本必须显式用 `C:\Program Files\Git\bin\bash.exe`；
+> ⚠ 这个反向测试自己踩过两个坑，都写进脚本注释了，因为**两者都会伪装成「产品坏了」**：  
+> ① Windows PATH 里的 `bash` 是 **WSL 启动器**，没装发行版时只打印一行中文就 `rc=1` 退出 ——  
+> 脚本必须显式用 `C:\Program Files\Git\bin\bash.exe`；  
 > ② 传给 `verify.sh` 的路径要用**正斜杠**，反斜杠会让 `[ -e "$APK" ]` 失败并**立刻退出**。
 
 ### 坑四：`rm -rf` 可能**静默失败**，而且根因不是「删除机制坏了」
@@ -166,21 +173,21 @@ python tools/reverse-lfhname.py     # == 全部符合预期 == 才算过
 ERROR … Error during a `trash` operation: Unknown { description: "Some operations were aborted" }
 ```
 
-`rc=1`，**目录原样留着**。但同一个目录**过几秒再删就成功** —— 也就是说它是个**竞态**，不是删法的问题。
+`rc=1`，**目录原样留着**。但同一个目录**过几秒再删就成功** —— 也就是说它是个**竞态**，不是删法的问题。  
 （我为此先去查了 genie-trash、又加了 `shutil.rmtree` 兜底、还加了 `wait`，全都没用。）
 
 真正的成因有两层：
 
-1. **顺序**：收尾那句 purge 写在 `exit 0` **之前**，而停服务器的 `trap cleanup EXIT` 要到退出时才跑
+1. **顺序**：收尾那句 purge 写在 `exit 0` **之前**，而停服务器的 `trap cleanup EXIT` 要到退出时才跑  
    ⇒ 删的时候服务器**还活着**，`server.log` 还被它占着 ⇒ Windows 拒绝删除。
-2. **静默**：`run.sh` 用的是 `set -uo pipefail`（**没有 `-e`**）⇒ `rm -rf` 失败**不影响脚本继续跑**。
+2. **静默**：`run.sh` 用的是 `set -uo pipefail`（**没有 `-e`**）⇒ `rm -rf` 失败**不影响脚本继续跑**。  
    同一句 `rm -rf` 在 `build.sh` 里是**响的**（那边有 `-e`，会当场把脚本打死）。
 
-为什么必须修，而不是「反正下一轮会重建」：清不掉就留着**上一轮**的 `expected/*.bin`，
-而 `contract.test.js` 是拿它当**真值**去比的。这一轮 `server.py` 要是没写出 `sse.bin`，
+为什么必须修，而不是「反正下一轮会重建」：清不掉就留着**上一轮**的 `expected/*.bin`，  
+而 `contract.test.js` 是拿它当**真值**去比的。这一轮 `server.py` 要是没写出 `sse.bin`，  
 测试就会拿**上一轮的录制**比对然后**通过** —— 拿旧数据当真值，比直接报错难查得多。
 
-所以改成「**先停服务器（并 `wait` 到它真的退出）→ 再删 → 回读确认 → 删不掉就拒跑**」。
+所以改成「**先停服务器（并 `wait` 到它真的退出）→ 再删 → 回读确认 → 删不掉就拒跑**」。  
 这条闸门也反向测过：用另一个进程占住目录里的文件再跑，它必须拒绝：
 
 ```
@@ -216,15 +223,15 @@ keystore/debug.jks                  ⚠ 签名密钥，见「签名」一节
 build.sh / verify.sh                构建 / 验证
 ```
 
-**不在这里的东西**：`assets/index.html`、`assets/fonts/`、`assets/ys-ai-shim.js` 和 `build/`
-都是生成物，已 gitignore。`assets/fonts/` 的来源是仓库根的 `../fonts/`（见「字体」一节），
+**不在这里的东西**：`assets/index.html`、`assets/fonts/`、`assets/ys-ai-shim.js` 和 `build/`  
+都是生成物，已 gitignore。`assets/fonts/` 的来源是仓库根的 `../fonts/`（见「字体」一节），  
 `assets/ys-ai-shim.js` 的来源是 `shim/ai-fetch-shim.js`（见「AI 跨域转发」）。
 
 ---
 
 ## 图标
 
-用的是 GitHub 头像（`https://avatars.githubusercontent.com/u/86054388`）。
+用的是 GitHub 头像（`https://avatars.githubusercontent.com/u/86054388`）。  
 `tools/make-icons.py` 从源图裁出一块「头部特写」，再生成各密度图标 + 自适应图标前景 + 一张预览。
 
 ```bash
@@ -232,10 +239,10 @@ python tools/make-icons.py <头像.png> res
 # 然后看 build/icon-preview.png —— 中间亮区就是启动器实际会露出的部分
 ```
 
-⚠ 裁切参数 `CROP_X / CROP_Y / CROP_SIDE` 是**看出来的**，改了必须重看预览图。
+⚠ 裁切参数 `CROP_X / CROP_Y / CROP_SIDE` 是**看出来的**，改了必须重看预览图。  
 （实测源图是 **460×460**，不是 512 —— GitHub 不会把原图放大。）
 
-⚠ 生成脚本故意**不用 Pillow**：本机 pip 走代理拉不到 PyPI（实测卡死 4 分钟无输出）。
+⚠ 生成脚本故意**不用 Pillow**：本机 pip 走代理拉不到 PyPI（实测卡死 4 分钟无输出）。  
 用标准库 `zlib` 手写 PNG 解码/编码 + 面积平均缩放，零依赖。
 
 ---
@@ -244,31 +251,31 @@ python tools/make-icons.py <头像.png> res
 
 `build.sh` 的第 1b 步会**从页面正文里抽出它真的引用到的字体**，只把那些拷进 `assets/fonts/`。
 
-**页面一个字都不用改**：`saki.html` 里的 `@font-face` 用的是相对路径 `./fonts/…`，
-而 `MainActivity` 的 `shouldInterceptRequest` 会把 `assets/` 下的**任意路径**都喂给 WebView，
+**页面一个字都不用改**：`saki.html` 里的 `@font-face` 用的是相对路径 `./fonts/…`，  
+而 `MainActivity` 的 `shouldInterceptRequest` 会把 `assets/` 下的**任意路径**都喂给 WebView，  
 所以 `https://appassets.androidplatform.net/fonts/…` 直接命中 `assets/fonts/…`。
 
 ### 为什么不是「整个 `../fonts` 拷进去」
 
 `../fonts` 一共 **5 个文件 13 589 664 字节**，而页面**只引用 1 个**：
 
-| 文件 | 字节 | 页面引用 |
-|---|---|---|
-| `fusion-pixel-12px-proportional-ja.ttf` | 7 012 636 | ✅ |
-| `myFont.ttf` | 2 761 212 | ❌ |
-| `ttf/Cubic_11_1.100_R.ttf` | 2 761 212 | ❌ |
-| `web/Cubic_11_1.100_R.woff` | 655 504 | ❌ |
-| `web/Cubic_11_1.100_R.woff2` | 399 100 | ❌ |
+| 文件                                      | 字节        | 页面引用 |
+| --------------------------------------- | --------- | ---- |
+| `fusion-pixel-12px-proportional-ja.ttf` | 7 012 636 | ✅    |
+| `myFont.ttf`                            | 2 761 212 | ❌    |
+| `ttf/Cubic_11_1.100_R.ttf`              | 2 761 212 | ❌    |
+| `web/Cubic_11_1.100_R.woff`             | 655 504   | ❌    |
+| `web/Cubic_11_1.100_R.woff2`            | 399 100   | ❌    |
 
-那 4 个（合计 **6 577 028 字节**未压缩）**全仓库任何地方都没引用过**，
-其中 `myFont.ttf` 与 `ttf/Cubic_11_1.100_R.ttf` 还是**同一份文件的两个副本**
+那 4 个（合计 **6 577 028 字节**未压缩）**全仓库任何地方都没引用过**，  
+其中 `myFont.ttf` 与 `ttf/Cubic_11_1.100_R.ttf` 还是**同一份文件的两个副本**  
 （crc32 都是 `733b9c8b`）。
 
-> ⚠ README 里原来写的是「合计 3 667 028 字节」—— 那个数是**错的**（正确值 6 577 028）。
-> 它是写死的，而写死的数字不会自己更正，也没人会去核。
+> ⚠ README 里原来写的是「合计 3 667 028 字节」—— 那个数是**错的**（正确值 6 577 028）。  
+> 它是写死的，而写死的数字不会自己更正，也没人会去核。  
 > 现在 `verify.sh` 会把合计**算出来**打出来。
 
-只装引用的那一个之后：APK **5 048 696 → 2 705 463 字节**（省 2 343 233），
+只装引用的那一个之后：APK **5 048 696 → 2 705 463 字节**（省 2 343 233），  
 `zipalign` 的 `header mismatch` 警告也从 5 条降到 1 条（见「坑三」）。
 
 ### 清单从页面抽，而且只有**一份实现**
@@ -280,19 +287,19 @@ python tools/make-icons.py <头像.png> res
 FONT_LIST=$("$PYBIN" "$HERE/tools/pick-fonts.py" "$ROOT/saki.html" "$FONTS_SRC") || exit 1
 ```
 
-⚠ 各写一份的话，改了一处忘了另一处，表现是「**构建挑的是 A、验证核的是 B**」——
-两边都绿，而装进 APK 的是别的东西。`tools/reverse-fonts.py` 里有一条针专门数这件事：
+⚠ 各写一份的话，改了一处忘了另一处，表现是「**构建挑的是 A、验证核的是 B**」——  
+两边都绿，而装进 APK 的是别的东西。`tools/reverse-fonts.py` 里有一条针专门数这件事：  
 那条正则只许出现在 `pick-fonts.py` 一个生产侧文件里。
 
 ### 两条**静默**失败，所以各配了一条闸门
 
-| 情况 | 后果 | 现在 |
-|---|---|---|
+| 情况                                  | 后果               | 现在                      |
+| ----------------------------------- | ---------------- | ----------------------- |
 | 一个 `fonts/` 引用都抽不到（正则失效 / 产品改了引用方式） | 出一个**没有字体**的 APK | `pick-fonts.py` 非零退出并说明 |
-| 页面引用了某个字体，但 `../fonts` 里没有 | 装进去 **404** | 同上，且**点名**那个文件 |
+| 页面引用了某个字体，但 `../fonts` 里没有          | 装进去 **404**      | 同上，且**点名**那个文件          |
 
-两种在手机上**都只表现为「字体悄悄退化成系统字体」，不报任何错** ——
-所以它们必须在这里就被拦住，而且必须**能考**。`tools/reverse-fonts.py` 喂进**造的 HTML**
+两种在手机上**都只表现为「字体悄悄退化成系统字体」，不报任何错** ——  
+所以它们必须在这里就被拦住，而且必须**能考**。`tools/reverse-fonts.py` 喂进**造的 HTML**  
 把两道闸门各打红一次（还顺带证明 4 种 `url(…)` 写法都认、`--list-only` 真的绕过闸门）：
 
 ```bash
@@ -307,20 +314,21 @@ python tools/reverse-fonts.py       # == 全部符合预期 == 才算过
 
 页面本身**已经是一个完整的 Vertex AI 客户端**了，什么都不用加：
 
-| 模式 | 页面里怎么做的 | 打到哪 |
-|---|---|---|
-| express（API key） | `fetch` + `x-goog-api-key` 头 | `aiplatform.googleapis.com` |
+| 模式                       | 页面里怎么做的                                              | 打到哪                                     |
+| ------------------------ | ---------------------------------------------------- | --------------------------------------- |
+| express（API key）         | `fetch` + `x-goog-api-key` 头                         | `aiplatform.googleapis.com`             |
 | 完整（Service Account JSON） | `crypto.subtle` 签 RSASSA-PKCS1-v1_5 → 换 access token | `oauth2.googleapis.com` → `aiplatform…` |
 
-它缺的只有一样：**从 WebView 里直连 `*.googleapis.com` 会被 CORS 挡掉**。
-Google 不给浏览器 origin 发 `Access-Control-Allow-Origin`，所以请求发得出去、响应读不回来
+它缺的只有一样：**从 WebView 里直连 `*.googleapis.com` 会被 CORS 挡掉**。  
+Google 不给浏览器 origin 发 `Access-Control-Allow-Origin`，所以请求发得出去、响应读不回来  
 （表现是 `TypeError: Failed to fetch`，控制台里只有一句含糊的跨域报错）。
 
 ### 为什么选「注入 `fetch` 垫片」而不是 `shouldInterceptRequest`
 
-`shouldInterceptRequest` 看上去更正统（不用动页面行为），但它的正确性取决于三条
-**在本机无法验证**的行为：① 自己合成的响应要不要手工写 CORS 头；② preflight 会不会也被拦；
+`shouldInterceptRequest` 看上去更正统（不用动页面行为），但它的正确性取决于三条  
+**在本机无法验证**的行为：① 自己合成的响应要不要手工写 CORS 头；② preflight 会不会也被拦；  
 ③ 流式必须在后台线程**同步**返回。
+
 
 垫片的语义是**浏览器自己的** —— 它只是把 `fetch` 换掉，剩下的 `Response` / `ReadableStream` /
 `AbortSignal` 全是真的。所以这条路**能脱离 WebView 用 Node 验证**，而上面那三条不能。

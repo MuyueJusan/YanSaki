@@ -10,11 +10,16 @@
     2026 年了，这笔账不划算。要兼容 29 以下再说。
 
   ⚠ targetSdk 34：Play 商店的硬要求，且 34 会强制 `android:exported` 显式声明。
+
+  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.2` ⇔ versionName `1.2`。
+    1.0 和 1.1 那两个包**顶着同一个 versionName「1.0」**（当时忘了提），
+    只有 tag 能区分 —— 从这一版起对齐，历史那两个不改（改了反而更乱）。
+    versionCode 只要求**单调递增**，装新包时系统靠它判断是升级。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="top.yansaki.shed"
-    android:versionCode="1"
-    android:versionName="1.0">
+    android:versionCode="2"
+    android:versionName="1.2">
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
 

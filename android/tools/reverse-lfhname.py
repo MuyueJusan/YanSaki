@@ -36,11 +36,22 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANDROID = os.path.dirname(HERE)
 
-TARGET = b'assets/fonts/web/Cubic_11_1.100_R.woff2'
+# ⚠ APK 路径**从 AndroidManifest.xml 现推**，别在这儿写死文件名：
+#   写死过一次 `YanSakiShed-1.0.apk`，一提版本这条就报「前置不满足，中止」——
+#   看着像环境坏了，其实只是这一行过时（RULES 六之四十八）。
+sys.path.insert(0, HERE)
+from apk_path import apk_path  # noqa: E402  （必须在 sys.path 之后）
+
+# ⚠ 这里原来有个 `TARGET = b'assets/fonts/web/Cubic_11_1.100_R.woff2'`：
+#   它既**没人用了**（改成从中央目录动态枚举之后就不用了），内容又**已经过时**
+#   （那个字体在瘦身那一轮被删出 APK）。留着比删掉更坏 —— 读代码的人会以为
+#   「这个探针盯的就是那个文件」，于是不会去看真正的 `pick_nested_entry()`。
+#   「过时文档」跟「过时断言」是同一类东西。
+
 NEEDLE = '每个条目的本地头名字都与中央目录逐字节一致'
 
 ap = argparse.ArgumentParser()
-ap.add_argument('--apk', default=os.path.join(ANDROID, 'build', 'YanSakiShed-1.0.apk'),
+ap.add_argument('--apk', default=apk_path(),
                 help='出货 APK（对照组，期望它是绿的）')
 ap.add_argument('--unsigned', default=os.path.join(ANDROID, 'build', 'aligned.apk'),
                 help='未签名产物，用来做注入的起点')

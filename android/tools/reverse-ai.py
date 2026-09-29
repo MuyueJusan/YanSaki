@@ -53,7 +53,12 @@ ANDROID = os.path.dirname(HERE)
 
 SHIM = os.path.join(ANDROID, 'shim', 'ai-fetch-shim.js')
 MAIN = os.path.join(ANDROID, 'src', 'top', 'yansaki', 'shed', 'MainActivity.java')
-APK = os.path.join(ANDROID, 'build', 'YanSakiShed-1.0.apk')
+# ⚠ APK 路径**从 AndroidManifest.xml 现推**，别写死文件名：
+#   写死过一次 `YanSakiShed-1.0.apk`，一提版本这条就报「前置不满足，中止」——
+#   看着像环境坏了，其实只是这一行过时（RULES 六之四十八）。
+sys.path.insert(0, HERE)
+from apk_path import apk_path  # noqa: E402  （必须在 sys.path 之后）
+APK = apk_path()
 BUILD_SH = os.path.join(ANDROID, 'build.sh')
 VERIFY_SH = os.path.join(ANDROID, 'verify.sh')
 

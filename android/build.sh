@@ -44,7 +44,17 @@ export JAVA_HOME
 export PATH="$JAVA_HOME/bin:$PATH"
 
 PKG_NAME="YanSakiShed"
-VER_NAME="1.0"
+# ⚠⚠ 版本号**从 AndroidManifest.xml 现读**（单一真相源），别在这儿再写一份。
+#   写死两份就一定会分叉：这一轮把清单的 versionName 提到 1.2，而这里还写着 1.0
+#   ⇒ 产出的包叫 `YanSakiShed-1.0.apk`、里面却是 1.2，Release 附件名跟版本对不上。
+#   （那正是用户这次要修的那类问题：两个包顶着同一个版本号，只有 tag 能区分。）
+# ⚠ 读不出来就当场退出，别拿空串去拼文件名（`YanSakiShed-.apk` 会一路签到最后才发现）
+VER_NAME=$(grep -o 'android:versionName="[^"]*"' "$HERE/AndroidManifest.xml" | head -1 | sed 's/.*="//;s/"$//')
+if [ -z "$VER_NAME" ]; then
+    echo "❌ 从 $HERE/AndroidManifest.xml 读不出 android:versionName —— 拒绝拼一个空版本号的文件名"
+    exit 1
+fi
+echo "版本（读自 AndroidManifest.xml）：$VER_NAME"
 
 OUT="$HERE/build"
 APK_DIR="$OUT/apk"
@@ -58,6 +68,19 @@ PYBIN="${PYBIN:-/c/Users/YanSaki/.workbuddy-ai/binaries/python/envs/default/Scri
 [ -x "$PYBIN" ] || { echo "❌ 找不到 python：$PYBIN（设 PYBIN=... 指过来）"; exit 1; }
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+
+# ---------- 0a. 清掉上一版留下的 APK ----------
+# ⚠⚠ 版本号一提，输出文件名就变了（`$PKG_NAME-$VER_NAME.apk`），上一版那个**不会自己消失**
+#   ⇒ build/ 里同时躺着两个包。而「留两份就一定有一份是错的」：核对 sha1 时拿错一份、
+#   Release 传错一份，都是这么来的。build/ 是纯生成物（gitignore 里就是它），
+#   所以这里删得理直气壮 —— 只删**本目录下、名字带本应用前缀**的那些。
+# ⚠ 用 glob 而不是 `ls | while`：没匹配时 glob 保持字面量，`[ -e ]` 挡掉即可，
+#   不必靠 `ls ... || true`（那玩意儿在 `set -o pipefail` 下容易咬到自己）
+for f in "$OUT/$PKG_NAME-"*.apk; do
+    [ -e "$f" ] || continue
+    echo "   清掉上一版产物：$(basename "$f")"
+    rm -f "$f"
+done
 
 # ---------- 0. 检查工具 ----------
 say "0. 检查工具链"
