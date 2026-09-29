@@ -217,11 +217,30 @@ function die(msg) { console.log('\n❌ ' + msg + '\n（远端 ref 未改动）')
             console.log('  ' + status + ' ' + p + '  → blob ' + b.body.sha.slice(0, 10) + ' ✅');
         }
 
-        const t = await api(tok, '/repos/' + REPO + '/git/trees', 'POST',
-            { base_tree: prevTree, tree: entries });
-        if (t.status !== 201 && t.status !== 200) die('建 tree 失败 HTTP ' + t.status + ' ' + JSON.stringify(t.body));
-        if (t.body.sha !== wantTree) die('tree sha 不一致：远端 ' + t.body.sha + ' vs 本地 ' + wantTree);
-        console.log('  tree ' + t.body.sha.slice(0, 10) + ' ✅');
+        // ⚠⚠ 空 diff 是**合法**的，而且合并提交经常就是空的 ——
+        //   它的 tree 与**第一父**逐字节相同（合并没带来任何新内容时就是这样）。
+        //   而 `POST /git/trees` 对**空的 tree 数组**返回
+        //   422 {"message":"Invalid tree info"} —— 那个报错长得像「参数写错了」，
+        //   实际是「这个提交相对第一父什么都没改，压根不需要建 tree」。
+        //   （2026-09-29 实测：第一次在 apk 上做 `git merge main` 就撞上，
+        //     而 apk 已经通过 cherry-pick 拿到同样内容 ⇒ 合并的 tree 与第一父相同。）
+        //   ⇒ 直接复用上一棵，但**必须核对**它等于这个 commit 自己的 tree，
+        //     否则「拿错树」会被静默吞掉（远端 ref 一动，错的东西就成了历史）。
+        let treeSha = wantTree;   // 两种分支下都应当等于本提交自己的 tree
+        if (!entries.length) {
+            if (prevTree !== wantTree) {
+                die('相对第一父无改动，但复用的 tree 对不上：prevTree ' + prevTree +
+                    ' vs 本提交 ' + wantTree);
+            }
+            console.log('  tree ' + wantTree.slice(0, 10) + ' ✅（相对第一父无改动，复用上一棵）');
+        } else {
+            const t = await api(tok, '/repos/' + REPO + '/git/trees', 'POST',
+                { base_tree: prevTree, tree: entries });
+            if (t.status !== 201 && t.status !== 200) die('建 tree 失败 HTTP ' + t.status + ' ' + JSON.stringify(t.body));
+            if (t.body.sha !== wantTree) die('tree sha 不一致：远端 ' + t.body.sha + ' vs 本地 ' + wantTree);
+            console.log('  tree ' + t.body.sha.slice(0, 10) + ' ✅');
+            treeSha = t.body.sha;
+        }
 
         const cm = await api(tok, '/repos/' + REPO + '/git/commits', 'POST', {
             message: c.message, tree: wantTree, parents: c.parents,
