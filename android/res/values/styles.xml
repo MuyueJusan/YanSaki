@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ⚠ 只用 **framework** 主题（@android:style/...），不引 androidx。
+     引 androidx 就得把 appcompat / material 的 AAR 一个个下下来再手工拼 classpath，
+     而这个 App 只有一个全屏 WebView，用不着那一整套。
+-->
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/shed_backdrop</item>
+        <!-- 顶栏颜色跟页面背景对齐，避免启动瞬间闪一下白 -->
+        <item name="android:statusBarColor">@color/shed_backdrop</item>
+        <item name="android:navigationBarColor">@color/shed_backdrop</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

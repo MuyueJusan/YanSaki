@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  YanSaki的小屋 · Android 封装版
+
+  ⚠ minSdk 选 29（Android 10）是**故意的**，不是偷懒：
+    产品里的「导出」走 `URL.createObjectURL(blob)` + `<a download>`，封装版要把文件
+    落到「下载」目录。API 29 起有 MediaStore.Downloads，**零运行时权限**；
+    29 以下只能写 /sdcard/Download，得再申请 WRITE_EXTERNAL_STORAGE、
+    还得处理用户拒绝 —— 多两条失败路径，换来的只是 Android 9 及更早的机器。
+    2026 年了，这笔账不划算。要兼容 29 以下再说。
+
+  ⚠ targetSdk 34：Play 商店的硬要求，且 34 会强制 `android:exported` 显式声明。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="top.yansaki.shed"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
+
+    <!-- 页面里 @import 了 Google Fonts；离线时只是字体退化，不影响可用 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/AppTheme"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="false"
+        android:allowBackup="false"
+        android:supportsRtl="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode|density|fontScale|locale|layoutDirection">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  shed_backdrop 取的是产品 `:root` 里那条 135deg 渐变的**中间调**（color-3 = #79c4d2）。
+  那条渐变有 400% 宽度且在动画，任意时刻看到的都接近中段颜色，用它做窗口底色
+  能把「启动瞬间 → 页面出来」的跳变降到最低。
+  ⚠ 页面支持自定义主题；用户换过色之后启动瞬间会有一点点不匹配，这是可以接受的。
+-->
+<resources>
+    <color name="shed_backdrop">#79c4d2</color>
+</resources>
