@@ -57,14 +57,23 @@ aapt2 compile → aapt2 link → javac → d8 → 追加 classes.dex → zipalig
 
 APK **不进仓库**（是生成物），挂在这个分支对应的 **Release** 上：
 
-| tag                                                                       | commit    | 附件                                                                                      | 说明                           |
-| ------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------- | ---------------------------- |
-| [`apk-v1.1`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.1) | `9a187f3` | `YanSakiShed-1.0.apk` 2 705 463 字节<br />sha1 `a4f3ee2f6289469d29d4eb0a652cbaf8bfbe5c49` | **当前版**：字体内嵌 + 可直连 Vertex AI |
-| [`apk-v1.0`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.0) | `02a874a` | 1 083 285 字节                                                                            | 最早那版，只有内嵌页面                  |
+| tag                                                                       | commit    | 附件                                                                                      | 说明                                                                                  |
+| ------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [`apk-v1.2`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.2) | `c9a900a` | `YanSakiShed-1.2.apk` 2 709 559 字节<br />sha1 `7ac49b09b61095155ab8c9c3c0f34910049578a2` | **当前版**：`versionName` 提到 `1.2`；修【ai对话】完整模式点「应用」被空 Key 拦住 + 【API 全局配置】标题栏跟着正文滚 |
+| [`apk-v1.1`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.1) | `9a187f3` | `YanSakiShed-1.0.apk` 2 705 463 字节<br />sha1 `a4f3ee2f6289469d29d4eb0a652cbaf8bfbe5c49` | 字体内嵌 + 可直连 Vertex AI（⚠ 附件名顶着 `1.0`，见下）                                |
+| [`apk-v1.0`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.0) | `02a874a` | 1 083 285 字节                                                                            | 最早那版，只有内嵌页面                                                                  |
 
 ⚠ **每次重建都要回头核对 Release 附件** —— 附件是 APK 的**第二份拷贝**，不会自己更新。  
 它挂着一个旧版的时候最坑：别人从你给的链接下载，拿到的是旧 App，而且不报错。  
 （每个 release 上传后都要把附件**下载回来核 sha1**，与本地逐字节一致才算数。）  
+⚠⚠ **这一步交给 `tools/release.js`，别手敲。** 默认 dry-run，`--go` 才真发，`--verify` 只复查已有 release。
+⚠⚠ **「上传成功」不等于「附件就是那个包」** —— 上传返回 201、`size` 也对，照样可能挂错东西。
+2026-09-29 就撞过一次：取附件时 `Object.assign({ 'Accept': 'application/octet-stream' }, H)` 里
+**H 反手把 `Accept` 盖回 JSON** ⇒ 下载回来的是资产的元数据（1514 字节），不是包。
+上传那一侧**完全看不出问题**，是「下载回来逐字节比」这道往返判据当场拦下的
+（⇒ 覆盖项一律放 `Object.assign` 最后一位）。  
+⚠ **往返判据失败时 fail-closed 是对的**：它证明不了「附件是对的」就拒绝放行。
+即使事后发现产物其实没问题，也不能让它退化成「猜对了才绿」的永真断言。  
 ⚠⚠ **版本号只有一个真相源：`AndroidManifest.xml` 的 `versionName`。**
 `build.sh` / `verify.sh` / 两个反向测试的 APK 路径**全部从它现推**
 （`tools/apk_path.py`）。它们原来各自写死 `YanSakiShed-1.0.apk` ⇒ 一提版本
