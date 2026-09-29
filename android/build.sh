@@ -78,6 +78,21 @@ cp -f "$SRC_HTML" "$ASSETS/index.html"
 echo "   saki.html → assets/index.html  ($(stat -c%s "$ASSETS/index.html") 字节)"
 # ⚠ 不重编码、不转换行尾 —— 产品的 CRLF 要原样带过去
 
+# ---------- 1b. 字体 ----------
+say "1b. 取字体"
+# 产品里的 @font-face 用的是**相对路径** `./fonts/fusion-pixel-….ttf`。
+# 页面跑在 https://appassets.androidplatform.net/ 上，所以相对路径会解析成
+#   https://appassets.androidplatform.net/fonts/…
+# 而 shouldInterceptRequest 会把** assets 下任意路径**都兜住 ⇒ 原样丢进 assets/fonts 即可，
+# **产品源码一个字都不用改**，也不用给它换绝对路径。
+FONTS_SRC="$ROOT/fonts"
+[ -d "$FONTS_SRC" ] || { echo "❌ 找不到 $FONTS_SRC"; exit 1; }
+rm -rf "$ASSETS/fonts"
+mkdir -p "$ASSETS/fonts"
+cp -R "$FONTS_SRC/." "$ASSETS/fonts/"
+echo "   fonts/ → assets/fonts/  ($(find "$ASSETS/fonts" -type f | wc -l) 个文件, $(du -sh "$ASSETS/fonts" | cut -f1))"
+find "$ASSETS/fonts" -type f | sed "s|$ASSETS/|     |" | sort
+
 # ---------- 2. 资源 ----------
 say "2. aapt2 compile"
 rm -rf "$OUT"; mkdir -p "$APK_DIR" "$CLASSES" "$DEX" "$GEN"

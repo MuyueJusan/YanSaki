@@ -39,7 +39,7 @@ aapt2 compile → aapt2 link → javac → d8 → 追加 classes.dex → zipalig
 
 ---
 
-## 两个必须知道的坑
+## 三个必须知道的坑
 
 ### 坑一：页面必须跑在**真实 origin** 上，不能用 `file://`
 
@@ -74,6 +74,56 @@ java.lang.NullPointerException: Cannot invoke "String.length()" because "<parame
 > 「目标 11 不允许选项 --boot-class-path」）。所以「改成 target 11 绕开」这条路是堵死的，
 > 唯一正解就是换 JDK。
 
+### 坑三：`zipalign` 的 `WARNING: header mismatch` 是**假警报**，而且它**退出码是 0**
+
+把 `../fonts` 整个拷进 `assets/fonts/` 之后，构建日志里多出 5 行：
+
+```
+zip W 09-29 19:17:11  2808 22460] WARNING: header mismatch
+```
+
+正好等于字体文件个数 —— 但那**不是**压缩、对齐或内容出了问题。查清的过程和结论：
+
+| 阶段 | 项数 | 「本地头名字 ≠ 中央目录名字」的条目 | zipalign 警告 |
+|---|---|---|---|
+| `build/apk/base.apk`（aapt2 输出） | 26 | **5**（就是那 5 个字体） | **5 条** |
+| `build/aligned.apk`（zipalign 输出） | 26 | 0 | **0 条** |
+| 出货 APK（签名后） | 29 | 0 | **0 条** |
+
+根因是 **aapt2 在 Windows 上给「带子目录的资产」写本地文件头(LFH)时，路径用的是平台分隔符 `\`**，
+而中央目录(CD)里是 `/`：
+
+```
+LFH: assets\fonts\web\Cubic_11_1.100_R.woff2
+CD : assets/fonts/web/Cubic_11_1.100_R.woff2
+```
+
+zipalign 的 `ZipEntry::compareHeaders()` 最后一条正是 `strcmp(CD 名字, LFH 名字)`，于是每条打一行警告。
+`assets/index.html` 路径里没有分隔符，所以**加字体之前从来没报过**。
+
+为什么可以判定无害：
+
+1. **zipalign 是从中央目录重建本地头的**，所以它顺手把反斜杠归一了 —— 它自己的输出 0 条警告。
+2. **apksigner 直接拒绝**这种 APK，`rc=1`：
+   ```
+   com.android.apksig.zip.ZipFormatException:
+     Name mismatch between Local File Header and Central Directory.
+   ```
+   ⇒ 这个缺陷**在结构上不可能进入出货产物**，签名那一步就是闸门。
+3. 但 zipalign **只打警告、退出码照样 0**，光看 `build.sh` 成没成功是**看不出来**的。
+
+所以 `verify.sh` 加了一条断言：**出货 APK 里每个条目的本地头名字都要与中央目录逐字节一致**。
+配了反向测试 `tools/reverse-lfhname.py`（注入反斜杠 → 断言必须变红；对照真实 APK → 必须为绿）：
+
+```bash
+python tools/reverse-lfhname.py     # == 全部符合预期 == 才算过
+```
+
+> ⚠ 这个反向测试自己踩过两个坑，都写进脚本注释了，因为**两者都会伪装成「产品坏了」**：
+> ① Windows PATH 里的 `bash` 是 **WSL 启动器**，没装发行版时只打印一行中文就 `rc=1` 退出 ——
+> 脚本必须显式用 `C:\Program Files\Git\bin\bash.exe`；
+> ② 传给 `verify.sh` 的路径要用**正斜杠**，反斜杠会让 `[ -e "$APK" ]` 失败并**立刻退出**。
+
 ---
 
 ## 目录
@@ -87,11 +137,13 @@ res/                                图标 + 主题色 + 应用名
 tools/make-icons.py                 头像 → 图标（纯标准库，见下）
 tools/add-dex.py                    把 classes.dex 追加进 APK 并自查压缩方式
 tools/repro-d8-javac/               坑二的最小复现
+tools/reverse-lfhname.py            坑三的反向测试（证明那条断言不是永远为真）
 keystore/debug.jks                  ⚠ 签名密钥，见「签名」一节
 build.sh / verify.sh                构建 / 验证
 ```
 
-**不在这里的东西**：`assets/index.html` 和 `build/` 都是生成物，已 gitignore。
+**不在这里的东西**：`assets/index.html`、`assets/fonts/` 和 `build/` 都是生成物，已 gitignore。
+`assets/fonts/` 的来源是仓库根的 `../fonts/`（见「字体」一节）。
 
 ---
 
@@ -110,6 +162,40 @@ python tools/make-icons.py <头像.png> res
 
 ⚠ 生成脚本故意**不用 Pillow**：本机 pip 走代理拉不到 PyPI（实测卡死 4 分钟无输出）。
 用标准库 `zlib` 手写 PNG 解码/编码 + 面积平均缩放，零依赖。
+
+---
+
+## 字体
+
+`build.sh` 的第 1b 步会把仓库根的 `../fonts/` **整个目录原样拷进 `assets/fonts/`**：
+
+```bash
+FONTS_SRC="$ROOT/fonts"          # $ROOT = 仓库根
+rm -rf "$ASSETS/fonts"; mkdir -p "$ASSETS/fonts"; cp -R "$FONTS_SRC/." "$ASSETS/fonts/"
+```
+
+**页面一个字都不用改**：`saki.html` 里的 `@font-face` 用的是相对路径 `./fonts/…`，
+而 `MainActivity` 的 `shouldInterceptRequest` 会把 `assets/` 下的**任意路径**都喂给 WebView，
+所以 `https://appassets.androidplatform.net/fonts/…` 直接命中 `assets/fonts/…`。
+
+体积代价：APK 从 **1 083 285 → 5 036 342 字节**（sha1 `30d9faeb…` → `97b67322…`）。
+
+⚠ 页面实际只引用了 **1 个**字体（`fusion-pixel-12px-proportional-ja.ttf`，7 012 636 字节）；
+另外 4 个（`myFont.ttf` / `ttf/Cubic_11_1.100_R.ttf` / `web/*.woff` / `web/*.woff2`，合计
+3 667 028 字节）**全仓库任何地方都没引用过** —— 它们是从整个 `fonts/` 目录一起拷进来的。
+`verify.sh` 会把这几个「装了但没引用」的列出来，方便决定要不要瘦身。
+
+> 顺带一个观察：`myFont.ttf` 与 `ttf/Cubic_11_1.100_R.ttf` 的 crc32 和大小**完全相同**
+> （`733b9c8b` / 2 761 212），是同一份文件的两个副本。
+
+`verify.sh` 的字体检查**故意不写死清单**，而是**从页面正文里把 `url(…fonts/…)` 抽出来**再逐条核对：
+
+```python
+refs = sorted(set(re.findall(rb'url\(\s*[\'"]?\.?/?(fonts/[^\'")]+)', html)))
+```
+
+这样「CSS 说要用的字体」和「真的装进去的字体」之间不可能出现缝 —— 写死清单的话，
+产品里改了路径验证脚本不会红，而且清单迟早漂。
 
 ---
 
