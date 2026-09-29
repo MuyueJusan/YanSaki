@@ -78,6 +78,20 @@ cp -f "$SRC_HTML" "$ASSETS/index.html"
 echo "   saki.html → assets/index.html  ($(stat -c%s "$ASSETS/index.html") 字节)"
 # ⚠ 不重编码、不转换行尾 —— 产品的 CRLF 要原样带过去
 
+# ---------- 1a. AI 转发垫片 ----------
+say "1a. 取 AI 转发垫片"
+# ⚠ 垫片放 shim/ 而不是直接放 assets/：assets/ 是生成物（已 gitignore），
+#   源文件必须待在仓库里。这里拷进去，MainActivity 再从 assets 读出来注入。
+SHIM_SRC="$HERE/shim/ai-fetch-shim.js"
+[ -e "$SHIM_SRC" ] || { echo "❌ 找不到 $SHIM_SRC"; exit 1; }
+cp -f "$SHIM_SRC" "$ASSETS/ys-ai-shim.js"
+echo "   shim/ai-fetch-shim.js → assets/ys-ai-shim.js  ($(stat -c%s "$ASSETS/ys-ai-shim.js") 字节)"
+# ⚠ 顺手做一次语法检查。垫片是注入到页面里的，语法错了表现是
+#   「页面上什么都没发生」，而 evaluateJavascript 的报错只进 logcat，非常难查。
+if command -v node >/dev/null 2>&1; then
+    node --check "$ASSETS/ys-ai-shim.js" && echo "   node --check 通过"
+fi
+
 # ---------- 1b. 字体 ----------
 say "1b. 取字体"
 # 产品里的 @font-face 用的是**相对路径** `./fonts/fusion-pixel-….ttf`。

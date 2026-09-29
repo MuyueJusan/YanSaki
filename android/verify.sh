@@ -63,9 +63,9 @@ chk "$([ "$AL_RC" -eq 0 ] && echo 1 || echo 0)" "4 字节对齐（zipalign 退�
 # ---------- 4. 内容 ----------
 echo
 echo "== 4. 内容（zip 条目 / dex / 页面字节 / 字体）=="
-"$PYBIN" - "$APK" "$HERE/../saki.html" "$HERE/../fonts" <<'PY'
+"$PYBIN" - "$APK" "$HERE/../saki.html" "$HERE/../fonts" "$HERE/shim/ai-fetch-shim.js" <<'PY'
 import hashlib, os, re, struct, sys, zipfile
-apk_path, src_path, fonts_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+apk_path, src_path, fonts_dir, shim_path = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 z = zipfile.ZipFile(apk_path)
 names = z.namelist()
 fail = 0
@@ -142,6 +142,95 @@ if html is not None:
         print('   ℹ️  装了但页面没引用（可考虑删掉瘦身）：')
         for n in unused:
             print('        %-58s %8d 字节' % (n, z.getinfo(n).file_size))
+
+# ---- AI 跨域转发（垫片 + 原生转发核心）----
+# 这一节回答的问题是：「APK 里真的带着那套能让页面直连 Vertex AI 的东西吗？」
+# 它**不**回答「真的能连上 Google」—— 本机连不上（所有 *.googleapis.com 都被代理挡死），
+# 那件事只能在能上外网的手机上验。这里只保证**东西装进去了、而且是仓库里那一份**。
+print('   --- AI 跨域转发 ---')
+SHIM_ASSET = 'assets/ys-ai-shim.js'
+chk(SHIM_ASSET in names, 'APK 里有 %s' % SHIM_ASSET)
+if SHIM_ASSET in names and shim_path and os.path.exists(shim_path):
+    a = z.read(SHIM_ASSET)
+    b = open(shim_path, 'rb').read()
+    chk(a == b, '垫片与仓库源文件逐字节一致 (%d 字节)' % len(b))
+    # ⚠ 白名单**只能有一份实现**（AiProxy.ALLOW_SUFFIX）。
+    #   垫片要是自己又抄一份域名清单，改了 Java 忘了改 JS 的表现是
+    #   「请求被垫片接管了，却报『不在白名单』」—— 能查，但纯属自找。
+    #   所以这里做一条「不该发生」的对照：垫片里不许出现任何 googleapis 域名。
+    # ⚠ 只扫**代码**，不扫注释。
+    #   垫片的注释里**正当**地提到了 *.googleapis.com（解释「本机连不上 Google」这件事）。
+    #   第一版没去注释，于是这条断言第一次跑就报了个假红：实得 ['.googleapis.com'] ——
+    #   那不是域名清单，是注释里的一个词。
+    #   这个去注释是**文本级**的：垫片里没有含 `//` 的字符串字面量，
+    #   所以不存在「把字符串里的 // 当成注释、把后面的代码整段吃掉」这种误伤。
+    code = re.sub(rb'/\*.*?\*/', b'', a, flags=re.S)
+    code = re.sub(rb'//[^\n]*', b'', code)
+    hosts = re.findall(rb'[a-z0-9.-]*googleapis\.com', code)
+    chk(not hosts,
+        '垫片代码里没有硬编码的 googleapis 域名（白名单只有 AiProxy 一份实现）'
+        + ('' if not hosts else '，实得 %r' % sorted(set(h.decode() for h in hosts))))
+    chk(b'aiAllowed' in a, '垫片是通过 aiAllowed() 问原生的')
+
+def dex_strings(d):
+    """把 dex 的 string_ids 表整个读出来，返回 set；解析不动就返回 None。
+
+    ⚠ 为什么要费这个劲：`b'aiAbort' in dex` 是**子串**搜索，
+       把桥接方法改名成 `aiAbortZZZ` 它**照样绿** —— 反向测试 tools/reverse-ai.py 的
+       针④ 实测过。而垫片里 `native.aiAbort(...)` 是硬调的 ⇒ 改了名**没有任何一层会报**，
+       直到真机上「点停止没反应」。所以这里要比**整串**。
+    """
+    try:
+        if not d.startswith(b'dex\n'):
+            return None
+        n, off = struct.unpack('<II', d[56:64])          # string_ids_size / _off
+        if not (0 < n < 200000 and 0 < off < len(d)):
+            return None
+        out = set()
+        for i in range(n):
+            p = struct.unpack('<I', d[off + 4 * i:off + 4 * i + 4])[0]
+            if not (0 < p < len(d)):
+                return None
+            while p < len(d) and d[p] & 0x80:            # uleb128 utf16_size
+                p += 1
+            p += 1
+            e = d.find(b'\x00', p)                       # MUTF-8 里 U+0000 是 C0 80，不会早停
+            if e < 0:
+                return None
+            out.add(d[p:e])
+        return out
+    except Exception:
+        return None
+
+
+if 'classes.dex' in names:
+    dex = z.read('classes.dex')
+    # ⚠ 「子串命中」和「符号就叫这个」是两件事，分两档写，别让弱断言混进强断言里。
+    #   方法名与类型描述符在 dex 字符串表里是**整串**存的 ⇒ 要求精确匹配。
+    strs = dex_strings(dex)
+    chk(strs is not None and len(strs) > 100,
+        'dex 字符串表解析成功（%s 条）' % (len(strs) if strs else 'None'))
+    if not strs:
+        # ⚠ 解析失败**不跳过**下面几条，而是让它们全部红出声。
+        #   `if strs:` 那种写法会让解析器坏掉时下面几条**静默消失** ——
+        #   输出上「红 1 条」和「红 6 条」都是红，但前者看着像「只坏了一点点」，
+        #   实际上「下面几条压根没被检查」这件事被藏起来了。
+        strs = set()
+    # 两条**对照**：一条正的（证明解析器真的在读 dex，不是返回空集/垃圾），
+    # 一条负的（证明它不是一个「查什么都有」的容器）。
+    # ⚠ 记忆里的规矩：说「发生了」必须配一条「不该发生」的 —— 否则这条断言
+    #   可能**永远为真**，而永远为真的绿不是证据。
+    chk(b'Ltop/yansaki/shed/MainActivity;' in strs,
+        '对照：字符串表里查得到 MainActivity（解析器真的在读 dex）')
+    chk(b'Ltop/yansaki/shed/NoSuchClassZZZ;' not in strs,
+        '对照：不存在的类型描述符确实查不到（不是「查什么都有」）')
+    for nm in (b'aiStart', b'aiAllowed', b'aiAbort'):
+        chk(nm in strs, 'dex 字符串表里有恰好叫 %s 的符号（不是子串命中）' % nm.decode())
+    for desc in (b'Ltop/yansaki/shed/AiProxy;', b'Ltop/yansaki/shed/JsEvent;'):
+        chk(desc in strs, 'dex 字符串表里有类型描述符 %s' % desc.decode())
+    # ⚠ `window.__ysAi` 只可能是**子串**匹配：它是 JsEvent 拼出来的 JS 字面量的一个片段，
+    #   不单独成串。这条弱一档是格式决定的，不是偷懒 —— 所以它单独写、单独说清楚。
+    chk(b'window.__ysAi' in dex, 'dex 含 window.__ysAi（JS 字面量片段，只做子串匹配）')
 
 # ---- zip 结构：本地文件头里的名字必须与中央目录里的名字逐字节一致 ----
 # ⚠⚠ 这条不是吹毛求疵，是**本轮花了很久才查清的一个假警报的判据**。

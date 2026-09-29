@@ -21,3 +21,13 @@ desktop.ini
 android/build/
 android/assets/
 
+# 桌面契约测试（tools/test-aiproxy）的中间产物：临时服务器录的字节、编译出的 class。
+# ⚠ 只排除这个 .work/；同目录下的 server.py / Harness.java / contract.test.js / run.sh
+#   是**测试本体，要进仓库** —— 否则「这条链路验过」就成了一句没有凭据的话。
+android/tools/test-aiproxy/.work/
+
+# Python 的字节码缓存 —— tools/ 下都是 Python 工具，随手 py_compile / import 就会生成。
+# ⚠ 是**产物**：机器相关、跟源码不同步，进仓库只会多一份「哪份是新的」。
+__pycache__/
+*.pyc
+

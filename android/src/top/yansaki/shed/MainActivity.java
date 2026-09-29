@@ -25,12 +25,16 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 「YanSaki的小屋」的 Android 封装：一个 WebView，页面来自 APK 内的 assets/。
@@ -53,6 +57,17 @@ import java.util.Locale;
  *   把 `HTMLAnchorElement.prototype.click` 包一层：只拦「带 download 属性且 href 是 blob:」
  *   的那一下，读出字节丢给 {@link Bridge#saveFile}，其余原样放行。
  *   ⇒ **不改产品源码**，封装层自己消化差异。
+ *
+ * ⚠ 第三处：AI 跨域。产品本身就是完整的 Vertex AI 客户端（快速模式 / Service Account 完整模式
+ *   都实现了），缺的**不是协议，是「浏览器不许跨域直连」**。
+ *   CORS 是浏览器施加的规则，原生 HTTP 里没有这个概念 ⇒ 把请求挪到原生层发就没有了。
+ *   做法同样是注入垫片（{@code shim/ai-fetch-shim.js}），包装 `window.fetch`：
+ *   命中白名单的请求交给 {@link AiProxy} 代发，再用 ReadableStream 还原出
+ *   `resp.ok / resp.status / resp.text() / resp.json() / resp.body.getReader()`。
+ *   ⇒ 同样**不改产品源码**。
+ *   ⚠ 为什么不用 `shouldInterceptRequest`：那条路的正确性依赖三个我没法在本机实测的行为
+ *     （CORS 是否作用于合成响应 / 预检是否也走拦截 / 必须在后台线程同步返回）。
+ *     详见 shim/ai-fetch-shim.js 顶部注释。
  */
 public class MainActivity extends Activity {
 
@@ -63,8 +78,18 @@ public class MainActivity extends Activity {
     private static final int REQ_FILE = 1001;
     private static final String TAG = "YanSakiShed";
 
+    /** AI 转发垫片。由 build.sh 从 shim/ 拷进 assets/。 */
+    private static final String SHIM_ASSET = "ys-ai-shim.js";
+
     private WebView web;
     private ValueCallback<Uri[]> fileCb;
+
+    /**
+     * 正在跑的转发请求：id → 取消句柄。
+     * ⚠ 用 ConcurrentHashMap：`aiStart` 在 JS 桥线程上写，`aiAbort` 也从那边来，
+     *   而收尾在后台线程上删 —— 三边并发。
+     */
+    private final Map<String, AiProxy.Handle> aiLive = new ConcurrentHashMap<String, AiProxy.Handle>();
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -118,6 +143,10 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView v, String url) {
                 v.evaluateJavascript(DOWNLOAD_SHIM, null);
+                // ⚠ 顺序无关紧要（两者互不依赖），但都在 onPageFinished 里注入。
+                //   安全性来自实测：产品**从不把 fetch 存进变量**（grep 过），
+                //   所有调用点都是裸 fetch(...)，所以在这里换掉 window.fetch 一定生效。
+                v.evaluateJavascript(readShim(), null);
             }
         });
 
@@ -188,7 +217,7 @@ public class MainActivity extends Activity {
 
     // ================= 导出落盘 =================
 
-    /** 暴露给页面的桥。只做一件事：把 base64 写成「下载」目录里的文件。 */
+    /** 暴露给页面的桥：写文件（导出）+ 代发跨域请求（AI）。 */
     private class Bridge {
         @JavascriptInterface
         public void saveFile(final String name, final String b64) {
@@ -202,6 +231,114 @@ public class MainActivity extends Activity {
                 Log.w(TAG, "saveFile failed", e);
                 toastOnUi("保存失败：" + e.getClass().getSimpleName());
             }
+        }
+
+        /**
+         * 垫片问「这个域名能不能走桥」。
+         *
+         * ⚠⚠ 白名单**只有 AiProxy 里那一份**。垫片不抄一份，就是为了不可能漂：
+         *   两边各写一份的话，改了 Java 忘了改 JS 的表现是「请求被垫片接管了，
+         *   却报『不在白名单』」—— 能查，但纯属自找。
+         */
+        @JavascriptInterface
+        public boolean aiAllowed(String url) {
+            return AiProxy.hostAllowed(url);
+        }
+
+        /**
+         * 开始一次转发。**立刻返回**，真正的活在后台线程上。
+         * 结果通过 {@code window.__ysAi.head/chunk/done/fail} 回推给垫片。
+         *
+         * ⚠ 这里绝不能同步做网络请求：这是 JS 桥线程，阻塞它会卡住整个页面。
+         */
+        @JavascriptInterface
+        public void aiStart(final String id, final String url, final String method,
+                            final String headers, final String body) {
+            if (id == null || id.isEmpty()) return;
+            final AiProxy.Handle h = new AiProxy.Handle();
+            aiLive.put(id, h);
+
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        AiProxy.execute(url, method, headers, body, new AiProxy.Sink() {
+                            @Override
+                            public void onHead(int status, String b64Headers) {
+                                emit(JsEvent.head(id, status, b64Headers));
+                            }
+
+                            @Override
+                            public void onChunk(String b64) {
+                                emit(JsEvent.chunk(id, b64));
+                            }
+
+                            @Override
+                            public void onDone() {
+                                emit(JsEvent.done(id));
+                            }
+
+                            @Override
+                            public void onFail(String msg) {
+                                emit(JsEvent.fail(id, msg));
+                            }
+                        }, h);
+                    } finally {
+                        aiLive.remove(id);
+                    }
+                }
+            }, "ys-ai");
+            t.setDaemon(true);
+            t.start();
+        }
+
+        /** 页面 abort 了（超时或用户点停止）⇒ 尽力把原生请求也停掉。 */
+        @JavascriptInterface
+        public void aiAbort(String id) {
+            if (id == null) return;
+            AiProxy.Handle h = aiLive.remove(id);
+            if (h != null) h.cancel();
+        }
+    }
+
+    /**
+     * ⚠ Java → JS 那一行怎么拼**不在这里** —— 在 {@link JsEvent}。
+     *   抽出去的理由是：那个类不 import android.*，所以桌面测试
+     *   （tools/test-aiproxy/）能在真 JVM 上跑同一份实现，
+     *   回放给垫片的字符串就是产品真正会发出的那些。
+     */
+    private void emit(final String js) {
+        final WebView w = web;
+        if (w == null) return;
+        w.post(new Runnable() {
+            @Override
+            public void run() {
+                if (web == null) return;
+                try {
+                    web.evaluateJavascript(js, null);
+                } catch (Exception e) {
+                    Log.w(TAG, "evaluateJavascript failed", e);
+                }
+            }
+        });
+    }
+
+    /** 读垫片。读不到就注入一条会喊出来的脚本 —— 静默失效最难查。 */
+    private String readShim() {
+        try {
+            InputStream in = getAssets().open(SHIM_ASSET);
+            try {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+                return new String(bos.toByteArray(), StandardCharsets.UTF_8);
+            } finally {
+                try { in.close(); } catch (IOException ignored) { }
+            }
+        } catch (IOException e) {
+            Log.w(TAG, "读不到 " + SHIM_ASSET, e);
+            return "console.error('" + SHIM_ASSET + " 读不到：AI 转发垫片没装上')";
         }
     }
 

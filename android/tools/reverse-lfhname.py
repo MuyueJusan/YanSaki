@@ -25,7 +25,9 @@ r"""reverse-lfhname.py —— 反向测试：证明 verify.sh 里「本地头名
   python tools/reverse-lfhname.py --apk build/X.apk --unsigned build/aligned.apk
 """
 import argparse
+import atexit
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -148,6 +150,10 @@ patched = lname.replace(b'/', b'\\')
 raw[off + 30:off + 30 + nl] = patched
 
 tmpd = tempfile.mkdtemp(prefix='rev-lfhname-')
+# ⚠ 这个目录里装着 ~9MB 的注入 APK，**用完无条件删**。
+#   用 atexit 而不是在末尾写一句：这样断言失败时的 sys.exit(1)、以及中途抛异常，
+#   三条退出路径全都兜住。漏掉的话每跑一次就在 %TEMP% 里积一份，且**没人会注意**。
+atexit.register(shutil.rmtree, tmpd, True)
 injected = os.path.join(tmpd, 'injected.apk')
 open(injected, 'wb').write(bytes(raw))
 print('   注入文件：%s' % injected)
