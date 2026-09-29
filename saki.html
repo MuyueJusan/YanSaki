@@ -115,17 +115,46 @@
            复用 .modal-overlay / .game-card 那套（含复古皮肤覆盖），只补表单自己的样式。
            ⚠ 卡片是白底，而 .ai-btn / .ai-switch-track 是「白字 / 半透明白」——
               直接搬进来会看不见，所以下面按弹窗作用域覆盖一遍 */
-        .api-global-card {
+        /* ⚠⚠ 选择器写成 `.game-card.api-global-card`（0,2,0）而不是光 `.api-global-card`
+           （0,1,0）：本规则**排在 `.game-card` 前面**，同权重时后写的赢 ⇒ 光写类名会被
+           `.game-card { padding: 20px }` 反压，而这件事**读代码看不出来**。
+           ⚠ retro 那条 `body.retro-mode .game-card`（0,2,1）仍然赢 —— 那是故意的，
+             它要 `padding-top: 30px` 给绝对定位的标题栏让位。 */
+        .game-card.api-global-card {
             align-items: stretch;
             max-width: 560px;
             max-height: 86vh;
-            overflow-y: auto;
+            /* ⚠⚠ 卡片自己**不滚**，滚动条交给下面的 .apig-body。
+               原来这里是 `overflow-y: auto` ⇒ 整个卡片（**含标题栏**）一起滚，
+               标题和那个 × 关闭按钮都被推出去。 */
+            overflow: hidden;
+            /* 内边距拆给标题栏和正文两段，卡片本身不要 */
+            padding: 0;
+        }
+
+        /* 标题栏留在原地：不参与滚动，也不被压缩 */
+        /* ⚠ 这条的权重是 (0,2,0)：压得住 `.game-card-header`（0,1,0），
+           但**压不过** retro 那条 (0,2,1) —— 那是故意的，retro 下标题栏是
+           绝对定位的 Win95 样式，`padding: 0 4px` 得留住。
+           别手贱把它升成三段的 `.game-card.api-global-card .game-card-header`（0,3,0），
+           那会把 retro 的标题栏样式一起打坏。 */
+        .api-global-card .game-card-header {
+            flex: 0 0 auto;
+            margin-bottom: 0;
+            padding: 18px 20px 8px;
         }
 
         .apig-body {
             display: flex;
             flex-direction: column;
             gap: 10px;
+            /* ⚠⚠ `min-height: 0` 不能省 —— flex 子项的 `min-height` 默认是 `auto`，
+               不加它这个子项**不肯缩到内容高度以下**，于是 `overflow-y: auto`
+               永远不生效（滚动条会跑回卡片身上，标题栏又跟着滚）。 */
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 12px 20px 20px;
         }
 
         .apig-grid {
@@ -5958,7 +5987,10 @@
                                     <label>Base URL（自定义时填写）</label>
                                     <input id="ai-base-url" type="text" placeholder="https://api.example.com/v1" oninput="customBaseUrlDraft=this.value">
                                 </div>
-                                <div class="ai-field">
+                                <!-- ⚠ 带 id：Vertex 完整模式（Service Account）下这一格要藏起来
+                                     —— 那一档用 SA JSON 换 token，根本没有 Key 可填。
+                                     见 syncAiVertexHint() -->
+                                <div class="ai-field" id="ai-key-field">
                                     <label>API Key</label>
                                     <input id="ai-api-key" type="password" placeholder="sk-..." autocomplete="off">
                                 </div>
@@ -8235,11 +8267,24 @@
         // 独立配置选了 Vertex 就得说清楚「那几项沿用全局那份」，否则用户会以为
         // 完整模式在这个面板里用不了（或者更糟：以为能用，填了个 Key 就走了快速模式）
         function syncAiVertexHint() {
-            const el = document.getElementById('ai-vertex-hint');
-            if (!el) return;
             const prov = (document.getElementById('ai-provider') || {}).value;
+            const baseUrl = (document.getElementById('ai-base-url') || {}).value || '';
             const isVertex = !!(AI_PROVIDERS.find(x => x.value === prov) || {}).vertex;
             const follow = aiConfig.followGlobal !== false;
+            // ⚠⚠ API Key 那一格在完整模式下要**藏起来**：那一档是拿 SA JSON 去换
+            //   access token 的，Key 根本没有用武之地。全局面板早就这么做了
+            //   （apig-key-field，见 syncApigAuthUI），这里漏了 —— 于是用户在
+            //   【ai对话】里对着一个「填了没用、不填又像缺了东西」的空框发愣，
+            //   点「应用」还被「请先填写 API Key」拦住。那是**同一个 bug 的两半**。
+            // ⚠ 判据与 stAiNeedsKey() 对齐：走 stAiIsVertex()（它还会看 baseUrl），
+            //   别只用下拉框那一份 —— 自定义服务商填 aiplatform 域名时两者会分叉
+            const keyField = document.getElementById('ai-key-field');
+            if (keyField) {
+                keyField.hidden = !!(stAiIsVertex({ provider: prov, baseUrl: baseUrl })
+                    && aiConfig.authMode === 'sa');
+            }
+            const el = document.getElementById('ai-vertex-hint');
+            if (!el) return;
             el.style.display = (isVertex && !follow) ? '' : 'none';
         }
 
@@ -17377,6 +17422,21 @@
         // 本机地址（Ollama / LM Studio / 反代）不需要 key
         function stAiIsLocal(baseUrl) {
             return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)/i.test(String(baseUrl || ''));
+        }
+
+        // 「这份配置到底要不要 API Key」的**唯一判据**。
+        // ⚠⚠ Vertex 完整模式（Service Account）是拿 SA JSON 去换 access token 的，
+        //   `apiKey` **本来就是空的** —— 谁无条件要求 Key，就等于把这条路整个封死。
+        //   这个坑踩过两次：先是 `stAiReady`（编写器发不出请求），
+        //   然后是 `applyAiSettings`（【ai对话】点「应用」被拦，聊天都进不去）。
+        // ⇒ 凡是「要不要 Key」的**轻量**判断一律走这里，别再各写各的。
+        //   ⚠ `stAiReady` / `apigReadyCheck` 是**整条**校验分支（还要管模型名、
+        //     SA JSON 解析、项目 ID），各自保留结构；但其中那条 Key 的判据必须跟这里一致。
+        //   ⚠ 别拿 `proto === 'gemini'` 代替 `stAiIsVertex()` —— AI Studio 也是 gemini
+        //     协议，它**永远要 Key**，混用会让它带着一个残留的 `authMode: 'sa'` 裸奔出去
+        function stAiNeedsKey(cfg) {
+            if (stAiIsVertex(cfg) && cfg && cfg.authMode === 'sa') return false;
+            return !stAiIsLocal((cfg && cfg.baseUrl) || '');
         }
 
         // needModel 默认 true。**「拉模型列表」要传 false** ——
@@ -29780,7 +29840,12 @@
             const cfg = getAiConfigFromInputs();
             // 跟随模式下这几格是只读镜像，缺了也只能去全局配置里补 —— 别让用户在这儿干瞪眼
             const where = (cfg.followGlobal !== false) ? '【API 全局配置】' : '这里';
-            if (!cfg.apiKey) { updateAiStatus('⚠️ 请先在' + where + '填写 API Key'); return; }
+            // ⚠⚠ 不能无条件要求 apiKey。Vertex 完整模式用的是 SA JSON，Key 那一格
+            //   在面板里是**藏起来**的（syncAiVertexHint）—— 原来这里直接
+            //   `if (!cfg.apiKey)` ⇒ 完整模式点「应用」永远被拦，而用户连那格都看不见，
+            //   根本无从「去填一个」，只能干瞪眼。
+            //   判据走 stAiNeedsKey()，别再在这儿写第三份
+            if (stAiNeedsKey(cfg) && !cfg.apiKey) { updateAiStatus('⚠️ 请先在' + where + '填写 API Key'); return; }
             if (!cfg.baseUrl) { updateAiStatus('⚠️ 请先在' + where + '填写服务商或 Base URL'); return; }
             if (!cfg.model) { updateAiStatus('⚠️ 请先在' + where + '获取并选择模型'); return; }
             aiCommitInputs(cfg);
@@ -29798,7 +29863,16 @@
             // 半成品兜底：这个对象里没有 proto（协议是推导出来的），
             // 少了这步 gemini / vertex 会按 openai 发出去
             stAiEnsureProto(cfg);
-            const needKey = !(cfg.proto === 'gemini' && cfg.authMode === 'sa');
+            // ⚠ 原来这里写的是 `!(cfg.proto === 'gemini' && cfg.authMode === 'sa')` ——
+            //   拿「协议是 gemini」代替「是 Vertex」是不等价的：
+            //   自定义服务商填一个 `generativelanguage.googleapis.com` 的地址时，
+            //   `stAiGuessProto()` 也会猜成 gemini，可它**不是 Vertex**；
+            //   而 `authMode` 是**跟着配置留着的**（从 Vertex 切走不会自动清）
+            //   ⇒ 那种组合下旧写法会判「不需要 Key」，于是**不带 Key 就发出去**拿一个 401。
+            //   （⚠ 注意：`provider:'gemini'` 那个预设走的是 OpenAI 兼容层，
+            //    它的 `proto` 是 `'openai'`，所以**不**在这个坑里。）
+            //   判据收归 stAiNeedsKey()：只有**真的是 Vertex** 且 sa 才免 Key
+            const needKey = stAiNeedsKey(cfg);
             if (needKey && !cfg.apiKey) { updateAiStatus('⚠️ 请先填写 API Key'); return; }
             if (cfg.proto !== 'gemini' && !cfg.baseUrl) { updateAiStatus('⚠️ 请填写服务商或 Base URL'); return; }
             const btn = document.getElementById('ai-fetch-btn');

@@ -6,6 +6,114 @@
 
 ---
 
+## 2026-09-29（第二十二段）· 【ai对话】完整模式点「应用」被空 Key 拦住 + 全局面板标题栏跟着滚
+
+**类型**：**产品改动**（`saki.html` / `index.html`，`1 682 949 → 1 688 840` 字节，
+`32 462 → 32 536` 行）+ 扩套件（`apig-verify.js` 新增 G5 / G6 两段，169 条）+ 新反向测试
+（`_verify/_reverse19.js`，4 针）+ Android 版提版本号（`1.0 → 1.2`）。
+
+### 起因（用户实测反馈）
+
+> 「【ai对话】中，处于完整模式的 google Vertex AI 时，本应该忽略并隐藏 ai key 项目，
+> 却因为 ai key 为空而无法保存」
+>
+> 「【api全局配置】的标题栏不应该一起滚动，网页和 apk 都要修复，
+> 修复后推 apk 新包时顺手把版本号提升了」
+
+### ① 完整模式：**同一个坑，第十四段只修了隔壁那一处**
+
+第十四段修过**全局面板**的「完整模式下把 API Key 那一格藏起来」。但【ai对话】这个面板
+**没有跟着修** —— 于是同一个坑在这里活了下来，而且是**两半**：
+
+| 位置 | 症状 |
+|---|---|
+| `syncAiVertexHint()` | 面板里压根没藏 Key 那一格（全局面板早就藏了）⇒ 用户对着一个「填了没用、不填又像缺东西」的空框发愣 |
+| `applyAiSettings()` | 开头就是 `if (!cfg.apiKey)` 无条件拦 ⇒ 完整模式下点「应用」永远被「请先填写 API Key」挡住，**连聊天都进不去** |
+
+两半合起来最难受：**拦住你的理由是「去填一个它根本不显示的东西」。**
+
+#### 根因：判据有三份实现，其中两份是错的
+
+「这份配置要不要 API Key」这件事，代码里当时有**三个**写法：
+
+| 位置 | 写法 | 对不对 |
+|---|---|---|
+| `stAiReady()`（编写器） | `stAiIsVertex(cfg) && authMode === 'sa'` | ✅ 对 |
+| `apigReadyCheck()`（全局面板） | 同上，整条分支 | ✅ 对 |
+| `applyAiSettings()`（【ai对话】） | **无条件要 Key** | ❌ **漏了 Vertex 完整模式** |
+| `fetchModels()`（【ai对话】） | `!(proto === 'gemini' && authMode === 'sa')` | ⚠ 方向对，但**判据不等价** |
+
+最后那条尤其阴：拿「协议是 gemini」代替「是 Vertex」。自定义服务商填一个
+`generativelanguage.googleapis.com` 的地址时，`stAiGuessProto()` 也会猜成 gemini，
+可它**不是 Vertex**；而 `authMode` 是**跟着配置留着的**（从 Vertex 切走不会自动清）
+⇒ 那种组合下它判「不用 Key」，于是**不带 Key 就发出去**，用户看到的是「列模型失败」
+而不是「缺 Key」。（⚠ 注意 `provider:'gemini'` 那个预设走 OpenAI 兼容层，
+它的 `proto` 是 `'openai'`，**不**在这个坑里。）
+
+#### 修法：判据收归**一份**
+
+新增 `stAiNeedsKey(cfg)` 作为唯一判据（Vertex + sa ⇒ 不要；本机地址 ⇒ 不要；其余 ⇒ 要），
+`applyAiSettings()` / `fetchModels()` 都改走它；`syncAiVertexHint()` 用同一个
+`stAiIsVertex()` 决定那一格的显隐。
+
+⚠ 只写「判据只有一份」还不够 —— 断言还必须打在**调用点**上。所以除了直接测
+`stAiNeedsKey()` 的语义，还走了一条**真实请求路径**：摆一个「自定义 + AI Studio 域名 +
+残留 `authMode:'sa'`」的配置去点「获取模型」，断言它**被拦住且一个请求都没发出去**。
+
+### ② 全局面板的标题栏跟着正文一起滚
+
+`.api-global-card` 自己是 `overflow-y: auto` 的滚动容器 ⇒ 标题栏（和那个 × 关闭按钮）
+**跟着正文一起滚出去**。窄屏（手机上）内容一超就必然出现。
+
+修法：卡片改 `overflow: hidden` + flex 列，标题栏 `flex: 0 0 auto` 留在原地，
+滚动条交给 `.apig-body`（`flex: 1 1 auto; min-height: 0; overflow-y: auto`）。
+
+⚠ 三个踩点：
+
+1. **`min-height: 0` 不能省** —— flex 子项的 `min-height` 默认是 `auto`，
+   不加它这个子项不肯缩到内容高度以下，`overflow-y: auto` 于是永远不生效。
+2. **选择器必须写成 `.game-card.api-global-card`** —— 那条规则排在 `.game-card` **前面**，
+   同权重时后写的赢 ⇒ 光写 `.api-global-card` 会被 `.game-card { padding: 20px }` 反压，
+   而这件事**读代码看不出来**。同时不能升到三段（`0,3,0`），那会压过 retro 那条
+   `body.retro-mode .game-card-header`（`0,2,1`）把 Win95 标题栏打坏。
+3. **retro 皮肤要单独验** —— 那里标题栏是 `position: absolute`，走的是另一套机制。
+
+### 验证
+
+- `_verify/apig-verify.js`：**169 通过 / 0 失败**（新增 G5 / G6 两段）。
+  每一条「不该发生」都配了**同一时刻另一侧相反**的对照组：
+  - 完整模式藏住 ⇔ 快速模式显示 ⇔ 非 Vertex + 残留 sa 也显示
+  - 完整模式空 Key 放行 ⇔ **OpenAI 空 Key 必须被拦**（否则「没被拦」可能只是检查被删了）
+  - 滚动后标题栏**不动** ⇔ 同一个滚动里正文元素**确实动了**（否则可能量了个死值）
+  - retro 下再验一遍
+- `_verify/_reverse19.js`（**新**）：4 针，各自只打中它声称打的那一条，对照组全绿。
+  ⚠ 做法与老的 `_reverse*.js` 不同：**绝不碰真产品** —— 把 `saki.html` 拷成
+  `saki.__rev.html`、只改那一处，再用 `YS_PAGE=` 让套件去跑替身，比对**红行集合**。
+  （老做法一旦中途被 kill 会留一份被注入过的产品，下一次整跑拿它当真值。）
+
+  反向测试自己也暴露了三条**断言质量**问题，都已修：
+  - 「标题栏 `flex-grow = 0`」**天生为真**（默认值就是 0）⇒ 改成盯 `flex-shrink`
+  - 「滚一下看标题栏动没动」原来写死滚 `.apig-body`，而**旧代码里它不是滚动容器**
+    ⇒ 改成「先找出正文真正的滚动容器，再滚它」
+  - 多行注入锚点用的是 `\n` 而产品是 **CRLF** ⇒ 一处都匹配不到；
+    靠「注入点唯一」那道闸门喊了出来（否则会静默跑一份**没被改过**的替身）
+
+### 顺带：APK 提版本号（用户要求）
+
+`AndroidManifest.xml`：`versionCode 1 → 2`，`versionName 1.0 → 1.2`。
+
+⚠ 提版本这一下**牵出四处写死的旧版本号**（`build.sh` 的 `VER_NAME`、`verify.sh` 的
+默认 APK 路径与那条版本断言、`reverse-lfhname.py`、`reverse-ai.py` 的 `--apk` 默认值），
+它们会一起报「找不到 APK」/「前置不满足，中止」——**看着像构建没产出，其实只是那几行过时了**。
+⇒ 全部改成**从 `AndroidManifest.xml` 现推**（新增 `tools/apk_path.py` 作为单一实现），
+`build.sh` 还会顺手清掉 build/ 里上一版的 APK（文件名带版本号 ⇒ 不会自己消失，
+留着就是「两份里必有一份是错的」）。
+
+⚠ 另外：`apk-v1.0` 与 `apk-v1.1` 两个包**顶着同一个 `versionName`「1.0」**（当时忘了提），
+只有 tag 能区分。从 `apk-v1.2` 起 `versionName` 与 tag 对齐，历史那两个不改（改了更乱）。
+
+---
+
 ## 2026-09-28（第二十一段）· 窄屏下 Code 页的**折叠弹层出界**（真机反馈）
 
 **类型**：**纯 CSS 修复**（`saki.html` / `index.html`，`1 681 659 → 1 682 949` 字节，

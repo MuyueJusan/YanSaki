@@ -21,7 +21,11 @@
 //   H. 收尾零报错
 //
 // 跑法：node apig-verify.js
-const PAGE_FILE = 'G:/saki/saki.html';
+// ⚠ 页面路径**可以用环境变量顶掉**（`YS_PAGE=…`）—— 给反向测试用的：
+//   反向测试把产品拷成 `saki.__rev.html`、只改它声称要改的那一处，再让本套件去跑
+//   那一份。这样**永远不碰真产品**（同目录，`./fonts/` 还能解析）。
+//   默认值不变 ⇒ 平时跑的就是真产品。
+const PAGE_FILE = process.env.YS_PAGE || 'G:/saki/saki.html';
 
 const fs = require('fs');
 const os = require('os');
@@ -914,6 +918,304 @@ const MOCK_SRC = `
     await ev(`closeApiGlobalModal()`);
     await sleep(250);
     await setScript({ fail: '', models: 'openai' });
+
+    // ================= G5. 【ai对话】完整模式：Key 那一格要藏 + 「应用」不该被空 Key 拦住 =================
+    // 用户报的是**同一个 bug 的两半**：
+    //   ① 完整模式（Vertex + Service Account）下 API Key 根本用不到，
+    //      【ai对话】却照样把那一格摆在屏幕上（全局面板早就藏了）；
+    //   ② 点「应用」被 `if (!cfg.apiKey)` 拦住 —— 而那一格用户**看不见**，
+    //      等于告诉他「请去填一个不存在的东西」，聊天都进不去。
+    // ⚠ 每条「不该发生」都配一条「同一时刻另一侧确实相反」的对照，
+    //   否则「不被拦住」可能只是因为**它压根没检查**（RULES 六之二十六）。
+    section('G5. 【ai对话】完整模式：Key 那一格藏起来 + 「应用」不被空 Key 拦');
+
+    const keyVis = () => ev(`(function(){
+      const el = document.getElementById('ai-key-field');
+      if (!el) return '(没有这个元素)';
+      return getComputedStyle(el).display;
+    })()`);
+
+    // —— 摆一份「Vertex 完整模式」的全局配置，让【ai对话】跟随它
+    await ev(`(function(){
+      apiGlobal = apiGlobalNormalize(Object.assign({}, apiGlobal, {
+        provider: 'vertex', authMode: 'sa', apiKey: '',
+        project: 'ys-test-proj', location: 'global', model: 'gemini-2.5-flash',
+        saJson: JSON.stringify({ client_email: 'ys@test.iam.gserviceaccount.com',
+          private_key: '-----BEGIN PRIVATE KEY-----\\nAAA\\n-----END PRIVATE KEY-----\\n',
+          project_id: 'ys-test-proj' })
+      }));
+      apiGlobalPersist();
+      aiConfig.followGlobal = true;
+      aiApplyEffective(); aiPersist(); syncAiCfgSourceUI();
+      return true; })()`);
+    await sleep(300);
+
+    check('前置：provider 镜像的是 vertex',
+      await ev(`document.getElementById('ai-provider').value`), 'vertex');
+    check('前置：authMode 镜像的是 sa', await ev(`aiConfig.authMode`), 'sa');
+    check('⚠⚠ 跟随 + Vertex 完整模式 ⇒ Key 那一格真的藏住了（computed display = none）',
+      await keyVis(), 'none');
+
+    // —— 对照①：切成快速模式 ⇒ 那一格必须回来（证明上一条不是「永远 none」）
+    await ev(`(function(){
+      apiGlobal.authMode = 'key'; apiGlobalPersist();
+      aiApplyEffective(); aiPersist(); syncAiCfgSourceUI(); return true; })()`);
+    await sleep(250);
+    check('（对照）快速模式 ⇒ Key 那一格**显示**', await keyVis(), v => v !== 'none', '≠ none');
+
+    // —— 对照②：authMode 还残留 sa、但服务商不是 Vertex ⇒ 也该显示
+    //    ⚠ 这一条盯的是「判据必须是 stAiIsVertex()，不能只看 authMode」
+    await ev(`(function(){
+      apiGlobal.provider = 'openai'; apiGlobal.authMode = 'sa';
+      apiGlobal.baseUrl = 'https://api.openai.com/v1';
+      apiGlobalPersist(); aiApplyEffective(); aiPersist(); syncAiCfgSourceUI(); return true; })()`);
+    await sleep(250);
+    check('（对照）非 Vertex + 残留 authMode=sa ⇒ Key 那一格**显示**（判据不是只看 authMode）',
+      await keyVis(), v => v !== 'none', '≠ none');
+
+    // —— 回到完整模式 + 空 Key，测「应用」这一步
+    await ev(`(function(){
+      apiGlobal = apiGlobalNormalize(Object.assign({}, apiGlobal, {
+        provider: 'vertex', authMode: 'sa', apiKey: '',
+        project: 'ys-test-proj', model: 'gemini-2.5-flash'
+      }));
+      apiGlobalPersist(); aiApplyEffective(); aiPersist(); syncAiCfgSourceUI();
+      document.getElementById('ai-api-key').value = '';
+      document.getElementById('ai-card').classList.remove('ai-settings-collapsed');
+      return true; })()`);
+    await sleep(250);
+    check('前置：Key 框真的是空的（不然这一段就没意义了）',
+      await ev(`document.getElementById('ai-api-key').value`), '');
+    check('前置：完整模式下 Key 那一格是藏着的', await keyVis(), 'none');
+
+    await ev(`applyAiSettings()`);
+    await sleep(320);
+    const st5 = await ev(`(function(){
+      const el = document.getElementById('ai-status');
+      return { text: el ? el.textContent : '(没有 #ai-status)',
+               collapsed: document.getElementById('ai-card').classList.contains('ai-settings-collapsed') };
+    })()`);
+    check('⚠⚠ 完整模式 + 空 Key：点「应用」**不该**被「请先填写 API Key」拦住',
+      st5.text, v => v.indexOf('API Key') < 0, '不含「API Key」');
+    check('⚠ 而且真的走完了（设置面板收起来 = 进对话）', st5.collapsed, true);
+
+    // —— 强对照：换成「真的要 Key」的配置，同一条路**必须**被拦
+    //    ⚠ 没有这一条，「不被拦住」可能只是因为检查被整段删掉了
+    await ev(`(function(){
+      apiGlobal = apiGlobalNormalize(Object.assign({}, apiGlobal, {
+        provider: 'openai', baseUrl: 'https://api.openai.com/v1',
+        authMode: 'key', apiKey: '', model: 'gpt-4o'
+      }));
+      apiGlobalPersist(); aiApplyEffective(); aiPersist(); syncAiCfgSourceUI();
+      document.getElementById('ai-api-key').value = '';
+      document.getElementById('ai-card').classList.remove('ai-settings-collapsed');
+      return true; })()`);
+    await sleep(250);
+    await ev(`applyAiSettings()`);
+    await sleep(320);
+    const st5b = await ev(`(function(){
+      const el = document.getElementById('ai-status');
+      return { text: el ? el.textContent : '',
+               collapsed: document.getElementById('ai-card').classList.contains('ai-settings-collapsed') };
+    })()`);
+    check('（强对照）OpenAI + 空 Key：同一条路**必须**被拦住',
+      st5b.text, v => v.indexOf('API Key') >= 0, '含「API Key」');
+    check('（强对照）被拦住时不该进对话', st5b.collapsed, false);
+
+    // —— 判据只有一份：三条取值路径各点一次名
+    check('⚠ stAiNeedsKey：Vertex + sa ⇒ 不需要 Key',
+      await ev(`stAiNeedsKey({ provider:'vertex', baseUrl:'https://aiplatform.googleapis.com', authMode:'sa' })`), false);
+    check('⚠ stAiNeedsKey：Vertex + 快速模式 ⇒ 需要 Key',
+      await ev(`stAiNeedsKey({ provider:'vertex', baseUrl:'https://aiplatform.googleapis.com', authMode:'key' })`), true);
+    check('⚠ stAiNeedsKey：本机地址 ⇒ 不需要 Key',
+      await ev(`stAiNeedsKey({ provider:'custom', baseUrl:'http://127.0.0.1:11434/v1', authMode:'key' })`), false);
+
+    // —— ⚠⚠ 新旧判据的分叉点：**证明这条修的是真事**，不是换个写法而已。
+    //    `fetchModels()` 原来写 `!(proto === 'gemini' && authMode === 'sa')`，
+    //    而「自定义服务商 + generativelanguage 域名」也会被猜成 gemini，
+    //    可它**不是 Vertex** ⇒ 旧写法判「不用 Key」，于是不带 Key 发出去拿 401。
+    const oldNew = await ev(`(function(){
+      const c = { provider: 'custom', baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+                  authMode: 'sa' };
+      stAiEnsureProto(c);
+      return { proto: c.proto,
+               oldNeed: !(c.proto === 'gemini' && c.authMode === 'sa'),
+               newNeed: stAiNeedsKey(c) };
+    })()`);
+    check('⚠⚠ 新旧判据在「自定义 + AI Studio 域名」上真的不同（proto=gemini / 旧=不用Key / 新=要Key）',
+      `${oldNew.proto}|${oldNew.oldNeed}|${oldNew.newNeed}`, 'gemini|false|true');
+
+    // —— ⚠⚠ 判据只有一份还不够，还要盯**调用点**：断言 helper 的语义
+    //   不能证明 `fetchModels()` 真的去问了它（RULES 六之四十：函数写好了 ≠ 被调用了）。
+    //   走**真实请求路径**：摆一个「自定义 + AI Studio 域名 + 残留 authMode=sa」的配置，
+    //   点「获取模型」—— 它**必须**被拦住。旧写法在这里判「不用 Key」，会**不带 Key
+    //   直接发出去**（拿一个 401 回来，用户看到的是「列模型失败」而不是「缺 Key」）。
+    await ev(`(function(){
+      apiGlobal = apiGlobalNormalize(Object.assign({}, apiGlobal, {
+        provider: 'custom', baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        authMode: 'sa', apiKey: '', model: ''
+      }));
+      apiGlobalPersist(); aiApplyEffective(); aiPersist(); syncAiCfgSourceUI();
+      document.getElementById('ai-api-key').value = '';
+      window.__aiCalls.length = 0;
+      return true; })()`);
+    await sleep(250);
+    await ev(`fetchModels()`, true);
+    await sleep(420);
+    const fm = await ev(`(function(){
+      return { calls: window.__aiCalls.length,
+               status: (document.getElementById('ai-status') || {}).textContent || '' };
+    })()`);
+    check('⚠⚠ fetchModels 走真实路径：这种配置下**必须**要 Key（旧写法会不带 Key 就发出去）',
+      fm.status, v => v.indexOf('API Key') >= 0, '含「API Key」');
+    check('⚠ 而且真的一个请求都没发出去', fm.calls, 0);
+
+    await ev(`(function(){ updateAiStatus(''); return true; })()`);
+
+    // ================= G6. 标题栏不跟着滚 =================
+    // ⚠ 网页与 APK 是**同一份 saki.html**（APK 只是把它套进 WebView），
+    //   所以这里验过的就是两边都成立。
+    section('G6. 【API 全局配置】标题栏不跟着正文滚');
+
+    // ⚠⚠ 先把视口压成窄屏 —— 用户报这个 bug 就是在窄屏上。
+    //   1440×900 下 `max-height: 86vh` = 774px，内容**装得下**、滚动条压根不出现，
+    //   于是「滚一下看标题栏动没动」什么也测不出来（第一版就是这么假绿的：
+    //   四条断言全红，而红的原因是**前置不成立**，不是产品坏）。
+    //   ⇒ 前置本身必须被断言，不能只在心里假设。
+    await ev(`(function(){
+      apiGlobal = apiGlobalNormalize(Object.assign({}, apiGlobal, {
+        provider: 'vertex', authMode: 'sa', project: 'ys-test-proj', location: 'global',
+        model: 'gemini-2.5-flash',
+        saJson: JSON.stringify({ client_email: 'ys@test.iam.gserviceaccount.com',
+          private_key: '-----BEGIN PRIVATE KEY-----\\nAAA\\n-----END PRIVATE KEY-----\\n',
+          project_id: 'ys-test-proj' })
+      }));
+      apiGlobalPersist(); aiApplyEffective(); aiPersist(); syncAiCfgSourceUI();
+      return true; })()`);
+    await cdp.send('Emulation.setDeviceMetricsOverride',
+      { width: 390, height: 720, deviceScaleFactor: 1, mobile: false }, SID);
+    await sleep(320);
+    check('前置：视口真的被压成窄屏了（否则这一段测不出东西）',
+      await ev(`window.innerWidth`), v => v <= 500, '<= 500');
+
+    await ev(`openApiGlobalModal()`);
+    await sleep(400);
+    const geo = () => ev(`(function(){
+      const card = document.querySelector('#apiGlobalModal .api-global-card');
+      if (!card) return { err: '找不到 .api-global-card' };
+      const head = card.querySelector('.game-card-header');
+      const body = card.querySelector('.apig-body');
+      const note = card.querySelector('.apig-note');
+      if (!head || !body) return { err: '缺 head / body' };
+      // ⚠⚠ 正文**真正**所在的滚动容器 —— 不写死是谁，因为要测的恰恰是
+      //   「滚动发生在哪一层」。第一版写死滚 .apig-body，而旧代码里它根本
+      //   不是滚动容器 ⇒ 改成旧 CSS 时「标题栏没动」照样绿（测了个空操作）。
+      function scrollerOf(el) {
+        let n = el;
+        while (n && n !== document.body) {
+          const cs = getComputedStyle(n);
+          if (/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight) return n;
+          n = n.parentElement;
+        }
+        return null;
+      }
+      const sc = note ? scrollerOf(note) : null;
+      const cr = card.getBoundingClientRect(), hr = head.getBoundingClientRect();
+      return {
+        cardOverflowY: getComputedStyle(card).overflowY,
+        bodyOverflowY: getComputedStyle(body).overflowY,
+        headFlexGrow: getComputedStyle(head).flexGrow,
+        // ⚠ 盯 flex-shrink 而不是 flex-grow：flex-grow 的**默认值就是 0**，
+        //   改回旧 CSS 也还是 0 ⇒ 那条断言分辨不了任何东西（反向测试里它没红，
+        //   一查才发现是断言天生为真）。flex-shrink 默认是 1，才真的能分辨。
+        //   ⚠⚠ 本注释在 ev() 的模板串**里面** ⇒ 一个反引号都不能写（写了会截断模板串）
+        headFlexShrink: getComputedStyle(head).flexShrink,
+        headInBody: body.contains(head),
+        noteInBody: note ? body.contains(note) : null,
+        bodyCanScroll: body.scrollHeight > body.clientHeight,
+        cardTop: Math.round(cr.top), cardBottom: Math.round(cr.bottom),
+        headTop: Math.round(hr.top),
+        noteTop: note ? Math.round(note.getBoundingClientRect().top) : null,
+        scrollerIsBody: sc ? sc === body : null,
+        scrollerIsCard: sc ? sc === card : null,
+        scrollerName: sc ? (sc.className || sc.tagName) : '(没有滚动容器)',
+        scrollerTop: sc ? sc.scrollTop : null,
+        cardScrollTop: card.scrollTop
+      };
+    })()`);
+
+    // ⚠ 每次量之前**必须先把 scrollTop 归零**再量「滚动前」——
+    //   否则上一段已经滚过的位置会原样留着，`scrollTop = 200` 变成空操作，
+    //   「滚动前后一样」于是**永远成立**（retro 那段第一版就是这么假绿的）
+    const scrollTo = async v => {
+      await ev(`(function(){
+        const card = document.querySelector('#apiGlobalModal .api-global-card');
+        const note = card.querySelector('.apig-note');
+        let n = note;
+        while (n && n !== document.body) {
+          const cs = getComputedStyle(n);
+          if (/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight) break;
+          n = n.parentElement;
+        }
+        if (!n || n === document.body) return '没有滚动容器';
+        n.scrollTop = ${v};
+        return n.className || n.tagName;
+      })()`);
+      await sleep(220);
+    };
+
+    await scrollTo(0);
+    const g0 = await geo();
+    check('前置：正文确实比可视区高（不然「滚一下」测不出任何东西）', g0.bodyCanScroll, true);
+    check('⚠ 结构：标题栏**不在**滚动容器里面（这才是它滚不动的根本原因）', g0.headInBody, false);
+    check('（对照）结构：正文里的东西**在**滚动容器里面', g0.noteInBody, true);
+    check('卡片自己不再是滚动容器（overflow-y = hidden）', g0.cardOverflowY, 'hidden');
+    check('正文才是滚动容器（overflow-y = auto）', g0.bodyOverflowY, 'auto');
+    check('标题栏不参与伸缩（flex-shrink = 0 —— 默认是 1，所以这条真的能分辨）',
+      g0.headFlexShrink, '0');
+    check('⚠⚠ 正文的滚动容器**就是** .apig-body（不是卡片）', g0.scrollerIsBody, true);
+    check('⚠⚠ 卡片**不是**正文的滚动容器', g0.scrollerIsCard, false);
+
+    // —— 真滚一下：**同一时刻量两个元素**，一个该动、一个不该动
+    await scrollTo(200);
+    const g1 = await geo();
+    check('⚠ 正文真的滚动了（滚动容器 scrollTop ≥ 100）', g1.scrollerTop, v => v >= 100, '>=100');
+    check('⚠⚠ 滚动之后标题栏**一动没动**（rect.top 与滚动前逐像素相同）', g1.headTop, g0.headTop);
+    check('（对照）同一个滚动里，正文里的元素**确实动了** —— 证明上面那条不是量了个死值',
+      g1.noteTop, v => v !== g0.noteTop, '≠ ' + g0.noteTop);
+    check('卡片自身的 scrollTop 始终是 0（滚动没跑回卡片身上）', g1.cardScrollTop, 0);
+
+    // —— retro 皮肤下**单独再验一遍**：那条标题栏是 `position: absolute`
+    //    （Win95 样子），走的是另一套机制，非 retro 那几条覆盖不到它
+    await ev(`document.body.classList.add('retro-mode')`);
+    await sleep(340);
+    await scrollTo(0);
+    const g2 = await geo();
+    check('retro：标题栏还在卡片可视范围内（绝对定位没被 overflow:hidden 裁掉）',
+      g2.headTop - g2.cardTop, v => v >= 0 && v < 40, '0 ≤ 差值 < 40');
+    check('retro：卡片仍然不是滚动容器', g2.cardOverflowY, 'hidden');
+    check('前置（retro）：正文仍然比可视区高', g2.bodyCanScroll, true);
+    await scrollTo(200);
+    const g3 = await geo();
+    check('retro：正文真的滚动了', g3.scrollerTop, v => v >= 100, '>=100');
+    check('retro：滚动之后标题栏照样不动', g3.headTop, g2.headTop);
+    check('（对照）retro：正文里的元素照样会动', g3.noteTop, v => v !== g2.noteTop, '≠ ' + g2.noteTop);
+    await ev(`document.body.classList.remove('retro-mode')`);
+    await sleep(220);
+
+    // 视口还原（后面的收尾段还在同一个浏览器里跑）
+    // ⚠ `VP` 这个常量**没有** deviceScaleFactor，而 CDP 的
+    //   setDeviceMetricsOverride 把它当必填 ⇒ 直接传 VP 会 -32602 崩掉
+    await cdp.send('Emulation.setDeviceMetricsOverride',
+      { width: VP.width, height: VP.height, deviceScaleFactor: 1, mobile: VP.mobile }, SID);
+    await sleep(250);
+    await ev(`closeApiGlobalModal()`);
+    await sleep(250);
+    await ev(`(function(){
+      apiGlobal = apiGlobalNormalize(Object.assign({}, apiGlobal, { authMode: 'key' }));
+      apiGlobalPersist(); aiApplyEffective(); aiPersist(); syncAiCfgSourceUI();
+      return true; })()`);
+    await sleep(200);
 
     // ================= H. 收尾 =================
     section('H. 收尾');

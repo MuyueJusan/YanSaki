@@ -14,6 +14,12 @@ _reverse*.bak
 Thumbs.db
 desktop.ini
 
+# 反向测试的**替身产品**：`_reverse19.js` 把 saki.html 拷成这一份、只改它声称要改的
+# 那一处，再让 `apig-verify.js`（YS_PAGE=…）去跑它 —— 真产品一个字节都不动。
+# ⚠ 正常跑完会被删掉；这条只是防「中途被 kill 时留一份替身被当成真产品」。
+#   它必须在 `G:/saki/` 根下（同目录 ⇒ `./fonts/` 还能解析）。
+saki.__rev.html
+
 # Android 封装版（apk 分支）的构建产物 —— **不进仓库**。
 # android/assets/index.html 是 build.sh 从仓库根的 ../saki.html 复制来的。
 # ⚠ 它**必须**是生成物：一旦入库就有两份 HTML，「哪份是新的」这个问题会立刻出现 ——
