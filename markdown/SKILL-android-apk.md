@@ -409,6 +409,37 @@ phone gets a download URL. Upload via `POST https://uploads.github.com/repos/{o}
 rebuilds produce the same signature, so updates install over the old version instead of demanding
 an uninstall. Label it clearly as debug — it can never go to the Play Store.
 
+⚠⚠ **A real signing key must never be committed, and neither must its password.** If the repo is
+public that is the whole game. Keep the `.jks` and a `signing.env` (file name + alias + passwords)
+both gitignored, ship a `signing.env.example` as an empty template, and have the build source the
+real one when it is present. Ignore `keystore/*.jks` with an explicit `!keystore/debug.jks`
+exception so the debug key keeps working. Print which key was used, every build.
+⚠ Pass the password as an **environment variable, not on the command line**: `apksigner sign
+--ks-pass env:VAR --key-pass env:VAR`. The `pass:<pw>` form puts the plaintext in the process argv
+table, where any local process can read it. (`keytool` has the same idea: `-storepass:env VAR`.)
+
+⚠⚠ **"The signature verifies" is not the assertion you want — it is true for *any* certificate.**
+The signing identity *is* the app's identity: a build signed with the wrong key passes every
+signature check and then refuses to install over an existing install
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) — something you only discover on a device.
+⇒ Assert the **round trip**: the SHA-256 from `apksigner verify --print-certs` on the APK and the
+SHA-256 read back out of the keystore must be **the same string**.
+⚠ Derive the expected fingerprint **from the keystore at run time** — never hardcode it. A hardcoded
+fingerprint is a stale assertion: the day the key rotates it goes red forever (or worse, someone
+"fixes" it by editing the check instead of reading it).
+⚠ `keytool`'s output is **localized** — under a Chinese locale it prints 所有者, not `Owner:`.
+Force `-J-Duser.language=en` or the `grep` silently returns nothing.
+⚠⚠ **Assert the shape of both readings before comparing them.** Otherwise "both parses failed" ⇒
+empty == empty ⇒ **green**, and you have an always-true assertion: rotate the key, delete the
+keystore, change the tool's output format — it stays green. Require 64 hex chars on each side.
+Both directions were tested: sign the same APK with the *debug* key ⇒ the identity line goes red,
+exit 1; put a *wrong password* in the config ⇒ the shape line goes red (printing an empty value),
+exit 1. Neither ever silently passes.
+
+⚠⚠ **Changing the signing key breaks in-place upgrade, permanently.** The old and the new APK are
+not the same app; users must uninstall first. Say that out loud before shipping — and never publish
+two builds under the same `versionName` with different keys, because nobody can tell them apart.
+
 ⚠⚠ **Re-check the release after every rebuild.** The release asset is a *second copy* of the APK, and
 it does not update itself. A release that still holds the pre-font / pre-feature build is the worst
 kind of stale: the user downloads from the URL you gave them and silently gets the old app.
