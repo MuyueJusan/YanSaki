@@ -6,7 +6,7 @@
 
 ---
 
-## 2026-09-29（第二十三段）· 发布 `apk-v1.2`（**往返校验当场抓到「取附件」请求头被覆盖**）+ lint 闸门扩到 `android/`
+## 2026-09-29（第二十三段）· 发布 `apk-v1.2`（**往返校验当场抓到「取附件」请求头被覆盖**）+ lint 闸门扩到 `android/` 并改成**从 git 推导清单**
 
 > 这一段跨了零点（提交时间 `23:48 → 00:12`），按 release 落地的日期记在 09-29。
 
@@ -58,22 +58,40 @@ const dl = await fetch(asset.url, { headers: Object.assign({ 'Accept': 'applicat
 坏的是我那句话。**但判据 fail-closed 是对的**：它证明不了「附件是对的」就该拒绝放行，
 即使事后发现产物没问题，也不能让它退化成「猜对了才绿」的永真断言。
 
-### 四、lint 闸门扩到 `android/`（`_lint-suites.js` 63 → 67）
+### 四、lint 闸门扩到 `android/`，并把清单改成**从 git 推导**
 
 `_lint-suites.js` 的存在理由是「**本仓库的脚本别带语法错**」，但它只 `readdirSync(_verify/)`，
-而 `android/` 下躺着 4 个要跑起来的 `.js`：`assets/ys-ai-shim.js` / `shim/ai-fetch-shim.js` /
+而 `android/` 下还有 3 个要跑起来的 `.js`：`shim/ai-fetch-shim.js` /
 `tools/release.js` / `tools/test-aiproxy/contract.test.js` —— **一个都不在里面**。
-最刺眼的是：**这一轮新写的 `tools/release.js` 就是其中之一**。
+最刺眼的是：**这一轮新写的 `tools/release.js` 就是其中之一**（我一边写它、一边以为闸门罩着它）。
 
-⇒ 递归扫 `android/`，跳过生成物/依赖目录（`node_modules` / `.git` / `build` / `__pycache__`），
-**并把「跳过了哪些」打出来**（白名单式的跳过自己也会漏）。
-⇒ 对照验证：塞一个语法错探针 ⇒ `❌ 1/68` **点名它**、退出码 **1**；删掉 ⇒ 67 个全绿、退出码 **0**；探针无条件删。
-⇒ `main` 上没有 `android/`，`collect()` 对不存在的目录直接当没有 ⇒ 两边共用同一份脚本。
+**第一次修法又踩了同一个坑：** 改成「递归扫 `android/` + 硬编码跳过 `build/` / `__pycache__`」，
+跑出来把 `android/assets/ys-ai-shim.js` 也数了进去 —— 而那是 `build.sh` 第 114 行 `cp -f`
+出来的**副本**（`build.sh` 第 119 行**已经**对它跑过 `node --check`）
+⇒ **既重复计数，又让这个数字取决于「本机构建过没有」**（干净 clone 是 3、本机是 4）。
+**一个会随环境变动的数字，比没有数字更坏。**
+
+⇒ 判据换成**从仓库自身推导**：`git ls-files --cached --others --exclude-standard -- '*.js'`
+（git 认得 + 不被 `.gitignore` 排除）—— 这恰好就是「本仓库里要跑起来的脚本」，
+**自动跟着文件增删走**，生成物天然不在里面；被排除的那些**打印出来**。
+⇒ **所以这份文档里也不写数量**（本轮把「67 = 63 + 4」写进三处，十分钟后就全错了）。
+⇒ 对照验证（两个方向，缺一不可）：塞一个**未被忽略**的语法错探针 ⇒ **点名它**、退出码 **1**；
+塞一个**被 `.gitignore` 排除**的语法错探针 ⇒ **不查**（只出现在「排除」那行）、全绿、退出码 **0**。
+探针无条件删。
+⇒ `main` 上没有跟踪的 `android/` ⇒ 同一份脚本两边都能跑（本轮已 cherry-pick 过去验证）。
 
 ### 五、分支与上线
 
-- `apk`：`c9a900a` → `ca6edc4`（api-push 修合并提交）→ `284df7c`（release.js + README）→ `c69e2b3`（lint 闸门）
-- `main`：`2aa5465` → `f12d152`（cherry-pick `ca6edc4`，`_verify/` 是两个分支共享的）
+- `apk`：`c9a900a` → `ca6edc4`（api-push 修合并提交）→ `284df7c`（release.js + README）
+  → `c69e2b3`（lint 扩到 android/）→ `b7c99a3`（文档）→ **本次**（lint 清单改 git 推导 + 数字收账）
+- `main`：`2aa5465` → `f12d152`（cherry-pick `ca6edc4`，`_verify/` 两分支共享）
+  → `84c65fe`（cherry-pick `c69e2b3`）→ **本次**（`markdown/` 整体同步到 apk 的状态）
+- ⚠⚠ **顺手发现 `main` 的 `markdown/` 已经落后**：`RULES.md` 缺 六之六十五~七十（整整 6 条）、
+  `SKILL-android-apk.md` 还是旧标题、`2026-09-29.md` 缺 361 行。
+  用 `git diff main apk --numstat` **逐文件核过**：apk 侧全是新增/改写，**main 没有独有内容**
+  ⇒ 直接 `git checkout apk -- markdown/` 同步，不丢东西。
+  ⚠ 教训：**文档只在 `apk` 上改，`main` 就会慢慢落后** —— `apk ⊇ main` 这个设计只对 `android/` 成立，
+  `markdown/` 两边本该一样。
 - ⚠ `git push` 第一次被代理挡死（`schannel: server closed abruptly`）⇒ 走 `api-push.js --go`；
   推 `main` 时 `git push` **又通了** —— 这个代理是**间歇性**的，
   所以顺序永远是「先试 `git push`、失败再走 API」。

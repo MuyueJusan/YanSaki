@@ -5577,16 +5577,26 @@ below. This was hit **three times in one round** (twice in one file) before it w
   check the artefact — not the source that generates it.)
 - ⚠⚠ **"Every file" means every runnable script in the repo — not every file in the suite directory.**
   That loop is scoped to `_verify/`, and the scope is invisible in its name: a gate whose reach is
-  silently smaller than its description. A sibling directory held four runnable `.js` files (a
-  build-time shim, a fetch shim, a release publisher, a contract test) and the linter had never looked
-  at any of them — the publisher was written *in the same session* on the assumption that the gate
-  covered it. ⇒ When you build a gate, ask "what else is the same kind of thing?" on day one, not after
-  it bites. And when you deliberately skip directories (dependencies, generated output), **print which
-  ones you skipped** — an allow-list has holes of its own, and a silent skip stays invisible forever.
-  ⚠ Green proves only "what it looked at is fine", never "it looked at everything" — those are two
-  different claims and the second one is the one you actually care about. Test the *scope* too: drop a
-  deliberately-broken file into the newly covered directory, check it goes red **and names that file**
-  (and exits non-zero — "prints red but exits 0" is its own trap), then delete the probe.
+  silently smaller than its description. A sibling directory held three runnable `.js` files (a fetch
+  shim, a release publisher, a contract test) and the linter had never looked at any of them — the
+  publisher was written *in the same session* on the assumption that the gate covered it.
+  ⇒ When you build a gate, ask "what else is the same kind of thing?" on day one, not after it bites.
+- ⚠⚠ **Don't hardcode the file list — derive it.** The obvious fix ("walk the sibling dir, skip `build/`
+  and `__pycache__`") failed the same way: it swept in a *generated copy* of the shim (the build script
+  `cp`s it into `assets/` and already syntax-checks it there), so the count both double-counted a file
+  and **depended on whether this machine had ever run a build**. A number that changes with the
+  environment is worse than no number — it makes you suspect the product when two readings differ.
+  ⇒ Derive the set from the repo itself: `git ls-files --cached --others --exclude-standard -- '*.js'`
+  (git knows it **and** it is not gitignored). That is exactly "the runnable scripts in this repo", it
+  follows files in and out automatically, and generated output is excluded by construction.
+  ⚠ Then **don't write the count into docs** — it drifts the moment someone adds a script.
+- ⚠ **Print what you skipped.** An allow-list has holes of its own, and a silent skip stays invisible
+  forever. (With the git-derived version this comes free: list the ignored matches.)
+- ⚠ Green proves only "what it looked at is fine", never "it looked at everything" — two different
+  claims, and the second is the one you actually care about. Test the *scope*, in **both directions**:
+  (a) drop a deliberately-broken file that is **not** ignored ⇒ it must go red, **name that file**, and
+  exit non-zero ("prints red but exits 0" is its own trap); (b) drop a broken file that **is** ignored
+  ⇒ it must **not** be linted. Then delete both probes.
 
 ## An injection that breaks the page's parse looks like "every assertion failed"
 
