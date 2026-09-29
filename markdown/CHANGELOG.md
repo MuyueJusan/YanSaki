@@ -6,6 +6,90 @@
 
 ---
 
+## 2026-09-29（第二十三段）· 发布 `apk-v1.2`（**往返校验当场抓到「取附件」请求头被覆盖**）+ lint 闸门扩到 `android/`
+
+> 这一段跨了零点（提交时间 `23:48 → 00:12`），按 release 落地的日期记在 09-29。
+
+**类型**：发布 + 新工具（`android/tools/release.js`）+ 扩闸门（`_verify/_lint-suites.js`）+ 文档。
+**产品文件零改动**（`saki.html` / `index.html` 仍是 `a36fe8ac…`，1 688 840 字节）。
+
+### 一、`apk-v1.2` 已发布
+
+- 产物 `android/build/YanSakiShed-1.2.apk`，**2 709 559 字节**，sha1 `7ac49b09b61095155ab8c9c3c0f34910049578a2`。
+- Release <https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.2>，
+  target = `apk` 分支头 `c9a900a`，`prerelease=true`（与 `apk-v1.0` / `apk-v1.1` 一致）。
+- 顺手看到老坑的化石：**`apk-v1.1` 挂的附件名叫 `YanSakiShed-1.0.apk`** ——
+  那正是「版本号忘了提、文件名跟着错」的遗留。历史不改（改了更乱），已在下载表里标注。
+
+### 二、新工具 `android/tools/release.js`
+
+原来只能推 commit（`_verify/api-push.js`），**没有任何发布 release 的脚本** ⇒ 每次手敲。
+新脚本的契约：
+
+- **默认 dry-run**，`--go` 才真发（会写远端的脚本不该把「写」设成默认动作，同 `api-push.js` / `_purge-tmp.js`）。
+- **新增 `--verify`**：只核**已有** release 的附件是不是这个包，一个字节都不写。
+  为什么要有它：发布路径在「tag 已存在」时**拒绝**（不静默覆盖 —— 覆盖会抹掉「谁下载过旧的那份」），
+  可拒绝之后就没路了，而「这个 release 挂的到底是不是那个包」恰恰最需要能随时复查。
+- 版本号**不重新实现**，直接问 `tools/apk_path.py`（Python 侧那份是单一实现）。
+- 最后一步**必须**把附件下载回来逐字节比 —— 判据是**往返**，不是「上传成功」。
+
+### 三、⚠⚠ 往返判据当场抓到一个 bug（**上传侧完全看不出**）
+
+第一次 `--go` 就红了：
+
+```
+asset id = 598603137   2709559 字节          ← 上传报的是对的
+远端附件 1514 字节  sha1 b7acfac3…           ← 下回来却是个 1.5 KB 的东西
+❌ ⚠⚠ 附件与本地 APK **不一致**
+```
+
+`1514 字节` ≈ GitHub 的**资产元数据 JSON**。根因是我写的那一行：
+
+```js
+const dl = await fetch(asset.url, { headers: Object.assign({ 'Accept': 'application/octet-stream' }, H) });
+```
+
+**`H` 在后面，把我刚设的 `Accept` 反手盖回了 `application/vnd.github+json`** —— 参数顺序反了，等于没设。
+
+⇒ 这个 bug 的形状值得记：**上传返回 201、`size` 也对**，
+从「上传成功」那一侧**完全看不出问题**；只有「下载回来逐字节比」能发现。
+⇒ 修法：`Object.assign({}, 基础头, { 覆盖项 })`，**覆盖项永远放最后**。
+⇒ 修完 `--verify` 回读：**2 709 559 字节，sha1 与本地逐字节一致** ⇒ 附件本身一直是好的，
+坏的是我那句话。**但判据 fail-closed 是对的**：它证明不了「附件是对的」就该拒绝放行，
+即使事后发现产物没问题，也不能让它退化成「猜对了才绿」的永真断言。
+
+### 四、lint 闸门扩到 `android/`（`_lint-suites.js` 63 → 67）
+
+`_lint-suites.js` 的存在理由是「**本仓库的脚本别带语法错**」，但它只 `readdirSync(_verify/)`，
+而 `android/` 下躺着 4 个要跑起来的 `.js`：`assets/ys-ai-shim.js` / `shim/ai-fetch-shim.js` /
+`tools/release.js` / `tools/test-aiproxy/contract.test.js` —— **一个都不在里面**。
+最刺眼的是：**这一轮新写的 `tools/release.js` 就是其中之一**。
+
+⇒ 递归扫 `android/`，跳过生成物/依赖目录（`node_modules` / `.git` / `build` / `__pycache__`），
+**并把「跳过了哪些」打出来**（白名单式的跳过自己也会漏）。
+⇒ 对照验证：塞一个语法错探针 ⇒ `❌ 1/68` **点名它**、退出码 **1**；删掉 ⇒ 67 个全绿、退出码 **0**；探针无条件删。
+⇒ `main` 上没有 `android/`，`collect()` 对不存在的目录直接当没有 ⇒ 两边共用同一份脚本。
+
+### 五、分支与上线
+
+- `apk`：`c9a900a` → `ca6edc4`（api-push 修合并提交）→ `284df7c`（release.js + README）→ `c69e2b3`（lint 闸门）
+- `main`：`2aa5465` → `f12d152`（cherry-pick `ca6edc4`，`_verify/` 是两个分支共享的）
+- ⚠ `git push` 第一次被代理挡死（`schannel: server closed abruptly`）⇒ 走 `api-push.js --go`；
+  推 `main` 时 `git push` **又通了** —— 这个代理是**间歇性**的，
+  所以顺序永远是「先试 `git push`、失败再走 API」。
+- ⚠⚠ **线上核对（「绿 + blob 一致 ≠ 上线了」）**：抓 `https://yansaki.top/` 下来，
+  与本地 `index.html` **逐字节一致**（sha1 `a36fe8acb7c2c1e46333d73429fc8df420a2c73a`），
+  五处修复标记（`stAiNeedsKey` / `ai-key-field` / `api-global-card` / `apig-body` / `stAiIsVertex`）全在
+  ⇒ **网页版确实上线了**。
+
+### 六、文档
+
+- `android/README.md`：下载表补 `apk-v1.2` 行、改标「当前版」，并写下 release.js 的用法与那个请求头坑。
+- `markdown/README.md`：`_lint-suites.js` 那一行改成实际范围（67 = `_verify/` 63 + `android/` 4）。
+- `markdown/RULES.md`：新增 **六之七十一「闸门的作用域会静默小于它的名字」**（同步到 `.workbuddy-ai/memory/RULES.md`，逐字节一致）。
+
+---
+
 ## 2026-09-29（第二十二段）· 【ai对话】完整模式点「应用」被空 Key 拦住 + 全局面板标题栏跟着滚
 
 **类型**：**产品改动**（`saki.html` / `index.html`，`1 682 949 → 1 688 840` 字节，

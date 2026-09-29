@@ -411,10 +411,35 @@ an uninstall. Label it clearly as debug — it can never go to the Play Store.
 
 ⚠⚠ **Re-check the release after every rebuild.** The release asset is a *second copy* of the APK, and
 it does not update itself. A release that still holds the pre-font / pre-feature build is the worst
-kind of stale: the user downloads from the URL you gave them and silently gets the old app. Compare
-`size`/`created_at` of the asset against the local file before you call anything done — and if the
-in-app `versionName` did not change either, say so, because two different builds then carry the same
-version label.
+kind of stale: the user downloads from the URL you gave them and silently gets the old app.
+
+⚠⚠ **The check is a round trip, not a metadata comparison.** Download the asset back and compare it
+**byte for byte** (`Buffer.equals` / sha1) against the local file. Do *not* settle for `size` +
+`created_at` off the asset object — those describe the *upload*, not what a *download* returns.
+Hit for real: the upload was fine (`201`, `size` = 2 709 559) yet the download came back as
+**1514 bytes of asset-metadata JSON**, because the header was built as
+`Object.assign({ 'Accept': 'application/octet-stream' }, H)` — and `H` (carrying
+`Accept: application/vnd.github+json`) is **last**, so it silently overwrote the octet-stream value.
+⇒ Always `Object.assign({}, baseHeaders, { overrides })`: **overrides go last.**
+⚠ Keep the check **fail-closed**. It refused to certify that release even though the artifact turned
+out to be fine. A check that passes only "when you happen to be right" is an always-green assertion
+in disguise — and the way you find out it was broken is that it *fails*.
+
+⚠ **The version has exactly one source of truth: `versionName` in `AndroidManifest.xml`.** Derive the
+APK path from it everywhere (`build.sh`, `verify.sh`, any reverse-test tool) rather than hardcoding
+`App-1.0.apk`. Hardcoded names turn a version bump into something that *looks like a broken build*:
+every tool reports "APK not found" / "precondition failed" at once, and the failure points at the
+wrong thing. Also purge the previous version's artifact on rebuild — two APKs side by side means one
+of them is wrong.
+
+⚠ Make the publisher **refuse when the tag already exists** (no silent overwrite — overwriting erases
+"who downloaded the old one"), and give it a separate **verify-only mode** that re-checks an existing
+release without writing anything, since the publish path has no other way back. Default to dry-run;
+a script that writes to the remote should never do so as its default action.
+
+⚠ Say which build a release is, in the release notes: the in-app `versionName`, the embedded page's
+sha1, and the asset's sha1. If the `versionName` did not change between two builds, say that too —
+two different builds then carry the same version label.
 
 ## 8. State the limits honestly
 
