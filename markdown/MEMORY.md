@@ -42,6 +42,6 @@
 |---|---|
 | ② 编写器 / 预制块 / AI 预制块 / 首页 —— 一 · 一之补 · 一之补二 · 04 分册十八 | `stSet(path,v)` **只写标量叶子**（路径传错 ⇒ 整块变 `''`）；块树「这层没子块」= **空列表，绝不兜底回根**；`blk` **先 extra、后 bind**；⚠ 首页导入模式放 **`<input>.dataset.mode`**（放 `stEditor` 会被「点取消」绕过）；`ST_HOME_BODY_FIELDS` 与 `renderStCard()` **逐字一致**；搬条目 = **追加 + 逐条 clone** |
 | ②d 小游戏 / ②e 人设生成器 —— 七 · 一之补三 | **卸载必须摘 DOM**（非 PLAYING 时 `gameLoop` 照样 rAF 排回去）；**「清空 = 回到默认」两处一起做**（删键 + 空则回落）；`personaTpl` 初值必须 `null`；模板冒号只认半角会**静默少认 9 项** |
-| ③ AI / ④ Code / ⑤ 状态栏 MVU / ⑥ 运行时 / ⑦ 摆放 —— 二 · 三及补一/二/三 · 三之补二 · 四 · 五 | **「第一段」永远是最前面那一条**；Code 页**读写不共用预算**（`ST_CODE_CUT_MARK` 见到就拒收）；`note` 绝不能发给模型；状态栏与 MVU **只有两个真容器**（`replaceString` / 脚本 `content`）⇒ 当普通条目删改 = **抹掉它们**；渲染条件**只有两条**（围栏里 + 同时有 `<body>`/`</body>`），**内联永远赢过 class** |
+| ③ AI / ④ Code / ⑤ 状态栏 MVU / ⑥ 运行时 / ⑦ 摆放 —— 二 · 三及补一/二/三 · 三之补二 · 四 · 五 | **「第一段」永远是最前面那一条**；Code 页**读写不共用预算**（`ST_CODE_CUT_MARK` 见到就拒收）；`note` 绝不能发给模型；状态栏与 MVU **只有两个真容器**（`replaceString` / 脚本 `content`）⇒ 当普通条目删改 = **抹掉它们**；渲染条件**只有两条**（围栏里 + 同时有 `<body>`/`</body>`），**内联永远赢过 class**；⚠ **API 设置里 Key 那一格的「显隐」与 `apigReadyCheck` 的「要不要填」必须同源**（判据只改一处 ⇒ 「藏起来了却要求你填」，六之七十九） |
 
 ⚠ **选项卡**（详见 `04-card-editor.md` 二）：`home` **排最前**、`persona` 在 **`code` 之后**；共 **16 个**，且 **`ST_TABS` 的条数/标签/id 被六处写死**（`persona-verify` / `smoke` / `st-code` / **`st-ai`** + 外部 `verify_steditor` / `verify_tavern_visual`）⇒ 加/删选项卡**六处都要改**（⚠⚠ **已错过两次**）⇒ **别信条数，`grep -rn "选项卡" _verify/ 外部_verify/` 一遍**；⚠ **默认落点 `stEditor.tab` 写在三处**（初值 / `stLoadDraft` 回落 / `stNewCard`）；⚠ 分册**节号顺序 ≠ 选项卡顺序**。

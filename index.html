@@ -29583,8 +29583,21 @@
             if (locF) locF.hidden = false;
             if (projF) projF.hidden = (mode !== 'sa');
             if (saF) saF.hidden = (mode !== 'sa');
+            // ⚠⚠ API Key 那一格「藏起来」的判据 = **真的是 Vertex** 且 完整模式 ——
+            //   不能只写 `mode === 'sa'`。authMode 是**全局**的那一个下拉（它跟着
+            //   vertex-box 一起被藏），**切走服务商时不会重置** ⇒ 只写 mode 的话，
+            //   「Vertex 完整模式 → 切到 OpenAI」之后 Key 那一格**再也不出现**，
+            //   而 apigReadyCheck 又拦着「请先填写 API Key」⇒ 用户被锁在门外。
+            //   ⚠ 判据必须和 stAiNeedsKey / syncAiVertexHint / stAiGeminiAuthHeaders
+            //     用**同一个** stAiIsVertex()（它除了下拉框还看 baseUrl —— 自定义服务商
+            //     填 aiplatform 域名时，只认下拉框那一份会和真正发请求那条路分叉）
+            //   ⚠ 这里读 baseUrl 输入框是安全的：syncApigProviderUI 先灌值、再调本函数
+            const vertexSa = !!(stAiIsVertex({
+                provider: (document.getElementById('apig-provider') || {}).value || '',
+                baseUrl: (document.getElementById('apig-base-url') || {}).value || ''
+            }) && (mode === 'sa'));
             // 完整模式用 SA JSON 换 token，API Key 那一格就不该还摆着
-            if (keyF) keyF.hidden = (mode === 'sa');
+            if (keyF) keyF.hidden = vertexSa;
             if (note) {
                 note.innerHTML = (mode === 'sa')
                     ? '完整模式：把 Service Account 密钥 JSON 整个粘进来（粘完点「验证 JSON」分步体检）。' +
@@ -29665,8 +29678,14 @@
         //   才能点「获取模型列表」，等于把这个按钮废掉了
         function apigReadyCheck(cfg, opts) {
             const needModel = !(opts && opts.needModel === false);
-            const p = AI_PROVIDERS.find(x => x.value === cfg.provider) || {};
-            if (p.vertex) {
+            // ⚠ 判据与 stAiNeedsKey / stAiGeminiAuthHeaders / syncApigAuthUI 一致：
+            //   走 stAiIsVertex()（它除了下拉框**还看 baseUrl**）。只认下拉框那一份的话，
+            //   「自定义服务商 + 填了 aiplatform 域名」会被当成普通服务商去要 Key，
+            //   而真正发请求那条路走的是 Vertex 那一条 ⇒ **校验与发送用两套判据**，
+            //   必然出现「拦着不让发」或「放过去但发错」。
+            //   ⚠ 更糟的是 Key 那一格的显隐也换成了这个判据 ⇒ 判据不一致会做出
+            //     「格子藏起来了、却还要求你填」——正是用户报的那个锁死形态
+            if (stAiIsVertex(cfg)) {
                 if (cfg.authMode === 'sa') {
                     if (!cfg.saJson) return '完整模式要先把 Service Account JSON 粘进去';
                     const sa = stAiSaParse(cfg.saJson);
