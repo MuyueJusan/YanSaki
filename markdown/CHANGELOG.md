@@ -6,6 +6,84 @@
 
 ---
 
+## 2026-09-30（第二十六段）· Vertex 完整模式下**切走服务商，Key 那一格必须回来**
+
+**类型**：修 bug（用户实测反馈）+ 扩断言（`apig-verify.js` 171 → **182** 条）+
+新增反向测试（`_reverse21.js`，3 针）+ 文档（顺手清掉 README 里两处**过时的总数**）。
+**产品文件**：`saki.html` 1 698 352 → 1 700 226 字节（32 690 → 32 709 行），
+sha1 `9a4d9452…` → `f86775e03e8d626bf239cd717efc9280a3443a62`。
+
+### 一、用户报的
+
+> 来到 api 设置，要求：在 google vertex ai 的完整模式下切换到其他服务商时，要重新显示 key 项目，
+> key 项目仅在 google vertex ai 的完整模式时被隐藏并忽略
+
+### 二、根因：隐藏的**判据少了一半**
+
+`syncApigAuthUI()` 里那一格原来写的是：
+
+```js
+if (keyF) keyF.hidden = (mode === 'sa');     // ← 只看 authMode
+```
+
+`authMode` 是**全局那一个下拉**（`apig-auth-mode`），它跟着 `apig-vertex-box` 一起被藏，
+但**切服务商时不会重置**。于是「Vertex 完整模式 → 切到 OpenAI」之后：
+`mode` 还是 `'sa'` ⇒ Key 那一格**继续藏着**；而 `apigReadyCheck` 对普通服务商那一支
+会拦「请先填写 API Key」⇒ **格子藏起来了、却还要求你填，用户被锁在门外**。
+
+### 三、改了三处（全部收归同一个判据）
+
+| 位置 | 旧 | 新 | 为什么 |
+|---|---|---|---|
+| `syncApigAuthUI()` 的 `keyF.hidden` | `(mode === 'sa')` | `stAiIsVertex(…) && (mode === 'sa')` | 用户报的就是这一条 |
+| `apigReadyCheck()` 的 Vertex 分支 | `AI_PROVIDERS.find(…).vertex`（只看下拉框） | `stAiIsVertex(cfg)` | 判据必须和**发送**那条路一致 |
+| `syncApigAuthUI()` 算 `vertexSa` | —— | 同上，并**读 baseUrl 输入框** | 显隐与「要不要 Key」必须同一个判断 |
+
+⚠⚠ **第二条是必须一起改的，不是顺手**：只改第一条的话，「自定义服务商 + 填了 `aiplatform`
+域名」就会变成**格子藏起来、`apigReadyCheck` 却还要求填** —— **同一个锁死形态，换个入口原样重现**。
+
+⚠ 顺序坑（注释里早有）：`syncApigProviderUI()` 会用 `apigBaseDraft` **覆盖** Base URL 那一格
+⇒ `syncApigAuthUI()` 必须在它**之后**调。
+
+### 四、⚠⚠ 为什么 171 条全绿的套件没抓到它
+
+**套件里早就有看着正好覆盖这个场景的断言**（`apig-verify.js` G3 段，第二十轮写的）：
+
+```js
+await ev(`… apig-provider.value = 'openai'; syncApigProviderUI(); …`);
+check('（对照）非 Vertex：API Key 那一格显示', vo.key, v => v !== 'none', '≠ none');
+```
+
+⚠ 它绿着，是因为它的**前置**是「先切回 `'key'` 再切服务商」；而用户是**在 `'sa'` 状态下
+直接切走**的 ⇒ **前置状态不同** ⇒ 它一路绿着放走了 bug（六之二十六：对照组必须真的不同）。
+⚠ 那一段的注释原来还写着「逻辑一直是对的」—— **那句话本身就是一条过时断言**，已一并改掉。
+
+⚠ 同一轮里还有一条「对照②：非 Vertex + 残留 `authMode=sa` ⇒ Key 显示」，但它盯的是
+**【ai对话】面板**（`ai-key-field`），不是全局面板（`apig-key-field`）——
+「同一个坑只修踩过的那一处 = 把坑留给隔壁」。⚠ 【ai对话】那一份（`syncAiVertexHint()`）
+**本来就是对的**（它一直带 `stAiIsVertex`），所以这一轮只动全局面板那一份。
+
+### 五、验证
+
+- `apig-verify.js` **171 → 182**（+11）：完整模式下切走（不碰 authMode）⇒ Key 必须回来、
+  把「authMode 仍停在 sa」本身也断言掉、**成对断言「可见 ⇔ 被要求」**、Vertex 完整模式
+  **真的**不要求 Key、**自定义 + `aiplatform`** 时那一格也藏起来、
+  `stAiIsVertex` / `stAiNeedsKey` / `apigReadyCheck` **三个都说「是 Vertex」**。
+- 反向测试 `_reverse21.js`（新，3 针）：R1 隐藏判据退回只看 `authMode`；R2 `apigReadyCheck`
+  退回只看下拉框；R3 `vertexSa` 退回只看下拉框。**三针各打红恰好一条、对照组全绿、
+  产品逐字节还原**（`f86775e03e8d`）。⚠ 老 `_reverse17.js` 打的就是这一块，但它写的是
+  **同步 API**（本环境一律 `EBUSY`）⇒ 另开一份，而不是去改它。
+- `check.js` 5/0、`_lint-suites.js` 68 个 `.js` 全过、`run-all.js` **20 套 2 978 通过 / 0 失败**。
+
+### 六、顺手清掉两处过时数字
+
+README 里 **「20 套共 2 868 条 / 2 864 通过 / 4 失败」** 已经过时两轮
+（第二十五轮给 `st-code.js` 加了 63 条、这一轮给 `apig-verify.js` 加了 11 条，总数没跟着改），
+`apig-verify.js` 那一行的「135」也早就该是 171。⇒ 全部按**实测**改成 **2 978 / 0 失败**、
+该行 **182**，并写明判据是「跑一次 `run-all.js` 把逐套数字加一遍」，别抄。
+
+---
+
 ## 2026-09-30（第二十五段）· Code 页的 Agent 补上 **Gemini / Vertex 原生协议的工具调用**
 
 **类型**：功能（此前是**明说「不支持」并拒绝发送**）+ 扩断言（`st-code.js` 696 → **759** 条）+

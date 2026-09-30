@@ -535,10 +535,13 @@ key 已经用不到了吧」。两句都对，各自对应一个真 bug，**而�
 
 ### ① 「完整模式下 Key 用不到」—— 根因在 CSS，不在逻辑
 
-`syncApigAuthUI()` 里 `keyF.hidden = (mode === 'sa')` **一直在执行**，但
+`syncApigAuthUI()` 里 `keyF.hidden = true` **一直在执行**，但
 `#apig-key-field` 是 `<div class="ai-field">`，而 `.ai-field { display: flex }` ——
 **同权重时 `display:flex` 盖掉 `hidden` 属性自带的 `display:none`** ⇒ 属性设对了、
 **画面上照样看得见**，而且**不报任何错**。
+
+⚠ 当时那条判据写的是 `(mode === 'sa')` —— **第二十六轮发现它少了另一半**（只看
+`authMode`、没看「是不是真的是 Vertex」），见下面的 §十三。**同一个格子的两半，隔了两轮才补齐**。
 
 页面里原来给 `.apig-vertex-box` / `.apig-sa-masked` / `.apig-verify-out` **逐条**写了
 `[hidden] { display: none }` —— 漏了 `.ai-field`。**「逐条补」就是会漏**，所以现在收敛成一条：
@@ -578,3 +581,86 @@ caption / voice / tts / image / video）—— 它**不列模型**，模型名�
 「验证 JSON」第 ⑥ 步的文案也改成**明说「列模型失败 ≠ 配置坏了」**——
 token 已经拿到了（①~⑤ 都过了），所以问题在**项目 ID / 区域 / 该账号的权限 / 这个 API 允不允许
 浏览器直连**。⚠ 回落**不能把失败伪装成成功**（六之二十七）。
+
+## 十三、Vertex 完整模式下切走服务商：Key 那一格必须回来（第二十六轮）
+
+用户实测反馈：
+
+> 来到 api 设置，要求：在 google vertex ai 的完整模式下切换到其他服务商时，要重新显示 key 项目，
+> key 项目仅在 google vertex ai 的完整模式时被隐藏并忽略
+
+### 根因：隐藏的**判据少了一半**
+
+```js
+// 第二十轮（旧）：只看 authMode
+if (keyF) keyF.hidden = (mode === 'sa');
+
+// 第二十六轮（新）：真的是 Vertex **且** 完整模式
+const vertexSa = !!(stAiIsVertex({
+    provider: (document.getElementById('apig-provider') || {}).value || '',
+    baseUrl: (document.getElementById('apig-base-url') || {}).value || ''
+}) && (mode === 'sa'));
+if (keyF) keyF.hidden = vertexSa;
+```
+
+`authMode` 是**全局那一个下拉**（`apig-auth-mode`），它跟着 `apig-vertex-box` 一起被藏，
+但**切服务商时不会重置**。于是「Vertex 完整模式 → 切到 OpenAI」之后：
+
+- `mode` 还是 `'sa'` ⇒ Key 那一格**继续藏着**；
+- 而 `apigReadyCheck` 对普通服务商那一支会拦「请先填写 API Key」。
+
+⇒ **格子藏起来了、却还要求你填** —— 用户被锁在门外。这正是用户报的那条。
+
+### 三处改动（都收归同一个判据）
+
+| 位置 | 旧 | 新 | 为什么 |
+|---|---|---|---|
+| `syncApigAuthUI()` 的 `keyF.hidden` | `(mode === 'sa')` | `stAiIsVertex(...) && (mode === 'sa')` | 这一条就是用户报的 bug |
+| `apigReadyCheck()` 的 Vertex 分支 | `AI_PROVIDERS.find(…).vertex`（只看下拉框） | `stAiIsVertex(cfg)` | 判据必须和**发送**那条路一致，否则「自定义 + aiplatform 域名」会被当普通服务商要 Key |
+| `syncApigAuthUI()` 算 `vertexSa` | —— | 同上，并且**读 baseUrl 输入框** | 显隐与「要不要 Key」必须是**同一个**判断 |
+
+⚠⚠ **第二条是必须一起改的，不是顺手**：只改第一条的话，「自定义服务商 + 填了 `aiplatform`
+域名」就会变成**格子藏起来、`apigReadyCheck` 却还要求填** —— **用户报的那个锁死形态，
+换个入口原样重现**。⇒ 判据要么统一，要么它自己就会造出新的锁死。
+
+⚠ 顺序上还有一处坑（原来的注释已记）：`syncApigProviderUI()` 会用 `apigBaseDraft`
+**覆盖** Base URL 那一格 ⇒ `syncApigAuthUI()` 必须在它**之后**调。
+
+### 为什么 182 条全绿的套件没抓到它
+
+这一段值得单独记 —— **套件里早就有看着正好覆盖这个场景的断言**：
+
+```js
+// apig-verify.js 的 G3 段（第二十轮就写了）
+await ev(`… apig-provider.value = 'openai'; syncApigProviderUI(); …`);
+check('（对照）非 Vertex：API Key 那一格显示', vo.key, v => v !== 'none', '≠ none');
+```
+
+⚠ 它绿着，是因为它的**前置**是「先切回 `'key'` 再切服务商」；而用户是**在 `'sa'` 状态下
+直接切走**的 ⇒ **前置状态不同** ⇒ 它一路绿着放走了这个 bug（六之二十六：对照组必须真的不同）。
+⇒ 那一段的注释原来还写着「逻辑一直是对的」—— **那句话本身就是一条过时断言**，已一并改掉。
+
+⚠ 同一轮里还有一条「对照②：非 Vertex + 残留 `authMode=sa` ⇒ Key 显示」，但它盯的是
+**【ai对话】面板**（`ai-key-field`），不是全局面板（`apig-key-field`）——
+「同一个坑只修踩过的那一处 = 把坑留给隔壁」。
+⚠ 【ai对话】那一份（`syncAiVertexHint()`）**本来就是对的**（它一直带 `stAiIsVertex`），
+所以这一轮只动全局面板那一份。
+
+### 这一轮补的断言
+
+`apig-verify.js` **171 → 182**（+11），全部落在 G3 / G5：
+
+- G3：**完整模式下切走**（全程不碰 authMode）⇒ Key 必须回来，并把「authMode 仍停在 sa」
+  本身也断言掉（否则前置不成立、这条就测不到东西）；
+- G3：**成对断言** —— **可见 ⇔ 被要求**（只测「可见」的话，一个「藏起来又照样要你填」
+  的实现也能绿）；
+- G3：Vertex 完整模式**真的**不要求 Key（「忽略」那一半）；
+- G3：自定义 + `aiplatform` + 完整模式 ⇒ 那一格**也**藏起来（判据看 baseUrl，不只下拉框）；
+- G5：同一份配置下 `stAiIsVertex` / `stAiNeedsKey` / `apigReadyCheck` **三个都说「是 Vertex」**。
+
+反向测试 `_reverse21.js`（新，3 针）：R1 把隐藏判据退回只看 `authMode`；R2 把
+`apigReadyCheck` 退回只看下拉框；R3 把 `syncApigAuthUI` 的 `vertexSa` 退回只看下拉框。
+三针各打红**恰好一条**、对照组全绿、产品逐字节还原。
+⚠ 老 `_reverse17.js` 打的就是这一块，但它写的是**同步 API**（本环境一律 `EBUSY`）
+⇒ 所以另开一份，而不是去改它。
+

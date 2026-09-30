@@ -798,12 +798,18 @@ const MOCK_SRC = `
     check('⚠ 退出复古：验证结果区也复原', s2.voutBg, v => v !== 'rgb(255, 255, 255)', '≠ #fff');
 
     // ================= G3. Vertex 两种模式的字段显隐 =================
-    // ⚠⚠ 这一段是**用户报的那个 bug 的回归测试**：
-    //   `syncApigAuthUI` 里写了 `keyF.hidden = (mode === 'sa')`，逻辑一直是对的 ——
-    //   但 `.ai-field { display: flex }` 会**盖掉** hidden 属性自带的 `display:none`
-    //   （同权重时后者输），于是完整模式下「API Key」那一格**照样看得见**。
-    //   ⇒ 只断言 `el.hidden === true` 是**看不出这个 bug 的**（属性确实设上了），
-    //     必须断言 computed `display === 'none'`（真的没渲染）。
+    // ⚠⚠ 这一段是**用户报的两个 bug 的回归测试** —— 同一个格子的两半：
+    //   ① `keyF.hidden = true` 设上了却**照样看得见**：`.ai-field { display: flex }`
+    //      会**盖掉** hidden 属性自带的 `display:none`（同权重时后者输）。
+    //      ⇒ 只断言 `el.hidden === true` 是**看不出这个 bug 的**（属性确实设上了），
+    //        必须断言 computed `display === 'none'`（真的没渲染）。
+    //   ② 隐藏的**判据少了一半**：原来写 `keyF.hidden = (mode === 'sa')`，**没看
+    //      「是不是真的是 Vertex」** ⇒ 在完整模式下切走服务商，Key 那一格不再出现，
+    //      而校验还拦着「请先填写 API Key」⇒ 用户被锁在门外。
+    //      ⚠⚠ 这里原来写着「逻辑一直是对的」——**那句话本身就是一条过时断言**：
+    //        下面的「非 Vertex ⇒ Key 显示」是**先把它切回 'key' 再切服务商**的，
+    //        前置状态与用户的实际操作不同，于是它一路绿着放走了 ②。
+    //      （六之二十六：**对照组必须真的不同**；六之四十八：过时断言是永真断言的镜像）
     section('G3. Vertex 两种模式：字段真的藏住了吗（断言 computed display，不是 hidden 属性）');
 
     await ev(`openApiGlobalModal()`);
@@ -859,6 +865,79 @@ const MOCK_SRC = `
     const vo = await vis();
     check('非 Vertex：整块 Vertex 区域藏住', vo.box, 'none');
     check('（对照）非 Vertex：API Key 那一格显示', vo.key, v => v !== 'none', '≠ none');
+
+    // —— ⚠⚠ 用户报的那条路径：**在完整模式下直接切走服务商**，全程不碰 authMode ——
+    //   上面那条「非 Vertex ⇒ Key 显示」是**先把它切回 'key' 再切服务商**的，
+    //   所以它**从来没走过这条路**：authMode 是全局那一个下拉（跟着 vertex-box 一起
+    //   被藏），切服务商时**不会重置**，旧实现 `keyF.hidden = (mode === 'sa')` 只认
+    //   mode ⇒ 切到 OpenAI 之后 Key 那一格**再也不出现**，而 apigReadyCheck 又拦着
+    //   「请先填写 API Key」⇒ 用户被锁在门外。
+    //   ⚠ 这就是六之二十六那条：**对照组必须真的不同** —— 上面那组的前置状态
+    //     与用户的实际操作不一样，于是它一路绿着放走了这个 bug。
+    await ev(`(function(){
+      document.getElementById('apig-provider').value = 'vertex';
+      syncApigProviderUI();
+      document.getElementById('apig-auth-mode').value = 'sa';
+      syncApigAuthUI();
+      return true; })()`);
+    await sleep(200);
+    const vSa = await vis();
+    check('（前提）Vertex 完整模式：Key 那一格藏住', vSa.key, 'none');
+
+    await ev(`(function(){
+      document.getElementById('apig-provider').value = 'openai';
+      syncApigProviderUI();
+      return true; })()`);
+    await sleep(200);
+    const vSw = await vis();
+    check('⚠⚠ 完整模式下切走：authMode 仍停在 sa（前提成立，否则这条测不到东西）',
+      vSw.authMode, 'sa');
+    check('⚠⚠ 完整模式下切走服务商：Key 那一格**必须回来**（用户报的就是这条）',
+      vSw.key, v => v !== 'none', '≠ none');
+    check('（对照）此时整块 Vertex 区域是藏住的', vSw.box, 'none');
+    // ⚠ 成对断言：**可见** 与 **会被要求填** 必须同时成立。只测「可见」的话，
+    //   一个「藏起来又照样要你填」的实现也能绿 —— 那正是锁死用户的形态
+    const swReady = await ev(`apigReadyCheck({ provider:'openai', proto:'openai',
+      baseUrl:'https://api.openai.com/v1', apiKey:'', model:'m' })`);
+    check('⚠ 而且校验**确实**会要 Key（可见 ⇔ 被要求，两边不能各说各话）',
+      swReady, v => typeof v === 'string' && v.indexOf('API Key') >= 0, '含 API Key');
+
+    // —— 对照的另一半：Vertex 完整模式下**真的**不要求 Key（「忽略」那一半）
+    const saReady = await ev(`apigReadyCheck({ provider:'vertex', proto:'gemini',
+      baseUrl:'https://aiplatform.googleapis.com', authMode:'sa', model:'gemini-2.5-flash',
+      apiKey:'', project:'p', saJson: JSON.stringify({ type:'service_account',
+        client_email:'a@b.iam.gserviceaccount.com', private_key:'x', project_id:'p' }) })`);
+    check('⚠ Vertex 完整模式：没有 Key 也放行（Key 被**忽略**，不是「藏了还要」）',
+      saReady, '');
+
+    // —— ⚠ 第三条路：**自定义服务商 + aiplatform 域名**（下拉框说它不是 Vertex，
+    //   但 baseUrl 是 —— `stAiIsVertex()` 两条都看）。这一格必须和 apigReadyCheck /
+    //   stAiNeedsKey 做出**同一个**判断：藏起来 ⇔ 不要 Key。
+    //   只认下拉框的写法会做出「要 Key 却把格子藏了」⇒ 用户被锁在门外。
+    //   ⚠ 顺序不能反：syncApigProviderUI 会用 apigBaseDraft **覆盖** Base URL 那一格，
+    //     所以必须先调它、再手写 baseUrl，最后才 syncApigAuthUI
+    await ev(`(function(){
+      const sel = document.getElementById('apig-provider');
+      sel.value = 'custom';
+      syncApigProviderUI();
+      document.getElementById('apig-base-url').value = 'https://aiplatform.googleapis.com/v1';
+      document.getElementById('apig-auth-mode').value = 'sa';
+      syncApigAuthUI();
+      return true; })()`);
+    await sleep(200);
+    const vCust = await vis();
+    check('⚠ 前置：自定义 + aiplatform 时 authMode 是 sa', vCust.authMode, 'sa');
+    check('⚠⚠ 自定义 + aiplatform + 完整模式：Key 那一格**也**藏起来（判据看 baseUrl，不只下拉框）',
+      vCust.key, 'none');
+
+    // 还原成原 G3 收尾时的状态（openai + 快速模式），别把状态漏给 G4
+    await ev(`(function(){
+      document.getElementById('apig-provider').value = 'openai';
+      syncApigProviderUI();
+      document.getElementById('apig-auth-mode').value = 'key';
+      syncApigAuthUI();
+      return true; })()`);
+    await sleep(150);
 
     await ev(`closeApiGlobalModal()`);
     await sleep(250);
@@ -1069,6 +1148,28 @@ const MOCK_SRC = `
     check('⚠⚠ fetchModels 走真实路径：这种配置下**必须**要 Key（旧写法会不带 Key 就发出去）',
       fm.status, v => v.indexOf('API Key') >= 0, '含「API Key」');
     check('⚠ 而且真的一个请求都没发出去', fm.calls, 0);
+
+    // —— ⚠⚠ 同一件事的**另一半**：自定义服务商 + **aiplatform** 域名 ⇒ 它**就是 Vertex**
+    //   （`stAiIsVertex()` 除了下拉框**还看 baseUrl**）。`apigReadyCheck` 原来只认下拉框
+    //   ⇒ 这种配置会被当普通服务商去要 Key，而真正发请求那条路走的是 Vertex 那一条
+    //   ⇒ **校验与发送两套判据**。⚠ 更要命的是 Key 那一格的显隐也用 stAiIsVertex
+    //   ⇒ 判据不一致会做出「格子藏起来了、却还要求你填」——正是用户报的那个锁死形态
+    const customVertex = await ev(`(function(){
+      const sa = JSON.stringify({ type:'service_account',
+        client_email:'ys@test.iam.gserviceaccount.com',
+        private_key:'-----BEGIN PRIVATE KEY-----MIIB-----END PRIVATE KEY-----',
+        token_uri:'https://oauth2.googleapis.com/token', project_id:'ys-test-proj' });
+      const c = { provider:'custom', proto:'gemini',
+        baseUrl:'https://aiplatform.googleapis.com/v1', authMode:'sa', apiKey:'',
+        project:'ys-test-proj', location:'global', model:'gemini-2.5-flash', saJson: sa };
+      return { isVertex: stAiIsVertex(c), needKey: stAiNeedsKey(c), ready: apigReadyCheck(c) };
+    })()`);
+    check('⚠ 前置：自定义 + aiplatform 域名 被判成 Vertex（判据真的看 baseUrl）',
+      customVertex.isVertex, true);
+    check('⚠⚠ 自定义 + aiplatform + 完整模式：**不需要** Key（只看下拉框的写法会拦着要）',
+      customVertex.needKey, false);
+    check('⚠⚠ 同一份配置 apigReadyCheck 也**放行**（校验与发送必须是同一套判据）',
+      customVertex.ready, '');
 
     await ev(`(function(){ updateAiStatus(''); return true; })()`);
 
