@@ -305,6 +305,22 @@ whole chain of pending commits, gates on every sha, and refuses to move the ref 
 commit sha equals the local one. Verified end-to-end: blob, tree and commit shas all matched,
 the ref moved, and the push still triggered the Pages deploy normally.
 
+⚠⚠ **After an API push the local remote-tracking ref is STALE — and `git status` lies about it.**
+The API moves `refs/heads/<branch>` *on the server*; it cannot move `refs/remotes/origin/<branch>`
+locally, because that update normally happens inside `git push` / `git fetch` — and `git fetch` is
+precisely the thing that is blocked. Measured 2026-09-30: right after pushing `main` to `cb37225`,
+`git rev-parse origin/main` still answered `3085f14` and `git status -sb` printed
+**`## main...origin/main [ahead 2]`** — both false, the push had already landed.
+
+⇒ **Never read `origin/<branch>` to decide what is left to push.** Ask the server instead
+(`GET /repos/<o>/<r>/git/ref/heads/<branch>`) — or just run `api-push.js` without `--go`; it reads
+the real ref and is idempotent, so a dry-run is the cheap ground truth.
+⇒ To resync the local ref afterwards: `git update-ref refs/remotes/origin/<branch> <sha>`, then
+**read it back** — ⚠ `update-ref` can exit 0 without writing the file (see §1), so the read-back
+*is* the verification, not a formality.
+⇒ ⚠ The corollary that actually bit: a **stale `origin/main` reads as "1 commit unpushed"**, which
+looks like a job to do. Here it meant I nearly re-derived a push that had already happened.
+
 ⚠⚠ **That implementation was dead for a day and nobody noticed — because it used `execFileSync`.**
 Re-measured 2026-09-24: `spawnSync` / `execFileSync` / `execSync` all return **`EBUSY`** in this
 environment, so the script died on its very first `git rev-parse HEAD`:
