@@ -1622,10 +1622,16 @@ Gemini 那边**也有同样的两条**（`contents` 非空 + 首条必须是 `us
 （完整模式要现换 access token），形状对不上，所以它走 `stAiGemini*` 那一组，
 再由 `stAiPlanAuth(plan, cfg)` 把异步那部分补进 `plan.headers`。
 
-⚠ **Code 页的 Agent 工具调用只支持前两种** —— Gemini 的工具调用是另一套形状
-（`functionDeclarations`、parts 里的 `functionCall` / `functionResponse`），这一版没做。
-`stCodeSend()` 里有一道闸门**明说**这件事并拒绝发送；不拦的话它会按 OpenAI 形状打 Google，
-回来的 400 跟「协议不对」看起来毫无关系。
+⚠ **三种协议都支持**（第二十五轮补齐了 Gemini）—— 各走各的形状：
+`stCodeToolsFor` → `functionDeclarations`、`stCodeMessagesFor` → `contents` / `parts`
+里的 `functionCall` / `functionResponse`、`stCodeParseReply` → `candidates[0].content.parts`。
+⚠⚠ 三处**必须一起改**：只改两处会出现「模型看得见但调不动」，或者反过来。
+⚠ gemini 的 `parameters` 是 **OpenAPI 的一个子集**（不认 `additionalProperties` / `$schema`），
+多发一个键就是 400、而且**不点名是哪个键** ⇒ 过一道白名单 `stCodeGeminiSchema()`。
+⚠ `functionResponse.response` 必须是**对象**（给字符串直接 400）。
+⚠ Gemini 3 起函数调用**必须回传 `thoughtSignature`**，而签名长在**原来那个 Part** 上
+⇒ 模型的原始 `parts` 整份存进 `msg.gemParts` 原样回发，**不能重拼**
+（重拼出来的那份看着也有 `functionCall`，但签名没了 —— 服务端回 400）。
 
 ### 模型列表
 
@@ -2079,13 +2085,20 @@ Anthropic 那边就是连续两条 assistant（400），OpenAI 那边也会因�
 `stAiEndpoint()` 是这一轮从 `stAiRequest` 里抽出来的：**「发去哪、带什么头」只有这一处**，
 `stAiRequest` 和 `stCodeRequest` 共用它。协议细节散成两份的那天，一定会出现「改了 A 忘了 B」。
 
-⚠⚠ **这里只认 `openai` / `anthropic` 两种形状。** 第十八轮加了第三种协议 `gemini`
-（Gemini 原生 / Vertex），但它的工具调用是**另一套形状**（`functionDeclarations`、
-parts 里的 `functionCall` / `functionResponse`），这一版**没实现**。
-⇒ `stCodeSend()` 里有一道闸门，遇到 `cfg.proto === 'gemini'` 就**明说**并拒绝发送。
-不拦的后果实测过：它会按 OpenAI 形状打 Google，回来的 400 跟「协议不对」看起来毫无关系，
-用户只会去怀疑 Key 或模型名。⚠ 这类「功能没做」的路径**必须自己喊出来** ——
-静默降级成另一种协议，比直接报错难查得多。
+⚠⚠ **三种协议各有一套形状，改一处要三处一起看。** 第十八轮加了第三种协议 `gemini`
+（Gemini 原生 / Vertex），第二十五轮补上了它的工具调用。三处的对应关系：
+
+| 协议 | tools 形状 | 消息形状 | 回复取法 |
+|---|---|---|---|
+| openai | `{type:'function', function:{…}}` | `messages` + `tool_calls` / `role:'tool'` | `choices[0].message` |
+| anthropic | `{name, description, input_schema}` | `messages` 块数组 + `tool_use` / `tool_result` | `content[]` |
+| gemini | `[{functionDeclarations:[…]}]` | `contents[]` + `parts` 里的 `functionCall` / `functionResponse` | `candidates[0].content.parts` |
+
+⚠ Gemini 那条路**没有 id**（2.5 及更早）⇒ 内部 `id` 是本地句柄、`mid` 才是模型给的；
+回传 `functionResponse.id` **只在模型给过时才写**，凭空编一个反而可能让它对不上。
+⚠ 它的 URL 里**要拼模型名**、头还可能异步 ⇒ **不走 `stAiEndpoint`**，走 `stAiGeminiUrl`，
+并由 `stCodeFetch` 调 `stAiPlanAuth` 把完整模式的 Bearer 补进去
+（⚠ 少了这一步只会拿到 401，而 401 看着像「Key 写错了」，查半天查不到协议上）。
 
 ### 工具表（19 个内置 + 工具型 skill）
 
@@ -3233,8 +3246,8 @@ C 段和 J 段暴露过一个**真问题**：`stAiPullModels` 原本复用 `stAi
 | 段 | 内容 |
 |---|---|
 | A | 接线与布局：16 个选项卡里有 `code`、左右两栏、工具条的折叠菜单与动作按钮、窄屏分段控件 |
-| B | 协议层：`stCodeRequest` 两套形状（`tools[].function` vs `tools[].input_schema`）、URL / 头 / 体；工具数量**从 `ST_CODE_TOOLS` 枚举**而不是写死 |
-| F2 | **Gemini / Vertex 协议下明说「工具调用不支持」**：报的错里点名协议、**一个请求都没发**、给了两条出路、没卡在 `running` 上；对照 = 同一步换成 openai 协议**就会**发（证明那个 0 是「被拦住」而不是「本来就不发」） |
+| B | 协议层：`stCodeRequest` **三套**形状（`tools[].function` / `tools[].input_schema` / `tools[].functionDeclarations`）、URL / 头 / 体；工具数量**从 `ST_CODE_TOOLS` 枚举**而不是写死；gemini 的 schema 白名单（不认的键删掉、认的留住）与 SA 模式的 `needsToken` |
+| F2 | **Gemini / Vertex 协议下工具调用真的往返一轮**：打的是 `:generateContent`（不是 OpenAI 形状）、发的是 `functionDeclarations`、带 `toolConfig AUTO`、**没有** `tool_choice`；第二轮把 `functionResponse` 发回去了、**带上了模型给的 id**、`response` 是对象且带回真实工具结果、**原始 parts 原样带上（`thoughtSignature` 没丢）**；对照 = 模型不调工具时只发一次就收尾 |
 | C | 消息转换：工具消息怎么进两套协议（`tool_calls` / `tool_result`）、连续 `tool_result` 并进同一条 user、`note` 两处都过滤 |
 | D | 回复解析：OpenAI `tool_calls[]` / Anthropic `tool_use` 块 → 统一的 `{text, calls[]}`；坏 JSON 的参数当空对象 |
 | E | 工具执行：`read_card` 不传 path 给整卡、传了只给那一个字段；`write_text` / `write_list` 只认白名单，越权路径**报错而不是静默**；`write_list` 三种 mode；世界书工具（摘要不含全文、删除进回收站、`update` 空值不覆盖）；超长结果截断（**两档预算**：读整份文档的工具 32 000 字符、其余 12 000，且断言「名字以 `read_` / `list_` 开头的一定都在读名单里、写工具一个都不许混进去」） |
