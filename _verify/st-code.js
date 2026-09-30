@@ -73,6 +73,14 @@ function check(name, actual, pred, expect) {
 }
 function section(t) { console.log(`\n== ${t} ==`); }
 
+// ⚠ 取数一律走这两个：产品坏掉时应该**红**、不该**崩**。
+//   一旦在 Node 侧抛异常（`undefined.length` / `undefined[0].x`），整套会崩掉、
+//   连汇总行都没有 ⇒ 反向测试拿不到「红了几条」，那一针等于白跑（RULES 六之六十六）。
+//   ⚠ 但 `[].every()` / `[].some()` 对空数组有定义好的返回值 ⇒ 光套 `arr()` 会让断言
+//   **天生为真**（RULES 六之三十九）⇒ 数组类判据一律**数出来跟期望比**，不用 every/some。
+const at = (o, ...ks) => ks.reduce((a, k) => (a == null ? undefined : a[k]), o);
+const arr = v => (Array.isArray(v) ? v : []);
+
 class CDP {
   constructor(ws) {
     this.ws = ws; this.id = 0; this.pending = new Map(); this.handlers = new Map();
@@ -150,9 +158,25 @@ const MOCK_SRC = `
   function textResponse(t, status) { return new Response(t, { status: status || 200 }); }
 
   // 一步 → 一套协议的响应体
-  function build(step, isAnth) {
+  function build(step, isAnth, isGem) {
     const calls = Array.isArray(step.calls) ? step.calls : [];
     const text = String(step.text == null ? '' : step.text);
+    if (isGem) {
+      // Gemini 的形状：candidates[0].content.parts[]，函数调用是 parts 里的 functionCall
+      const parts = [];
+      calls.forEach((c, i) => {
+        const fc = { name: c.name, args: c.args || {} };
+        // ⚠ 真 Gemini 3 会带 id、2.5 及更早不带。用 step.noCallId 明确造「不带」那种
+        if (!step.noCallId) fc.id = 'fc_' + i;
+        // ⚠ 思考模型的签名长在**函数调用那个 Part 上**，回传时必须原样带着
+        //   （Gemini 3 起对函数调用是强制的）。造一个出来，套件才能分辨
+        //   「原样回发」和「重拼一遍」（重拼的那份**不会**有它）
+        parts.push({ functionCall: fc, thoughtSignature: 'SIG-' + i });
+      });
+      if (text) parts.push({ text: text });
+      if (!parts.length) parts.push({ text: '' });
+      return { candidates: [{ content: { role: 'model', parts: parts }, finishReason: 'STOP' }] };
+    }
     if (isAnth) {
       const content = [];
       if (text) content.push({ type: 'text', text: text });
@@ -195,10 +219,12 @@ const MOCK_SRC = `
     if (/\\/models$/.test(u)) return jsonResponse({ data: [{ id: 'gpt-4o' }] });
 
     const isAnth = /\\/messages$/.test(u);
+    // ⚠ Gemini 的 URL 里带模型名和动作：…/models/<model>:generateContent
+    const isGem = /:generateContent/.test(u);
     let step = S.queue.length ? S.queue.shift() : null;
     if (!step) step = { text: S.reply };
     if (step.raw) return jsonResponse(step.raw);
-    return jsonResponse(build(step, isAnth));
+    return jsonResponse(build(step, isAnth, isGem));
   };
 })();
 `;
@@ -532,6 +558,106 @@ const MOCK_SRC = `
       plan.body.messages.some(m => m.role === 'system'), false);
     check('Anthropic 的 messages 首条是 user', plan.body.messages[0].role, 'user');
 
+    // —— 第三种协议：Gemini 原生 / Vertex ——
+    // ⚠ 第十八轮加了协议、第二十五轮才补上工具调用。这一组断言盯的就是「补上了」
+    await ev(`(function(){
+      stAi.mode = 'own'; stAi.provider = 'vertex'; stAi.proto = 'gemini';
+      stAi.model = 'gemini-2.5-pro'; stAi.apiKey = 'sk-vertex-AAA';
+      stAi.baseUrl = 'https://aiplatform.googleapis.com';
+      stAi.authMode = 'key'; stAi.location = 'global'; stAi.saJson = '';
+      stAiSave(); return true; })()`);
+    plan = await ev(`stCodeRequest(stAiCfg(), [
+      { role: 'system', content: 'sys' }, { role: 'user', content: 'x' }], {})`);
+    check('Gemini 走 :generateContent（工具调用一律非流式）',
+      /:generateContent$/.test(plan.url), true);
+    check('Gemini 的 URL 里带模型名', /gemini-2\.5-pro/.test(plan.url), true);
+    check('Gemini 用 x-goog-api-key', plan.headers['x-goog-api-key'], 'sk-vertex-AAA');
+    check('Gemini 在 Key 模式下不带 Authorization', plan.headers['Authorization'], undefined);
+    check('Gemini 在 Key 模式下不标 needsToken', plan.needsToken, false);
+    check('Gemini 的 tools 是 functionDeclarations 形状',
+      Array.isArray(at(plan, 'body', 'tools', 0, 'functionDeclarations')), true);
+    // ⚠ 数出「带了 type 键的声明有几条」而不是「第 0 条的 type 是不是 undefined」——
+    //   后者在**声明整份消失**时也返回 undefined，等于**永真**（RULES 六之二十六）
+    check('Gemini 的声明**没有** OpenAI 那层 type:function 包装',
+      arr(at(plan, 'body', 'tools', 0, 'functionDeclarations'))
+        .filter(d => d && d.type !== undefined).length, 0);
+    // 同上：数量从源码枚举，别写死
+    check('Gemini 的声明数量和工具表一致',
+      arr(at(plan, 'body', 'tools', 0, 'functionDeclarations')).length,
+      await ev(`ST_CODE_TOOLS.length`));
+    check('Gemini 的声明带 parameters',
+      at(plan, 'body', 'tools', 0, 'functionDeclarations', 0, 'parameters', 'type'), 'object');
+    check('Gemini 带 toolConfig AUTO',
+      at(plan, 'body', 'toolConfig', 'functionCallingConfig', 'mode'), 'AUTO');
+    check('Gemini 把 system 提到 systemInstruction',
+      at(plan, 'body', 'systemInstruction', 'parts', 0, 'text'), 'sys');
+    check('Gemini 的 contents 里没有 system',
+      arr(at(plan, 'body', 'contents')).filter(c => c && c.role === 'system').length, 0);
+    check('Gemini 的 contents 首条是 user', at(plan, 'body', 'contents', 0, 'role'), 'user');
+    // ⚠ 不用 `.every()` —— 空数组会返回 true，断言就天生为真了
+    check('Gemini 的 contents 角色只有 user / model',
+      arr(at(plan, 'body', 'contents'))
+        .filter(c => !c || (c.role !== 'user' && c.role !== 'model')).length, 0);
+    check('Gemini 仍然带 safetySettings（漏发 = 交给 Google 默认拦截）',
+      Array.isArray(plan.body.safetySettings) && plan.body.safetySettings.length > 0, true);
+
+    // Vertex **完整模式**（Service Account）：token 是**异步**换的 ⇒ stCodeRequest 只标
+    // `needsToken`，由 stCodeFetch await 之后补进 headers。这个标记丢了就是 401，
+    // 而 401 看起来像「Key 写错了」—— 查半天查不到协议上
+    await ev(`(function(){ stAi.authMode = 'sa';
+      stAi.saJson = '{"type":"service_account","project_id":"p",' +
+        '"client_email":"a@b.iam.gserviceaccount.com","private_key":"x",' +
+        '"token_uri":"https://oauth2.googleapis.com/token"}';
+      stAiSave(); return true; })()`);
+    plan = await ev(`stCodeRequest(stAiCfg(), [{ role: 'user', content: 'x' }], {})`);
+    check('Gemini 在 SA 模式下标 needsToken（token 由 stCodeFetch 异步补）',
+      plan.needsToken, true);
+    check('Gemini 在 SA 模式下**不**放 x-goog-api-key（那会顶掉 Bearer）',
+      plan.headers['x-goog-api-key'], undefined);
+    await ev(`(function(){ stAi.authMode = 'key'; stAi.saJson = '';
+      stAiSave(); return true; })()`);
+
+    // ⚠ 「标了 needsToken」≠「真的去补了那个头」—— 两件事得分开测（RULES 六之四十：
+    //   覆盖要盯**调用点**，不是盯「函数写好了」）。
+    //   真去换 token 要签 JWT，本机跑不起来 ⇒ 把**换 token 那一步**换成桩，
+    //   测「有没有去补」这件事本身。
+    await ev(`(function(){ window.__origGemAuth = stAiGeminiAuthHeaders;
+      stAiGeminiAuthHeaders = async () => ({ 'Authorization': 'Bearer STUB-TOKEN' });
+      return true; })()`);
+    await clearCalls();
+    await ev(`stCodeFetch({ url: 'https://code.stub.test/generateContent',
+      headers: { 'Content-Type': 'application/json' }, needsToken: true, body: {} })
+      .then(() => true).catch(e => String(e && e.message))`, true);
+    check('stCodeFetch 在 needsToken 时补上 Authorization（完整模式的 Bearer）',
+      at(await lastCall(), 'headers', 'Authorization'), 'Bearer STUB-TOKEN');
+    await clearCalls();
+    await ev(`stCodeFetch({ url: 'https://code.stub.test/generateContent',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'K' }, body: {} })
+      .then(() => true).catch(e => String(e && e.message))`, true);
+    check('（对照）不需要 token 时不会凭空加 Authorization',
+      at(await lastCall(), 'headers', 'Authorization'), undefined);
+    await ev(`(function(){ stAiGeminiAuthHeaders = window.__origGemAuth; return true; })()`);
+    check('补头用的桩已还原（后续段落不受影响）',
+      await ev(`stAiGeminiAuthHeaders === window.__origGemAuth`), true);
+
+    // schema 白名单：Gemini 的 parameters 是 OpenAPI 子集，多发一个键就是 400
+    check('Gemini 的 schema 删掉它不认的键（additionalProperties / $schema）',
+      await ev(`JSON.stringify(stCodeGeminiSchema({ type:'object',
+        properties:{ a:{ type:'string', additionalProperties:false } },
+        additionalProperties:false, $schema:'x' }))`),
+      '{"type":"object","properties":{"a":{"type":"string"}}}');
+    check('Gemini 的 schema 留住它认的键（enum / required / items）',
+      await ev(`JSON.stringify(stCodeGeminiSchema({ type:'object',
+        properties:{ k:{ type:'string', enum:['a','b'] }, l:{ type:'array', items:{ type:'number' } } },
+        required:['k'] }))`),
+      '{"type":"object","properties":{"k":{"type":"string","enum":["a","b"]},"l":{"type":"array","items":{"type":"number"}}},"required":["k"]}');
+    // ⚠ 数出来跟期望比 —— 写成 `.every(...)` 的话工具表空了也照样绿（RULES 六之三十九）；
+    //   而 `[0].functionDeclarations` 没加兜底的话，形状一坏就是**页面抛异常**⇒ 整套崩
+    check('真实工具表的每个声明都留住了 parameters.type 和 description',
+      await ev(`(function(){ const d = (stCodeToolsFor('gemini')[0] || {}).functionDeclarations || [];
+        return d.filter(x => x && x.parameters && x.parameters.type && x.description).length; })()`),
+      await ev(`ST_CODE_TOOLS.length`));
+
     // ================= C. 消息转换 =================
     section('C. 消息转换：工具消息怎么进两套协议');
     const CONV = [
@@ -560,6 +686,56 @@ const MOCK_SRC = `
     check('Anthropic：tool_result 用 tool_use_id 对上',
       an.messages[2].content[0].tool_use_id, 'c1');
 
+    let gm = await ev(`stCodeMessagesFor('gemini', ${JSON.stringify(CONV)})`);
+    check('Gemini：system 收集到顶层', gm.system, 'SYS');
+    check('Gemini：assistant 变成 role:model', at(gm, 'contents', 1, 'role'), 'model');
+    check('Gemini：工具调用是 parts 里的 functionCall',
+      at(gm, 'contents', 1, 'parts', 0, 'functionCall', 'name'), 'read_card');
+    check('Gemini：functionCall 的 args 直接是对象',
+      at(gm, 'contents', 1, 'parts', 0, 'functionCall', 'args', 'path'), 'name');
+    check('Gemini：tool 结果走 role:user', at(gm, 'contents', 2, 'role'), 'user');
+    check('Gemini：tool 结果用 functionResponse',
+      at(gm, 'contents', 2, 'parts', 0, 'functionResponse', 'name'), 'read_card');
+    check('Gemini：functionResponse.response 是**对象**（给字符串直接 400）',
+      typeof at(gm, 'contents', 2, 'parts', 0, 'functionResponse', 'response'), 'object');
+    check('Gemini：结果文本放在 response.result 里',
+      at(gm, 'contents', 2, 'parts', 0, 'functionResponse', 'response', 'result'), '空');
+    // ⚠ Gemini 2.5 及更早**不给** id，凭空编一个回传反而可能让它对不上
+    check('Gemini：模型没给过 id 时不回传 id',
+      at(gm, 'contents', 2, 'parts', 0, 'functionResponse', 'id'), undefined);
+    check('Gemini：contents 里没有 role:system',
+      arr(at(gm, 'contents')).filter(c => c && c.role === 'system').length, 0);
+
+    // 模型**给过** id（Gemini 3 起强制）时，必须原样回传
+    const CONV_MID = [
+      { role: 'user', content: 'a' },
+      { role: 'assistant', content: '', calls: [{ id: 'x1', mid: 'fc_7', name: 'read_card', args: {} }] },
+      { role: 'tool', content: '', toolResults: [{ id: 'x1', mid: 'fc_7', name: 'read_card', text: 'R' }] }
+    ];
+    gm = await ev(`stCodeMessagesFor('gemini', ${JSON.stringify(CONV_MID)})`);
+    check('Gemini：模型给过 id 就原样回传',
+      at(gm, 'contents', 2, 'parts', 0, 'functionResponse', 'id'), 'fc_7');
+    check('Gemini：assistant 回发时也带那个 id',
+      at(gm, 'contents', 1, 'parts', 0, 'functionCall', 'id'), 'fc_7');
+
+    // ⚠ thoughtSignature：Gemini 3 起对函数调用**强制**回传，签名长在原来的 Part 上
+    const CONV_SIG = [
+      { role: 'user', content: 'a' },
+      { role: 'assistant', content: '先看看',
+        calls: [{ id: 'g1', mid: 'fc_1', name: 'read_card', args: {} }],
+        gemParts: [{ thoughtSignature: 'SIG-ABC',
+          functionCall: { name: 'read_card', args: {}, id: 'fc_1' } }, { text: '先看看' }] },
+      { role: 'tool', content: '', toolResults: [{ id: 'g1', mid: 'fc_1', name: 'read_card', text: 'R' }] }
+    ];
+    gm = await ev(`stCodeMessagesFor('gemini', ${JSON.stringify(CONV_SIG)})`);
+    check('Gemini：有原始 parts 就整份原样回发（签名必须待在它那个 Part 里）',
+      JSON.stringify(at(gm, 'contents', 1, 'parts')), JSON.stringify(CONV_SIG[1].gemParts));
+    check('Gemini：原样回发时签名还在',
+      at(gm, 'contents', 1, 'parts', 0, 'thoughtSignature'), 'SIG-ABC');
+
+    gm = await ev(`stCodeMessagesFor('gemini', [{ role: 'assistant', content: 'A' }])`);
+    check('Gemini：首条不是 user 会补一条', at(gm, 'contents', 0, 'role'), 'user');
+
     // 连续两条 tool 结果必须并进同一条 user
     const CONV2 = [
       { role: 'user', content: 'a' },
@@ -585,6 +761,18 @@ const MOCK_SRC = `
     oa = await ev(`stCodeMessagesFor('openai', ${JSON.stringify(CONV3)})`);
     check('给用户看的 note 不发给模型', oa.messages.length, 1);
     check('note 的内容确实没进去', /给用户看的/.test(JSON.stringify(oa)), false);
+
+    // CONV2 / CONV3 这两份要等它们声明之后才能用（`const` 有暂时性死区）
+    gm = await ev(`stCodeMessagesFor('gemini', ${JSON.stringify(CONV2)})`);
+    check('Gemini：两条连续 tool 结果并进同一条 user',
+      arr(at(gm, 'contents')).length, 3);
+    check('Gemini：并起来那条里有两个 functionResponse',
+      arr(at(gm, 'contents', 2, 'parts')).length, 2);
+    // ⚠ 不用 `.every()` —— 空数组返回 true ⇒ 天生为真；改成「数出违规的条数」
+    check('Gemini：没有连续的相同角色',
+      arr(at(gm, 'contents')).filter((c, i, a) => i > 0 && c.role === a[i - 1].role).length, 0);
+    gm = await ev(`stCodeMessagesFor('gemini', ${JSON.stringify(CONV3)})`);
+    check('Gemini：给用户看的 note 不发给模型', arr(at(gm, 'contents')).length, 1);
 
     // ================= D. 回复解析 =================
     section('D. 回复解析');
@@ -622,6 +810,36 @@ const MOCK_SRC = `
     rep = await ev(`stCodeParseReply('openai', {})`);
     check('空响应：没有正文', rep.text, '');
     check('空响应：没有工具调用', rep.calls.length, 0);
+
+    // —— Gemini ——
+    rep = await ev(`stCodeParseReply('gemini', { candidates: [{ content: { role: 'model', parts: [
+      { text: '我看看' },
+      { functionCall: { name: 'list_skills', args: {}, id: 'fc_3' } }] },
+      finishReason: 'STOP' }] })`);
+    check('Gemini：拼出正文', rep.text, '我看看');
+    check('Gemini：取到 functionCall', at(rep, 'calls', 0, 'name'), 'list_skills');
+    check('Gemini：args 直接就是对象', typeof at(rep, 'calls', 0, 'args'), 'object');
+    check('Gemini：模型给的 id 存进 mid（回传要用它）', at(rep, 'calls', 0, 'mid'), 'fc_3');
+    check('Gemini：内部句柄 id 也在', at(rep, 'calls', 0, 'id'), 'fc_3');
+    check('Gemini：原始 parts 整份留下来（签名回传要用）', arr(rep.parts).length, 2);
+    check('Gemini：stop 取 finishReason', rep.stop, 'STOP');
+
+    rep = await ev(`stCodeParseReply('gemini', { candidates: [{ content: { role: 'model', parts: [
+      { functionCall: { name: 'read_card', args: { path: 'name' } } }] } }] })`);
+    check('Gemini：模型没给 id 时 mid 是空串（不编一个）', at(rep, 'calls', 0, 'mid'), '');
+    check('Gemini：没给 id 时内部句柄仍然有（本地记账要用）',
+      String(at(rep, 'calls', 0, 'id') || '').length > 0, true);
+
+    // ⚠ 思考片段：不进正文（否则用户看到「AI 自言自语」），但必须留在 parts 里（签名在那）
+    rep = await ev(`stCodeParseReply('gemini', { candidates: [{ content: { role: 'model', parts: [
+      { text: '（内部推理，别给用户看）', thought: true, thoughtSignature: 'S1' },
+      { text: '结论' }] } }] })`);
+    check('Gemini：思考片段不进正文', rep.text, '结论');
+    check('Gemini：但思考片段仍留在 parts 里', arr(rep.parts).length, 2);
+
+    rep = await ev(`stCodeParseReply('gemini', {})`);
+    check('Gemini：空响应不炸', rep.text, '');
+    check('Gemini：空响应没有工具调用', arr(rep.calls).length, 0);
 
     // ================= E. 工具执行 =================
     section('E. 工具执行');
@@ -1125,45 +1343,92 @@ const MOCK_SRC = `
     check('探针函数已还原（后续段落的断言不受影响）',
       await ev(`stCodePaintJson === window.__origPaintJson`), true);
 
-    // ========== F2. Gemini / Vertex：明说「工具调用不支持」，不静默按 OpenAI 发 ==========
-    section('F2. Gemini / Vertex 协议：工具调用不支持时要说出来');
+    // ========== F2. Gemini / Vertex：工具调用要真的跑通 ==========
+    section('F2. Gemini / Vertex 协议：工具调用真的发得出去、回得来');
 
-    // ⚠ 第十八轮加了第三种协议 `gemini`（Gemini 原生 / Vertex），但 Code 页的
-    //   Agent 工具调用只实现了 OpenAI 兼容 / Anthropic 两种形状
-    //   （`stCodeToolsFor` / `stCodeMessagesFor` / `stCodeParseReply` 全按这两种写）。
-    //   Gemini 的工具调用是**另一套形状**（`functionDeclarations`、parts 里的
-    //   `functionCall` / `functionResponse`），这一版没做。
-    //   ⇒ 必须在**发之前**拦住并说清楚。否则它会按 OpenAI 形状打 Google，
-    //     回来的 400 跟「协议不对」看起来毫无关系 —— 用户只会怀疑 Key 或模型名
+    // ⚠ 第十八轮加了第三种协议 `gemini`（Gemini 原生 / Vertex），当时的 Agent 工具调用
+    //   只实现了 OpenAI 兼容 / Anthropic 两种形状 ⇒ 所以**明说「不支持」**。
+    //   第二十五轮补上了：`stCodeToolsFor` → functionDeclarations、
+    //   `stCodeMessagesFor` → contents/parts + functionCall/functionResponse、
+    //   `stCodeParseReply` → candidates[0].content.parts。
+    //   ⇒ 这一节从「断言那句拒绝」改成「断言真的往返了一轮」。
+    //   ⚠ 旧的断言（「报的错里点名协议」「一个请求都没发」）**必须删掉**，不能留着 ——
+    //     产品改了行为而断言没跟着改，套件就会**一直红**，红久了没人看（RULES 六之四十八）
     await resetScript();
-    await clearCalls();
     await ev(`(function(){
       stAi.mode = 'own'; stAi.provider = 'vertex'; stAi.proto = 'gemini';
       stAi.model = 'gemini-2.5-pro'; stAi.apiKey = 'sk-vertex-AAA';
       stAi.baseUrl = 'https://aiplatform.googleapis.com';
+      stAi.authMode = 'key'; stAi.location = 'global'; stAi.saJson = '';
       stAiSave(); return true; })()`);
     check('（准备）cfg 走的是 gemini 协议', (await ev(`stAiCfg()`)).proto, 'gemini');
 
-    await ev(`(function(){ document.getElementById('st-code-input').value = '随便改点什么'; return true; })()`);
-    await ev(`stCodeSend()`, true);
-    await sleep(400);
-    check('⚠ 报的是明确的错（不是静默发出去）',
-      await ev(`/Gemini \\/ Vertex 原生协议/.test(stCode.err || '')`), true);
-    check('⚠ 而且**一个请求都没发**（没按 OpenAI 形状打 Google）',
-      await ev(`window.__aiCalls.length`), 0, 0);
-    check('⚠ 提示里给了两条出路（换服务商 / 手动改协议）',
-      await ev(`/换个服务商/.test(stCode.err || '') && /OpenAI 兼容/.test(stCode.err || '')`), true);
-    check('没卡在 running 上（不会一直转圈）', await ev(`stCode.running`), false);
-    // 对照：同样这一步，换成 openai 协议就**会**发请求 ——
-    // 证明上面那条 0 是「被拦住」而不是「这个用例本来就不发」
-    await useOwn('openai', 'gpt-4o');
-    await setScript({ reply: '好的' });
+    await ev(`(function(){ stEditor.card = stBlankCard();
+      stEditor.card.name = '雨夜侦探'; return true; })()`);
+    await ev(`(function(){ stCode.sessions = []; stCode.sessionId = ''; return true; })()`);
+    await ev(`stCodeNewSession()`);
+    // 第一步：模型要读卡；第二步：收尾
+    await setScript({ queue: [
+      { calls: [{ name: 'read_card', args: {} }], text: '先看一眼' },
+      { text: '看完了。' }
+    ] });
     await clearCalls();
-    await ev(`(function(){ document.getElementById('st-code-input').value = '随便改点什么'; return true; })()`);
+    await ev(`(function(){ document.getElementById('st-code-input').value = '看看这张卡'; return true; })()`);
     await ev(`stCodeSend()`, true);
     await sleep(400);
-    check('（对照）同样一步换成 openai 协议就会发出去',
-      await ev(`window.__aiCalls.length > 0`), true);
+
+    check('⚠ Gemini 真的发出去了（不再被拦住）', await ev(`window.__aiCalls.length`), 2, 2);
+    const g1 = await ev(`window.__aiCalls[0]`);
+    check('⚠ 打的是 Google 的 :generateContent（不是 OpenAI 形状）',
+      /:generateContent$/.test(String(at(g1, 'url') || '')), true);
+    check('⚠ 发的是 functionDeclarations 形状',
+      Array.isArray(at(g1, 'body', 'tools', 0, 'functionDeclarations')), true);
+    check('⚠ 带 toolConfig AUTO',
+      at(g1, 'body', 'toolConfig', 'functionCallingConfig', 'mode'), 'AUTO');
+    check('⚠ 没有 OpenAI 那层 tool_choice（那是另一种协议的字段）',
+      at(g1, 'body', 'tool_choice'), undefined);
+    check('⚠ 第二轮把 functionResponse 发回去了',
+      await ev(`(function(){ const c = window.__aiCalls[1] || {};
+        return (c.body && c.body.contents || []).some(x => (x.parts||[]).some(p => p.functionResponse)); })()`), true);
+    check('⚠ functionResponse 里带上了模型给的 id（fc_0）',
+      await ev(`(function(){ const c = window.__aiCalls[1] || {};
+        for (const x of (c.body && c.body.contents || [])) for (const p of (x.parts||[]))
+          if (p.functionResponse) return p.functionResponse.id;
+        return ''; })()`), 'fc_0');
+    check('⚠ functionResponse.response 是对象，且带回了真实的工具结果',
+      await ev(`(function(){ const c = window.__aiCalls[1] || {};
+        for (const x of (c.body && c.body.contents || [])) for (const p of (x.parts||[]))
+          if (p.functionResponse) return typeof p.functionResponse.response === 'object'
+            && /雨夜侦探/.test(String(p.functionResponse.response.result || ''));
+        return false; })()`), true);
+    // ⚠ 判据是 **thoughtSignature 还在不在**，不是「有没有 functionCall」——
+    //   重拼一遍也会产出 functionCall（还带着 id），所以那个判据**分辨不出**两种实现
+    check('⚠ 第二轮把第一轮的原始 parts 原样带上（thoughtSignature 不能丢）',
+      await ev(`(function(){ const c = window.__aiCalls[1] || {};
+        return (c.body && c.body.contents || []).some(x => (x.parts||[]).some(p =>
+          p.thoughtSignature)); })()`), true);
+    check('没卡在 running 上（不会一直转圈）', await ev(`stCode.running`), false);
+    check('跑通了就不该留错误', await ev(`stCode.err`), '');
+
+    // 对照：**不调工具**的那条路也得能走 —— 证明上面那 2 次不是「碰巧」，
+    // 同时守住「没有工具调用时循环要收尾」（别把 break 丢了）
+    await resetScript();
+    await setScript({ reply: '不用工具也能答' });
+    await clearCalls();
+    await ev(`(function(){ document.getElementById('st-code-input').value = '随便说句话'; return true; })()`);
+    await ev(`stCodeSend()`, true);
+    await sleep(300);
+    check('（对照）模型不调工具时只发一次就收尾',
+      await ev(`window.__aiCalls.length`), 1, 1);
+    check('（对照）那一次也走的是 generateContent',
+      await ev(`/:generateContent$/.test(String((window.__aiCalls[0] || {}).url || ''))`), true);
+
+    // ⚠ 收尾必须把配置**还原成 openai**：后面 H / H2 / I… 各节都按 `body.messages`
+    //   取请求体（那是 OpenAI 的形状，Gemini 用 `contents`）。漏了这一步，下一节会崩在
+    //   `body.messages[0]` 上，而那个报错**看起来像「产品坏了」**。
+    //   （旧版 F2 末尾就有这行 `useOwn('openai', …)`，重写这一节时差点把它吃掉）
+    await resetScript();
+    await useOwn('openai', 'gpt-4o');
 
     // ================= G. 会话历史 =================
     section('G. 会话历史');

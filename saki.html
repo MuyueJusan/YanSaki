@@ -20694,13 +20694,54 @@
             return out;
         }
 
-        // 同一张表转成两套协议要的形状
+        // Gemini 的 `parameters` 是 **OpenAPI 3 的一个子集**，不是完整 JSON Schema：
+        // `additionalProperties` / `$schema` / `$ref` / `oneOf` 这类它不认，发了就是
+        // 400 INVALID_ARGUMENT —— 而那个报错**不会**点名「是 schema 写错了」，
+        // 用户只会以为 Key 或模型名不对。⇒ 过一道白名单，只留它认的那些键。
+        //
+        // ⚠ 白名单**天生会漏**（RULES：过滤一律白名单，但白名单自己也会漏）——
+        //   所以这里只做「删掉不认的键」，**不改结构、不改类型**：模型在三种协议下
+        //   看到的参数形状一致。真被漏掉的约束由工具自己在运行时兜（stCodeTool 的
+        //   入参校验那一层），不靠 schema。
+        const ST_GEMINI_SCHEMA_KEYS = [
+            'type', 'description', 'enum', 'items', 'properties', 'required',
+            'nullable', 'minimum', 'maximum',
+            'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern'
+        ];
+        function stCodeGeminiSchema(v) {
+            // 元组写法（items 是数组）Gemini 不支持，取第一个当元素类型
+            const src = Array.isArray(v) ? (v[0] || {}) : v;
+            if (!src || typeof src !== 'object') return { type: 'string' };
+            const out = {};
+            ST_GEMINI_SCHEMA_KEYS.forEach(k => { if (src[k] !== undefined) out[k] = src[k]; });
+            if (out.properties && typeof out.properties === 'object' && !Array.isArray(out.properties)) {
+                const props = {};
+                Object.keys(out.properties).forEach(k => { props[k] = stCodeGeminiSchema(out.properties[k]); });
+                out.properties = props;
+            }
+            if (out.items) out.items = stCodeGeminiSchema(out.items);
+            if (!out.type) out.type = out.properties ? 'object' : 'string';
+            return out;
+        }
+
+        // 同一张表转成三套协议要的形状
         function stCodeToolsFor(proto) {
             const defs = stCodeToolDefs();
             if (proto === 'anthropic') {
                 return defs.map(t => ({
                     name: t.name, description: t.desc, input_schema: t.schema
                 }));
+            }
+            if (proto === 'gemini') {
+                // ⚠ 比 OpenAI 少一层 `type:'function'` 包装，多一层 `functionDeclarations`：
+                //   tools: [ { functionDeclarations: [ {name, description, parameters} ] } ]
+                return [{
+                    functionDeclarations: defs.map(t => ({
+                        name: t.name,
+                        description: t.desc,
+                        parameters: stCodeGeminiSchema(t.schema)
+                    }))
+                }];
             }
             return defs.map(t => ({
                 type: 'function',
@@ -20760,6 +20801,67 @@
                 if (out[0].role !== 'user') out.unshift({ role: 'user', content: '（继续）' });
                 return { system: sys.join('\n\n'), messages: out };
             }
+            if (proto === 'gemini') {
+                const sys = [], contents = [];
+                // Gemini 每一轮叫一个「content」，形状 {role:'user'|'model', parts:[...]}。
+                // ⚠ 同一个 role 连着出现时**合并**：一组工具结果本来就是好几条
+                //   functionResponse，拆成多条 content 会让模型看到一串空转的轮次
+                const pushParts = (role, parts) => {
+                    if (!parts.length) return;
+                    const last = contents[contents.length - 1];
+                    if (last && last.role === role) last.parts = last.parts.concat(parts);
+                    else contents.push({ role: role, parts: parts });
+                };
+                list.forEach(m => {
+                    // 同上：note 只给用户看
+                    if (!m || m.role === 'note') return;
+                    const text = String(m && m.content != null ? m.content : '');
+                    if (m.role === 'system') { if (text) sys.push(text); return; }
+                    if (m.role === 'tool') {
+                        pushParts('user', (m.toolResults || []).map(r => {
+                            const fr = {
+                                name: String(r.name || ''),
+                                // ⚠ response 必须是**对象**（proto 里是 Struct）——
+                                //   给个字符串服务端直接 400
+                                response: { result: String(r.text == null ? '' : r.text) }
+                            };
+                            // ⚠ 只有模型**真的给过** id 才回传：Gemini 2.5 及更早不给 id，
+                            //   凭空编一个反而可能让它对不上（3 代起才要求回传）
+                            if (r.mid) fr.id = String(r.mid);
+                            return { functionResponse: fr };
+                        }));
+                        return;
+                    }
+                    if (m.role === 'assistant') {
+                        // ⚠ 有原始 parts 就**原样**发回去：`thoughtSignature` 必须待在它
+                        //   原来那个 Part 里（Gemini 3 起对函数调用是强制的），重新拼一遍
+                        //   签名就丢了，服务端回 400
+                        if (Array.isArray(m.gemParts) && m.gemParts.length) {
+                            pushParts('model', m.gemParts);
+                            return;
+                        }
+                        const parts = [];
+                        if (text) parts.push({ text: text });
+                        (m.calls || []).forEach(c => {
+                            const fc = {
+                                name: String(c.name || ''),
+                                args: (c.args && typeof c.args === 'object') ? c.args : {}
+                            };
+                            if (c.mid) fc.id = String(c.mid);
+                            parts.push({ functionCall: fc });
+                        });
+                        if (!parts.length) parts.push({ text: '（继续）' });
+                        pushParts('model', parts);
+                        return;
+                    }
+                    pushParts('user', [{ text: text || '（继续）' }]);
+                });
+                if (!contents.length) contents.push({ role: 'user', parts: [{ text: '（继续）' }] });
+                if (contents[0].role !== 'user') {
+                    contents.unshift({ role: 'user', parts: [{ text: '（继续）' }] });
+                }
+                return { system: sys.join('\n\n'), contents: contents };
+            }
             const out = [];
             list.forEach(m => {
                 // 同上：note 只给用户看
@@ -20794,13 +20896,39 @@
         // Code 页的请求体。**没有第一段** —— 只有 system + messages + tools
         function stCodeRequest(cfg, msgs, opts) {
             const o = opts || {};
-            const proto = cfg.proto === 'anthropic' ? 'anthropic' : 'openai';
-            const ep = stAiEndpoint(cfg, proto === 'anthropic' ? '/messages' : '/chat/completions');
+            const proto = cfg.proto === 'anthropic' ? 'anthropic'
+                : (cfg.proto === 'gemini' ? 'gemini' : 'openai');
             const maxTokens = Math.trunc(stAiNum(o.maxTokens, cfg.maxTokens, 256, 32000));
             const temperature = stAiNum(o.temperature, cfg.temperature, 0, 2);
             const conv = stCodeMessagesFor(proto, msgs);
             const tools = stCodeToolsFor(proto);
 
+            if (proto === 'gemini') {
+                // ⚠ gemini 的 URL 里**要拼模型名**、头还可能异步 ⇒ 不能走 stAiEndpoint
+                //   （那个只认 openai / anthropic）。完整模式的 token 同理：这里只留
+                //   `needsToken` 标记，由 stCodeFetch await 之后合并进 headers ——
+                //   这样本函数保持**同步**，套件才能直接取返回值断言
+                const needsToken = stAiIsVertex(cfg) && (cfg.authMode === 'sa');
+                const headers = { 'Content-Type': 'application/json' };
+                if (!needsToken) headers['x-goog-api-key'] = String(cfg.apiKey || '');
+                // generationConfig / safetySettings 复用 stAiGeminiBody —— 「安全阈值必须发」
+                // 和 maxOutputTokens 的钳制这两条规则只该有一份实现
+                const body = stAiGeminiBody(cfg, [], { temperature: temperature, maxTokens: maxTokens });
+                body.contents = conv.contents;
+                if (conv.system) body.systemInstruction = { parts: [{ text: conv.system }] };
+                else delete body.systemInstruction;
+                body.tools = tools;
+                body.toolConfig = { functionCallingConfig: { mode: 'AUTO' } };
+                return {
+                    proto: 'gemini',
+                    url: stAiGeminiUrl(cfg, cfg.model, false),
+                    headers: headers,
+                    needsToken: needsToken,
+                    body: body
+                };
+            }
+
+            const ep = stAiEndpoint(cfg, proto === 'anthropic' ? '/messages' : '/chat/completions');
             if (proto === 'anthropic') {
                 const body = {
                     model: cfg.model,
@@ -20841,6 +20969,35 @@
                     });
                 });
                 out.stop = String(data.stop_reason || '');
+                return out;
+            }
+            if (proto === 'gemini') {
+                const cands = Array.isArray(data.candidates) ? data.candidates : [];
+                const c0 = cands[0] || {};
+                const parts = (c0.content && Array.isArray(c0.content.parts)) ? c0.content.parts : [];
+                parts.forEach(p => {
+                    if (!p || typeof p !== 'object') return;
+                    // ⚠ 思考片段（thought:true）**不进正文** —— 那是模型的内部推理，
+                    //   混进 out.text 用户就会看到「AI 在自言自语」，而且下一轮还会被
+                    //   当成 assistant 正文回发。但它必须留在 out.parts 里（签名在那）
+                    if (p.thought === true) return;
+                    if (typeof p.text === 'string') { out.text += p.text; return; }
+                    if (p.functionCall && typeof p.functionCall === 'object') {
+                        const fc = p.functionCall;
+                        // ⚠ mid = **模型给的** id（可能没有）。没有时内部补一个，但回传
+                        //   时只回 mid —— 见 stCodeMessagesFor 的 gemini 分支
+                        const mid = fc.id ? String(fc.id) : '';
+                        out.calls.push({
+                            id: mid || stUuid(),
+                            mid: mid,
+                            name: String(fc.name || ''),
+                            args: stCodeArgs(fc.args)
+                        });
+                    }
+                });
+                // 原始 parts 整份留着 —— thoughtSignature 必须原样待在它那个 Part 里
+                out.parts = parts;
+                out.stop = String(c0.finishReason || '');
                 return out;
             }
             const ch = (data.choices && data.choices[0]) || null;
@@ -21976,7 +22133,10 @@
             return out;
         }
 
-        async function stCodeFetch(plan) {
+        async function stCodeFetch(plan, cfg) {
+            // ⚠ Vertex 完整模式要**现换 access token**，这个补头必须走和 AI 助手同一条
+            //   （stAiPlanAuth）—— 漏掉它只会拿到 401，看着像 Key 写错了
+            if (plan && plan.needsToken) await stAiPlanAuth(plan, cfg || stAiCfg());
             const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
             if (ctl) stCode.abort = ctl;
             let resp;
@@ -22015,19 +22175,6 @@
             const cfg = stAiCfg();
             const ready = stAiReady(cfg);
             if (!ready.ok) { stCode.err = ready.why; stCodeRepaint(); return; }
-            // ⚠ Code 页的 Agent 工具调用只实现了 OpenAI 兼容 / Anthropic 两种形状
-            //   （`stCodeToolsFor` / `stCodeMessagesFor` / `stCodeParseReply` 全按这两种写）。
-            //   Gemini / Vertex 的工具调用是**另一套形状**（`functionDeclarations`、
-            //   parts 里的 `functionCall` / `functionResponse`），这一版没做。
-            //   ⇒ **明说**，别让它按 OpenAI 形状发出去 —— 那样 Google 回的 400
-            //     跟「协议不对」看起来毫无关系，用户只会以为是 Key 或模型名的问题
-            if (cfg.proto === 'gemini') {
-                stCode.err = 'Code 页的工具调用只支持 OpenAI 兼容与 Anthropic 两种协议，' +
-                    '当前走的是 Gemini / Vertex 原生协议。请到【AI 助手】换个服务商，' +
-                    '或把那一页的「协议」手动改成「OpenAI 兼容」。';
-                stCodeRepaint();
-                return;
-            }
 
             const th = stCodeThink();
             // ⚠ skill 列表来自 IndexedDB，是异步读的。这里必须等一下 ——
@@ -22065,7 +22212,7 @@
                     stCodePaint();
 
                     const plan = stCodeRequest(cfg, stCodeSysMsgs(s), {});
-                    const data = await stCodeFetch(plan);
+                    const data = await stCodeFetch(plan, cfg);
                     const rep = stCodeParseReply(plan.proto, data);
 
                     const calls = (rep.calls || []).filter(c => c && c.name);
@@ -22082,7 +22229,13 @@
                     // ⚠ 拆成两条的话 Anthropic 那边就是连续两条 assistant，直接 400；
                     //   OpenAI 那边也会因为「带 tool_calls 的消息后面没紧跟 tool」而报错。
                     //   再把每条工具结果各记一条 tool —— 每个 tool_call_id 都得有对应的结果
-                    s.msgs.push({ role: 'assistant', content: rep.text, calls: calls, ts: Date.now() });
+                    // ⚠ Gemini 的原始 parts 要留着：`thoughtSignature` 必须原样回传
+                    //   （Gemini 3 起对函数调用是强制的），重新拼一遍签名就丢了
+                    const am = { role: 'assistant', content: rep.text, calls: calls, ts: Date.now() };
+                    if (plan.proto === 'gemini' && Array.isArray(rep.parts) && rep.parts.length) {
+                        am.gemParts = rep.parts;
+                    }
+                    s.msgs.push(am);
                     let touched = false;
                     // ⚠ 这里必须 for...of + await，不能用 forEach：
                     //   ① fetch_url 要真的等网络，forEach 不认 async 回调 ——
@@ -22101,7 +22254,8 @@
                         s.msgs.push({
                             role: 'tool',
                             content: '',
-                            toolResults: [{ id: c.id, name: c.name, text: r.text }],
+                            // mid 一起带上：Gemini 回传 functionResponse 时要那个 id
+                            toolResults: [{ id: c.id, mid: c.mid || '', name: c.name, text: r.text }],
                             ok: r.ok !== false,
                             ts: Date.now()
                         });

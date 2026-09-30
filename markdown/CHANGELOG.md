@@ -6,6 +6,91 @@
 
 ---
 
+## 2026-09-30（第二十五段）· Code 页的 Agent 补上 **Gemini / Vertex 原生协议的工具调用**
+
+**类型**：功能（此前是**明说「不支持」并拒绝发送**）+ 扩断言（`st-code.js` 696 → **759** 条）+
+新增反向测试（`_reverse20.js`，6 针）+ 文档。
+**产品文件**：`saki.html` 1 688 840 → 1 698 352 字节（32 536 → 32 690 行），
+sha1 `a36fe8ac…` → `9a4d9452e7a2d217bf01692df888bf3cb2ed049c`。
+
+### 一、改了什么
+
+第十八轮加了第三种协议 `gemini`（Gemini 原生 / Vertex），但 **Code 页的 Agent 工具调用**
+当时只实现了 OpenAI 兼容 / Anthropic 两种形状 —— 遇到 gemini 会**明说「不支持」并拒绝发送**。
+这一轮补齐，一共五处：
+
+| 位置 | 改动 |
+|---|---|
+| `stCodeToolsFor` | 加 gemini 分支 → `[{ functionDeclarations: [{name, description, parameters}] }]` |
+| `stCodeMessagesFor` | 加 gemini 分支 → `contents[]` + `parts` 里的 `functionCall` / `functionResponse` |
+| `stCodeRequest` | 加 gemini 分支 → `stAiGeminiUrl(cfg, cfg.model, false)` + `x-goog-api-key` + `toolConfig` |
+| `stCodeParseReply` | 加 gemini 分支 → `candidates[0].content.parts` |
+| `stCodeFetch` | 补 `await stAiPlanAuth(plan, cfg)` —— 此前**完全没调**，Vertex 完整模式必 401 |
+
+`stCodeSend()` 里那道「拒绝发送」的闸门整段删掉（连带它上面那段解释性注释）。
+
+⚠ 三处形状**必须一起改** —— 只改两处会出现「模型看得见但调不动」，或者反过来。
+这条警告在产品注释里早就写着，这一轮只是把它兑现了。
+
+### 二、⚠⚠ 五个「不发出去就看不出来」的坑
+
+- **`thoughtSignature` 必须原样回传**（Gemini 3 起对函数调用是**强制**的）。
+  签名长在**原来那个 Part** 上，所以模型的原始 `parts` 整份存进 `msg.gemParts` 原样回发，
+  **不能重拼** —— 重拼出来的那份看着也有 `functionCall`，但签名没了，服务端回 400。
+  ⚠ 这一条决定了「断言该打在哪儿」：光断言「第二轮里有 `functionCall`」是**分辨不出**
+  「原样回发」和「重拼一遍」的（RULES 六之二十六），所以假 fetch 里给函数调用**造了一个
+  `thoughtSignature`**，判据改成「签名还在不在」。
+- **`functionResponse.response` 必须是对象**（proto 里是 Struct）。给字符串直接 400。
+  所以工具结果的文本包一层：`{ result: '…' }`。
+- **id 只在模型给过时才回传**。Gemini 2.5 及更早**不给** id（3 代起才强制回传），
+  凭空编一个反而可能让它对不上 ⇒ 内部 `id` 是本地句柄、`mid` 才是模型给的，
+  回传时只写 `mid`。
+- **`parameters` 是 OpenAPI 的一个子集，不是完整 JSON Schema** ——
+  `additionalProperties` / `$schema` / `$ref` / `oneOf` 它不认，发了就是 400
+  INVALID_ARGUMENT，**而且不点名是哪个键**，用户只会去怀疑 Key 或模型名。
+  ⇒ 过一道白名单 `stCodeGeminiSchema()`：只删不认的键，**不改结构、不改类型**。
+  ⚠ 白名单天生会漏（RULES 六之三十六），真被漏掉的约束由工具在运行时兜（`stCodeTool` 的入参校验）。
+- **`needsToken` 只是标记，得有调用点去兑现**。`stCodeRequest` 在 Vertex 完整模式下
+  标 `needsToken: true`，真正补 `Authorization` 的是 `stCodeFetch` ——
+  而它此前**根本没调** `stAiPlanAuth`。⚠ 「标了」≠「真的去补了」是两件事，
+  套件里也是**分开测**的（RULES 六之四十：覆盖要盯**调用点**，不是盯「函数写好了」）。
+
+### 三、验证
+
+- `st-code.js`：**759 通过 / 0 失败**（断言 696 → 759，本轮新增 63 条）。
+  - B 段：URL / 头 / `functionDeclarations` / `toolConfig` / `systemInstruction` /
+    `contents` 角色；schema 白名单（删掉不认的键 + 留住认的键，两条都精确比字符串）；
+    SA 模式的 `needsToken`；`stCodeFetch` 真的把 Bearer 补进了 headers。
+  - C 段：`role:model`、`functionCall`、`functionResponse`、连续 tool 结果合并、
+    `mid` 的有无两种情形、**原始 parts 整份原样回发**。
+  - D 段：`candidates[0].content.parts`、`mid` / `id`、**思考片段不进正文但留在 parts 里**。
+  - **F2 段整段重写**：从「断言那句拒绝」改成「断言真的往返了一轮」。
+    ⚠ 旧的断言（「报的错里点名协议」「一个请求都没发」）**必须删掉** ——
+    产品改了行为而断言没跟着改，套件就会**一直红**（RULES 六之四十八）。
+- `_reverse20.js`：**6 针全部达标**（1 个基线 + 6 次套件运行）。
+  R1 键名写错 / R2 `response` 改字符串 / R3 不保留原始 parts / R4 用本地句柄当 id /
+  R5 思考片段混进正文 / R6 不补 `needsToken`。每针都配了对照组，且「没有预期之外的红」。
+- 收尾产品逐字节还原（sha1 `9a4d9452…`）。
+
+### 四、⚠⚠ 这一轮踩到的两个「测试自己坏掉」的坑
+
+- **套件的新断言差点把整套搞崩**。第一版反向测试 R1 是「把 `functionDeclarations` 整行删掉」，
+  而套件里有一句 `plan.body.tools[0].functionDeclarations.length` —— 在 **Node 侧**求值，
+  `undefined.length` 直接抛 ⇒ **整套崩掉、连汇总行都没有** ⇒ 反向测试拿不到「红了几条」，
+  那一针等于白跑（RULES 六之六十六）。**两边都改了**：① 新断言一律走 `at()` / `arr()` 兜底
+  （**该红不该崩**）；② 探针改成「改键名」而不是「删结构」，让产品仍是合法 JSON。
+- **兜底本身会造出「永真断言」**。光套 `arr()` 会让 `[].every()` / `[].some()` 那类判据
+  在空数组上**天生为真**（RULES 六之三十九）⇒ 数组类判据一律**数出来跟期望比**，
+  这一轮把三处 `.every()` 全换成了 `filter(...).length === 0`。
+- ⚠ 另外还改掉了一条**自己写歪的**断言：`at(…, 'type') === undefined` 在「声明整份消失」时
+  **也返回 undefined** ⇒ 等于永真。改成「数出带了 `type` 键的声明有几条」。
+- ⚠ **F2 重写时差点把配置还原吃掉**：旧 F2 末尾有一行 `useOwn('openai', …)`，
+  而后面 H / H2 / I 各节都按 `body.messages` 取请求体（那是 OpenAI 的形状，Gemini 用 `contents`）。
+  漏了它，下一节崩在 `body.messages[0]` 上，**而那个报错看起来像「产品坏了」**。
+  套件跑第一遍就抓到了（320 通过 / 1 失败 · FATAL），已补回并写了注释。
+
+---
+
 ## 2026-09-30（第二十四段）· 换成**真密钥**签名（`YanSaki-13.jks`）+ 清空重来重发 `apk-v1.0`
 
 **类型**：签名/发布 + 扩断言（`verify.sh` §2b）+ 修工具（`release.js` 加超时）+ 文档。
