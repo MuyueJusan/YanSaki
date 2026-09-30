@@ -3080,6 +3080,47 @@ check('…数量…', plan.body.tools[0].functionDeclarations.length, …)
 ⚠ **同族**：六之六十九（换取值路径再量）、六之三十六（写死的数字没有断言盯着）、
 `MEMORY.md` §①「行号与『共 N 个』都会静默漂 ⇒ 计数一律从源码枚举」。
 
+### 六之八十二：**跨分支改内容时「切分支」会卡死 —— 改用 plumbing**（第二十七轮）
+
+这一轮要**两个分支都改**（`main` 与 `apk` 都要删同样六份文件）。按老办法
+「切到 `main`，再 `git checkout apk -- <那 5 个文档>`」，结果**卡死**：
+
+| 尝试 | 结果 |
+|---|---|
+| 前台 `git checkout main` | **SIGTERM**，无任何输出 |
+| 前台重试（timeout 300 s） | **SIGTERM**，无输出 |
+| 后台跑 | **8 分 22 秒**里 `android/` 磁盘文件 78 → **54**，被 kill |
+
+`main` 不含 `android/` ⇒ 切过去要**删掉 45 个跟踪文件**。**删除方向极慢（≈17 秒/个）**，
+而**写入方向是秒级**（每次 `git checkout -- .` 恢复 20 多个文件都立刻返回）。
+⚠ **机制未证实**（磁盘 / 杀毒实时扫描 / 目录项回收都有可能），
+但**「切分支」在这台机器 + 这个仓库上不可用**是实测结论。
+
+**两条替代路（都不碰工作区）：**
+
+1. **只改 HEAD 指向**：`git symbolic-ref HEAD refs/heads/<分支>`。
+   `api-push.js` 推的是 `rev-parse HEAD`（第 128 行），只跑
+   `rev-parse` / `log` / `ls-tree` / `rev-list` / `diff-tree` —— **不读索引、不读工作区**
+   ⇒ 推完 `git symbolic-ref HEAD refs/heads/apk` 复位，`git status` 依旧干净。
+2. **纯 plumbing 造提交**：`GIT_INDEX_FILE=<临时> git read-tree <分支>` →
+   `update-index --force-remove` / `--cacheinfo 100644,<sha>,<path>` → `write-tree` →
+   `commit-tree <tree> -p <分支>` → `update-ref refs/heads/<分支>`。
+   ⚠ 临时索引文件**用完必须 `rm -f`**；⚠ 提交前先核
+   **「新树与另一分支的差异只在预期的那部分」**（这轮 = 只在 `android/`，非 android 差异 **0**）。
+
+⚠⚠ **顺带挖出一个 `api-push.js` 的潜在陷阱**：**`--branch=X` 只决定远端 ref 的名字，
+内容来自 `HEAD`。** 在 `apk` 上跑 `--branch=main` = **把 `apk` 的提交往 `main` 推**。
+这轮侥幸没出事（`force:false` 让 GitHub 拒了非快进），但**只要 `main` 恰好是 `apk` 的祖先，
+它就会静默把 `android/` 推进 `main`** ⇒ **跑之前先 `git rev-parse --abbrev-ref HEAD` 核一眼**。
+
+⚠ **被 kill 之后的两样残留**：① **0 字节的 `.git/index.lock`**（之后任何 `git checkout -- .`
+都报 `Unable to create index.lock`）；② 工作区少了一部分文件。
+恢复顺序 = **先确认没有活着的 git 进程**（`tasklist //FI "IMAGENAME eq git.exe"`）→
+`rm -f .git/index.lock` → `git checkout -- .` → 核 `status` 为空 + 文件数回基线。
+
+⚠ **同族**：六之四十六（本环境 `spawnSync` 一律 `EBUSY` ⇒ 工具要用异步 —— 同样是
+「环境限制逼着换实现」）、六之七十八（推完别读 `origin/<分支>`，问服务器）。
+
 ---
 
 ## 七、内联一整份外部网页（小游戏「复古线框战机」，第十轮）
