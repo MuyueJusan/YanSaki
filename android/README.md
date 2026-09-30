@@ -253,7 +253,8 @@ shim/ai-fetch-shim.js               注入页面、包一层 window.fetch 的垫
 res/                                图标 + 主题色 + 应用名
   mipmap-*/                         各密度图标（生成物，已入库，方便直接看）
   mipmap-anydpi-v26/                自适应图标描述
-tools/make-icons.py                 头像 → 图标（纯标准库，见下）
+icon-source.png                     ⚠ **图标源图**（1200x1200 PNG）—— 必须入库：`build/` 每次构建都会被清空
+tools/make-icons.py                 源图 → 图标（纯标准库，见下）
 tools/add-dex.py                    把 classes.dex 追加进 APK 并自查压缩方式
 tools/pick-fonts.py                 从页面里挑出真正引用的字体 + 两条静默闸门（build.sh / verify.sh 共用）
 tools/repro-d8-javac/               坑二的最小复现
@@ -277,18 +278,52 @@ build.sh / verify.sh                构建 / 验证
 
 ## 图标
 
-用的是 GitHub 头像（`https://avatars.githubusercontent.com/u/86054388`）。  
-`tools/make-icons.py` 从源图裁出一块「头部特写」，再生成各密度图标 + 自适应图标前景 + 一张预览。
+源图是 `icon-source.png`（**1200×1200**，YanSaki 自己画的 chibi 头像）。
+`tools/make-icons.py` 从源图裁出一块方形，再生成各密度图标 + 自适应图标前景 + 一张预览。
 
 ```bash
-python tools/make-icons.py <头像.png> res
+python tools/make-icons.py icon-source.png res
 # 然后看 build/icon-preview.png —— 中间亮区就是启动器实际会露出的部分
 ```
 
-⚠ 裁切参数 `CROP_X / CROP_Y / CROP_SIDE` 是**看出来的**，改了必须重看预览图。  
-（实测源图是 **460×460**，不是 512 —— GitHub 不会把原图放大。）
+⚠ 裁切参数 `CROP_X / CROP_Y / CROP_SIDE` 是**看出来的**，改了必须重看预览图。
+现行取值 **`(0, 0, 1200)` = 整幅满幅**，理由：实测头发铺满上/左/右三边
+（主体包围盒 `x 0..1198 / y 0..1198`），灰底 `#cac4c4` 只露在下方两角
+⇒ 启动器按形状裁掉四角之后，露出来的正好是脸。脸的几何：双眼 `x 256..933`
+（中心 594 ≈ 画布中心 600）、`y 322..600`，下巴 `y≈867`。
 
-⚠ 生成脚本故意**不用 Pillow**：本机 pip 走代理拉不到 PyPI（实测卡死 4 分钟无输出）。  
+> 上一版用的是 GitHub 头像（460×460），裁切框是 `(0, 0, 430)`。
+> ⚠ 换源图时**必须重看预览图** —— 这几个数只对当时那张图成立。
+
+### ⚠ 源图必须是 **PNG**，而手机/画图软件给的常常是 JPEG
+
+`png_read()` 只认 PNG（`IHDR + IDAT(zlib) + IEND`），遇到 JPEG 直接
+`raise ValueError('不是 PNG')`。所以 JPEG 要先转一道。**本机没有 Pillow、没有
+ffmpeg、没有 ImageMagick**（`pip` 走代理拉不到 PyPI），而 `Add-Type`（`System.Drawing`）
+被安全策略挡掉 ⇒ 走 **Chrome headless 截图**：
+
+```bash
+# ① 一张只放这张图的极简页面（图片按原始尺寸铺在 0,0，页面无边距无滚动条）
+printf '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#fff;overflow:hidden}img{display:block;width:1200px;height:1200px}</style><img src="_src.jpg">' > build/_src.html
+cp <源图.jpg> build/_src.jpg
+
+# ② 视口 = 图片尺寸，缩放强制 1，截图就是 1:1 的像素
+"/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --disable-gpu \
+  --hide-scrollbars --force-device-scale-factor=1 --window-size=1200,1200 \
+  --user-data-dir="$TEMP/ys-chrome-prof" \
+  --screenshot='G:\saki\android\icon-source.png' 'file:///G:/saki/android/build/_src.html'
+
+# ③ 转完**当场验**：PNG 魔数 + IHDR 里的宽高/位深/颜色类型
+#    实测 1200x1200 / 位深 8 / ct=2 —— ct=2 正是 png_read 支持的其中一种
+rm -f build/_src.jpg build/_src.html
+```
+
+⚠⚠ **源图放 `build/` 会被下一次构建删掉** —— `build.sh` 第 2 步是 `rm -rf "$OUT"`。
+我第一版就把它放在 `build/icon-src.png`，构建完回头再取就没了（`cp: cannot stat`）。
+⇒ 它必须待在**仓库里**（`android/icon-source.png`，769 013 字节，已入库）。
+⚠ 目录里那个 `icon-preview.png` 反而是**产物**，被删掉无所谓（重跑就有）。
+
+⚠ 生成脚本故意**不用 Pillow**：本机 pip 走代理拉不到 PyPI（实测卡死 4 分钟无输出）。
 用标准库 `zlib` 手写 PNG 解码/编码 + 面积平均缩放，零依赖。
 
 ---
