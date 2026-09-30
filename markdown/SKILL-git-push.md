@@ -398,6 +398,45 @@ Finally, keep these two failure modes apart, because their messages look nothing
 
 Explaining one failure with the other's cause burns a lot of time.
 
+### The credentials file must be ONE line — a wrapped paste reads as *no credential at all*
+
+The stored-credential file holds a single line:
+
+```
+https://x-access-token:<TOKEN>@github.com
+```
+
+⚠ A paste that lands across **several lines** does not "sort of work" — it fails closed, and the
+failure reads like the file is *missing* rather than malformed. `api-push.js` parses it as
+`split(/\r?\n/).find(l => l.trim())` (the **first non-empty line only**) and then requires that line
+to match `^https:\/\/[^:]+:([^@]+)@`. If the token got wrapped, that line has **no `@`** ⇒ the regex
+misses ⇒ `读不到凭据`. Real case: an edit that replaced only part of the old token left the old
+prefix in front and a 2-char tail behind, so the file held three lines —
+`https://x-access-token:github_pat_` / `ghp_…(40)` / `HB@github.com`.
+
+**Don't guess which line holds the good token — enumerate the whole file and probe each candidate:**
+
+```js
+const cands = [...new Set(text.match(/(?:github_pat_|ghp_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9_]+/g) || [])];
+// GET /user for each; require EXACTLY ONE 200, otherwise write nothing at all
+```
+
+⚠ Note what the pattern *excludes*: a bare `github_pat_` prefix with nothing after it is **not a
+token** (the regex needs ≥1 char past the prefix), and that is the correct answer — it is debris.
+The tell that the reassembled 53-char string was junk: a fine-grained PAT is **93** chars
+(`github_pat_` + 22 + `_` + 59), and `GET /user` answered **401**.
+
+**Never repair this file with the Write/Edit file tools.** They snapshot the previous contents into
+`~/.workbuddy-ai/workspace/sessions/*/modify_backup/`, leaving another **plaintext copy of the
+token** on disk — exactly the leak the rotation was meant to close. Rewrite it from a script; the
+token then never enters the conversation either. ⚠ And don't "back it up for safety" — that is just
+one more plaintext copy. Verify the repair by **running the consumer**
+(`api-push.js --branch=<current branch>`, a dry run), not by re-reading the bytes.
+
+⚠ When the new token is a **classic** PAT, read `x-oauth-scopes` and say it out loud — classic
+tokens can carry near-everything (`admin:org`, `delete_repo`, `admin:enterprise`), which is a
+privilege *increase* over a fine-grained token. Surface the trade-off and let the user decide.
+
 ## 8. Private repos lose GitHub Pages — and it does NOT come back by itself
 
 On a free plan, Pages requires a **public** repo. Flipping a working Pages repo to private:
