@@ -2944,6 +2944,26 @@ check('…数量…', plan.body.tools[0].functionDeclarations.length, …)
 ⚠ 反过来说，**这个崩溃是套件自己抓到的、而且当场就报了** —— 这正是
 「一段跑完立刻跑一次」的价值；攒到最后再跑，就要在一堆红里找这一条了。
 
+### 六之七十八：**API 推送之后，本地跟踪 ref 是过期的，`git status` 会说反话**（第二十五轮）
+
+`api-push.js` 移动的是**服务器上的** `refs/heads/<branch>`；它**没法**移动本地的
+`refs/remotes/origin/<branch>` —— 那个更新平时发生在 `git push` / `git fetch` **内部**，
+而 `git fetch` 恰恰就是被代理挡死的那个东西。
+
+2026-09-30 实测：`main` 推到 `cb37225` **已经成功**（API 回读 `refs/heads/main` 就是它），
+可同一时刻 `git rev-parse origin/main` 还答 `3085f14`、`git status -sb` 打印
+**`## main...origin/main [ahead 2]`** —— **两条都是假的**。
+
+⇒ **判「还剩什么要推」永远别读 `origin/<branch>`**，去问服务器
+（`GET /repos/<o>/<r>/git/ref/heads/<branch>`）；或者干脆跑一次 `api-push.js` **不带 `--go`** ——
+它读真实远端 ref、且**幂等**，dry-run 就是最便宜的真值来源。
+⇒ 事后把本地 ref 拉回来：`git update-ref refs/remotes/origin/<branch> <sha>`，**然后回读** ——
+⚠ `update-ref` **会 exit 0 而根本没写**（技能 §1 记过同一件事）⇒ **回读才是验证**，不是走过场。
+⇒ ⚠ **真正咬人的推论**：过期的 `origin/main` 读起来像「还有 1 个提交没推」——
+**那看起来是一件待办**。本轮就是照着它差点重推一遍已经推完的东西。
+⚠ 同族：六之五十（「通过数 = 1」看着像通过）、六之四十八（`grep` 产品会骗人）——
+**「读数」和「真实」是两件事，中间那道闸门要自己搭。**
+
 ---
 
 ## 七、内联一整份外部网页（小游戏「复古线框战机」，第十轮）
