@@ -1,7 +1,11 @@
 # ⚠ 本仓库**绝不**做行尾转换（这一条是硬要求，别删）。
 #
 # 这个项目的文件是**混行尾**的：
-#   saki.html / index.html / index2.html / 「saki - 副本*.html」 → 纯 CRLF
+#   saki.html / index.html → 纯 CRLF
+#     ⚠ 这行以前还举过 `index2.html` 与「saki - 副本*.html」两个例子 —— **两者都已不在仓库里**
+#       （`index2.html` 早就没了；六份 `saki - 副本*.html` 于 2026-09-30 删除，
+#        见 markdown/README.md §1「那六份副本去哪了」）。删掉举例**不影响规则**：
+#       下面那条 `* -text` 是通配的，本来就没按文件名开列。
 #   markdown/ 与 _verify/ 下的全部文件                            → 纯 LF
 #
 # 而系统级 gitconfig（PortableGit 的 etc/gitconfig）里 core.autocrlf = **true**。
