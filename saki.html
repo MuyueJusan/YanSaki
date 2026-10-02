@@ -5917,7 +5917,10 @@
             <div class="header-title-box">
                 <span id="title-year" class="clickable-title" onclick="switchMode('year')">2026年</span>
                 <span id="title-month" class="clickable-title" onclick="switchMode('month')">09月</span>
-                <button class="cal-btn today-btn" onclick="resetToToday()">今日</button>
+                <!-- 「今日」按钮：**文案由 `updateTodayBtn()` 改写成当前日**（如 `2日` / `31日`），
+                     这里的「今日」只是**脚本跑起来之前的兜底**，不是最终显示内容。
+                     ⚠ 别把它当成「功能没做」而删掉 —— 真跑起来它会被覆盖成当前日。 -->
+                <button class="cal-btn today-btn" id="today-btn" onclick="resetToToday()">今日</button>
             </div>
             <div style="display: flex; gap: 6px;">
                 <button class="cal-btn" onclick="handleNext()">＞</button>
@@ -6567,6 +6570,11 @@
             const formattedHours = String(h12).padStart(2, '0');
 
             document.getElementById('clock').textContent = `${formattedHours}:${minutes}:${seconds}`;
+
+            // 顺带刷新日历那个「今日」按钮上的日子 —— 页面开着过夜时，跨过 00:00 它得自己翻到新的一天。
+            // ⚠ 它取的是**本地**日期，跟上面这行 `getClockTimeParts()`（跟时区选择器走）**不同源**，
+            //   别把两者合并（理由写在 `updateTodayBtn()` 上方）。
+            updateTodayBtn();
         }
 
         // 时区列表（value 为 IANA 时区名，'local' 表示本地时间）
@@ -6663,6 +6671,9 @@
         function renderCalendar() {
             document.getElementById('title-year').textContent = `${viewYear}年`;
             document.getElementById('title-month').textContent = `${String(viewMonth + 1).padStart(2, '0')}月`;
+            // 头部那一排标签一起刷新：年份 / 月份跟着 `viewYear` `viewMonth` 走，
+            // 而「今日」按钮上的日子**永远是真的今天**（跟浏览到哪个月无关）。
+            updateTodayBtn();
 
             const body = document.getElementById('calendar-body');
             body.innerHTML = '';
@@ -6806,6 +6817,25 @@
                     viewYear += 9;
                 }
             });
+        }
+
+        // 「今日」按钮上显示的是**当前日**（`2日` / `31日`），点它仍然回到今天。
+        // ⚠⚠ 日期必须取**本地** `new Date().getDate()` —— 与 `resetToToday()` **同源**。
+        //   **不要**图省事用 `getClockTimeParts()`：那个是跟着**时区选择器**走的
+        //   （时钟可以切成东京 / 纽约时间），而日历的「今天」永远是本地的今天。
+        //   两处判据不同源 ⇒ 症状是「按钮写着 3 日、点下去跳到 2 日」这种自相矛盾。
+        // ⚠ 缓存写在**元素自己的 `data-day` 上**，而不是模块级 `let`：`updateClock()` 每秒都会来调
+        //   它一次（为了页面开着过夜时能自动翻到新的一天），不做缓存就是每秒动一次 DOM。
+        //   而 `updateClock()` 还有一处调用点在 `setClockTimezone()` 里 —— 用外层 `let` 的话，
+        //   哪天有人把它挪到脚本求值期就会撞 TDZ（`ReferenceError`，而且症状离现场很远）；
+        //   挂在元素上没有这个顺序依赖。
+        function updateTodayBtn() {
+            const el = document.getElementById('today-btn');
+            if (!el) return;
+            const d = String(new Date().getDate());
+            if (el.dataset.day === d) return;
+            el.dataset.day = d;
+            el.textContent = d + '日';
         }
 
         function resetToToday() {
