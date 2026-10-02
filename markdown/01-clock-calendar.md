@@ -18,6 +18,10 @@
         </div>
         <div id="clock" class="digital-clock" onclick="toggleRetroMode()"
              title="点击切换复古 / 现代模式">00:00:00</div>
+        <!-- 日期偏移徽标：文案由 `updateClockDayOffset()` 写。
+             ⚠ 这里**必须留空**，别放占位文字 —— 空文案靠 CSS 的 `:empty` 完全收起。 -->
+        <span id="clock-day-offset" class="clock-day-offset"
+              title="所选时区的日期与本地日期相差的天数"></span>
     </div>
     <button id="clock-tz-toggle" class="tz-toggle" onclick="toggleTimezoneGrid()">
         <span id="clock-tz-label">本地时间</span> <span class="tz-toggle-icon">▾</span>
@@ -36,6 +40,7 @@
 | 午前 / 午後 | 12 小时制的指示器，`< 12` 时午前亮、否则午後亮 |
 | 时区按钮 | 点击展开 / 折叠时区网格（切换 `#clock-tz-card` 上的 `tz-collapsed` 类） |
 | 时区格子 | 点击即切换，选中项加 `.selected` |
+| 日期偏移徽标 | 时钟右边的小字，显示 `【D+1】` / `【D-1】`；偏移为 0 时**完全收起**（见下） |
 
 ### 时间显示格式
 
@@ -53,6 +58,55 @@ const formattedHours = String(h12).padStart(2, '0');
 - 否则用 `Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', ... })`
   + `formatToParts()` 取值。用 `hourCycle: 'h23'` 是为了避开 12 小时制带来的
   `AM/PM` 歧义（`h23` 下 0 点是 `00`，不会变成 `24`）
+
+### 日期偏移徽标（`【D+1】` / `【D-1】`）
+
+世界时间跟本地**不在同一天**时，时钟右边出现一个小字标记：所选时区的日期比本地**晚**一天
+显示 `【D+1】`，**早**一天显示 `【D-1】`。本地时间自己**永远不标**（它是基准）。
+
+三个函数，各管一段：
+
+| 函数 | 职责 |
+|---|---|
+| `getClockDateParts()` | 取**所选时区**当天的 `{year, month, day}`；`local` 走本地字段，否则 `Intl.DateTimeFormat` 的 `formatToParts` |
+| `getClockDayOffset()` | 所选时区日期 − **本地**日期，返回整数天（正 = 晚，负 = 早） |
+| `updateClockDayOffset()` | 把 `【D±N】` 写到 `#clock-day-offset` 上；偏移 0 时写**空串** |
+
+调用点在 `updateClock()` 里（紧跟时钟文案那次写入），所以：
+
+- 每秒刷新 ⇒ 页面开着跨 00:00 时它**自己翻**；
+- `setClockTimezone()` 里会调 `updateClock()` ⇒ 换城市时它跟着换。
+
+⚠⚠ **基准永远是「本地日期」，不是「上一个看过的时区」。** 每帧拿本地重算。
+拿上一个时区累加会漂，而且症状很难看：连点几个城市之后徽标开始胡说。
+
+⚠⚠ **整数天差必须靠 `Date.UTC(...)` 折算，不能拿两个 `Date` 直接相减。**
+两个日历日期各折成「当天 00:00 的 **UTC** 毫秒」再相减，结果必然是整数天；
+直接相减会踩夏令时 —— 切换日那天是 23 或 25 小时，除不尽 `86400000`，
+`Math.round` 就会在「其实只差 1 小时」的时候把它算成 1 天。
+
+⚠⚠ **偏移 0 时必须写空串，靠 CSS 的 `.clock-day-offset:empty { display: none }` 收起。**
+只清 `textContent` 是不够的：元素本身还在，一个 `margin-left` 会把时钟往左推 ——
+而「本地时间」下它**永远是空的**，也就是说是常态，不是边角情况。
+同理，**别写「同日」「本地」之类的占位文字**，那会变成一个永久挂着的假标记。
+
+⚠ **文案不硬夹到 ±1。** 按真值输出 `D+N` / `D-N`：地球上时区跨度 26 小时
+（UTC+14 ~ UTC-12）⇒ 理论上能到 ±2。本机（UTC+8）配这份城市表只可能是 ±1，
+但夹到 ±1 就是撒谎。
+
+⚠ **缓存写在元素自己的 `data-off` 上**（跟日历那个「今日」按钮的 `data-day` 同一个理由）：
+这个函数被 `updateClock()` **每秒**调一次，无条件写 `textContent` 等于每秒触发一次样式失效，
+而值几乎从不变。
+
+⚠⚠ **它跟日历的「今日」按钮判据**不同源**，别合并：**
+徽标取**所选时区**的日期，日历那个按钮取**本地**日期。
+混起来就会「时钟说东京是 3 日、日历的今日按钮也变成 3 日」。
+
+配套：
+- 断言在 `_verify/smoke.js`（`== 世界时间：日期偏移徽标 ==`，7 条）；
+  期望值**现扫城市表**算出，且走一条**跟产品不同的机制**（`timeZoneName: 'longOffset'`
+  取偏移分钟数 → 加时间 → 读 UTC 年月日），避免「两条路径读同一个值」。
+- 反向测试 `_verify/_reverse23.js`（R1 文案恒空 / R2 方向取负 / R3 删调用点）。
 
 ### 时区列表（`TIMEZONES`，23 项）
 
@@ -215,6 +269,7 @@ function switchMode(targetMode) {
 | 区域 | 变化 |
 |---|---|
 | 时钟数字 | 绿色 CRT 荧光色 |
+| 日期偏移徽标 | 跟着时钟变绿（**单独一条覆盖**：白字压在灰底卡片上会糊成一片） |
 | 标题 | 换 `DotGothic16`（CSS 1888 起） |
 | 所有毛玻璃卡片 | 变白底黑框（Win95 风格） |
 | 酒馆面板 | 独立覆盖（CSS 2190 起） |
@@ -222,16 +277,34 @@ function switchMode(targetMode) {
 | 选项卡选中态 | **深蓝底白字**（不是白底黑字，Win95 选中态） |
 
 编写器和酒馆面板的复古覆盖是**分开写的**，新增组件时别忘了补。
+⚠ 时钟卡片里**每个**可见元素都要单独补一条 `body.retro-mode …` ——
+新加 `.clock-day-offset` 时就是这样：不补的话现代模式看着没问题，
+一切复古它就变成白字白底，而且**没有任何断言会红**（断言只看文案，不看颜色）。
 
 ---
 
 ## 四、相关 CSS 锚点
 
+⚠ **下表是 `saki.html` 的绝对行号**（`grep -n` 出来的），会随改动**静默漂** ——
+用之前先核一遍，一条命令就能重取：
+
+```bash
+for s in .clock-container .tz-toggle .tz-grid .tz-cell .digital-clock \
+         .clock-day-offset .calendar-container; do
+  printf '%-22s %s\n' "$s" "$(grep -n -F "$s {" saki.html | head -1 | cut -d: -f1)"
+done
+```
+
 | 行号 | 选择器 |
 |---|---|
-| 144 | `.clock-container` |
-| 162 | `.tz-toggle`（时区切换开关） |
-| 209 | `.tz-cell` / `.tz-grid` |
-| 274 | `.digital-clock` |
-| 289 | `.calendar-container` |
-| 3237 | 复古皮肤下避开窗口标题栏的 `.glass-card` padding 调整 |
+| 439 | `.glass-card` |
+| 452 | `.clock-container` |
+| 470 | `.tz-toggle`（时区切换开关） |
+| 517 | `.tz-grid` |
+| 525 | `.tz-cell` |
+| 582 | `.digital-clock` |
+| 603 | `.clock-day-offset`（日期偏移徽标） |
+| 615 | `.clock-day-offset:empty`（**空文案时彻底收起**，别删） |
+| 618 | `.calendar-container` |
+| 2335 | `body.retro-mode .clock-day-offset`（复古皮肤） |
+| 2279 | 复古皮肤下避开窗口标题栏的 `.glass-card` padding 调整 |

@@ -273,6 +273,74 @@ function check(name, actual, pred, expect) {
   await ev('openStEditor()');
   check('重开后卡片还在', await ev(`!!stEditor.card`), true);
 
+  // ── 世界时间：日期偏移徽标（`【D+1】` / `【D-1】`）────────────────────────
+  // 需求：选了非本地时区后，如果**那个时区的日期**跟本地差一天，时钟旁边出现小字标记。
+  // ⚠⚠ 期望值**不能拿产品那套算法算** —— 那是「两条路径读同一个值」，产品算错了期望值跟着错，
+  //   删掉实现照样绿（RULES 六之二十六）。这里换一条**不同机制**：用
+  //   `timeZoneName: 'longOffset'` 取该时区的 UTC 偏移分钟数，把 `Date.now()` 加上偏移后
+  //   读它的 **UTC** 年月日 —— 跟产品那条 `formatToParts(year/month/day)` 不是一回事。
+  // ⚠ 更不能写死「东京 = D+1」：同一个城市**上午看是同一天、晚上看就是下一天**，
+  //   写死的话每天有半天是假红。所以从城市表里**现扫**出此刻真的跨了天的那个时区。
+  // ⚠⚠ 断言名一律**不带动态值**（不放城市名 / 不放 `【D+1】`）—— 名字随时辰变的话，
+  //   反向测试的「存在性闸门」会在别的时辰假红（那是闸门自己坏，不是产品坏）。
+  //   会变的东西放 `actual` / `expect` 和下面那行 log 里，报红时照样看得到。
+  console.log('== 世界时间：日期偏移徽标 ==');
+  const offBadge = () => ev(`document.getElementById('clock-day-offset') ? document.getElementById('clock-day-offset').textContent : '(无此徽标)'`);
+  check('前提：时钟卡片里有那个日期徽标元素', await offBadge(), v => v !== '(无此徽标)', '不是 (无此徽标)');
+
+  // 独立算法：某个 IANA 时区「当天」的日序号（把该时区的本地日期折成 UTC 零点）
+  const tzDayIndex = (tz) => {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' })
+      .formatToParts(new Date());
+    const raw = (parts.find(p => p.type === 'timeZoneName') || {}).value || 'GMT';
+    const m = raw.match(/GMT([+-])(\d{2}):(\d{2})/);           // 偏移为 0 时只有 "GMT"，落回 0
+    const offMin = m ? (m[1] === '-' ? -1 : 1) * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10)) : 0;
+    const t = new Date(Date.now() + offMin * 60000);
+    return Math.floor(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) / 86400000);
+  };
+  const localDayIndex = () => {
+    const n = new Date();
+    return Math.floor(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) / 86400000);
+  };
+  const expectBadge = (diff) => diff === 0 ? '' : '【D' + (diff > 0 ? '+' : '') + diff + '】';
+
+  const tzList = await ev(`TIMEZONES.filter(t => t.value !== 'local').map(t => t.value)`);
+  const L0 = localDayIndex();
+  const crossed = tzList.map(v => ({ v, diff: tzDayIndex(v) - L0 })).filter(o => o.diff !== 0);
+  // 覆盖率闸门：**必须真的有城市跨了天**，否则下一条根本没被测到（而它会「绿」）。
+  // 本机 UTC+8 配这份城市表：本地 ≥11:00 时奥克兰是 D+1、<14:00 时檀香山是 D-1，
+  // 两段覆盖全天 ⇒ 任何时刻都至少有一个跨天。
+  check('前提：城市表里至少有一个时区此刻跨了天', crossed.length, n => n > 0, '>0');
+
+  // 基准不标自己
+  await ev(`(function(){ setClockTimezone('local'); return clockTimezone; })()`);
+  await sleep(300);
+  check('对照组：本地时间下徽标为空（基准不标自己）', await offBadge(), '');
+
+  // 探针固定取**唯一一个**（|偏移| 最大的那个）⇒ 断言**恒好跑一次**，
+  // 不会因为此刻是正偏移还是负偏移而多跑 / 少跑一条。
+  crossed.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  const probe = crossed[0] || { v: 'local', diff: 0 };
+  console.log('  此刻跨天的时区 ' + crossed.length + ' 个，探针取 ' + probe.v +
+    '（期望 ' + expectBadge(probe.diff) + '）');
+  await ev(`(function(){ setClockTimezone(${JSON.stringify(probe.v)}); return clockTimezone; })()`);
+  await sleep(300);
+  check('跨天的时区：徽标与独立算法一致（含方向）', await offBadge(), expectBadge(probe.diff));
+
+  // 对照组：切回本地，徽标又变空 —— 证明上一条不是「反正一直有字」
+  await ev(`(function(){ setClockTimezone('local'); return clockTimezone; })()`);
+  await sleep(300);
+  check('对照组：切回本地时间后徽标又变空', await offBadge(), '');
+
+  // 「不该发生」的另一半：需求只说了**时钟旁边**，时区格子上**不该**冒出 D+ / D-。
+  // ⚠ 先断言格子里**真有格子** —— 否则 `filter(...).length` 对空网格恒为 0，
+  //   这条会变成**天生为真**（同族：兜底让断言永真，RULES 六之三十九）。
+  const tzCellN = await ev(`document.querySelectorAll('#clock-tz-grid .tz-cell').length`);
+  check('前提：时区网格里有格子', tzCellN, n => n > 0, '>0');
+  check('时区格子上没有多余的 D+ / D- 标记',
+    await ev(`Array.from(document.querySelectorAll('#clock-tz-grid .tz-cell')).filter(b => /D[+-]\\d/.test(b.textContent)).length`),
+    0);
+
   // ── 日历「今日」按钮：**显示当前日** + 点它仍然回到今天 ──────────────────
   // 这个按钮原来写死「今日」两个字（2026-10-02 改），现在显示当前日（`2日` / `31日`）。
   // ⚠ 判据必须**现算** `new Date().getDate()`，**不能写死数字** —— 写死的话明天就假红，
