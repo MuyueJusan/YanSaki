@@ -593,6 +593,27 @@
             cursor: pointer;
         }
 
+        /* 世界时间的日期偏移徽标：所选时区的日期比**本地**日期晚 / 早一天时，
+           在时钟右边出现一个 `【D+1】` / `【D-1】` 小字标记。
+           ⚠ 它跟 `.period-box` 一样是 `.clock-display` 的 flex 子项，**居中**（继承 align-items），
+             不要写 `align-self: flex-start` —— 那会跟旁边居中的「午前/午後」对不齐，像没排好版。
+           ⚠⚠ **空文案时必须彻底不占位**，靠下面那条 `:empty`。只把 `textContent` 清空的话
+             元素本身还在，一个 `margin-left` 就会把时钟往左推 —— 而「本地时间」下它**永远**是空的，
+             也就是说是常态，不是边角情况。 */
+        .clock-day-offset {
+            font-size: clamp(0.6rem, 1.7vw, 0.8rem);
+            line-height: 1;
+            color: #ffffff;
+            opacity: 0.8;
+            margin-left: clamp(4px, 1.2vw, 10px);
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+            flex-shrink: 0;
+            text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+        }
+
+        .clock-day-offset:empty { display: none; }
+
         /* 日历容器 */
         .calendar-container {
             margin-top: clamp(1rem, 2.5vh, 1.5rem);
@@ -2307,6 +2328,14 @@
             border: 2px solid;
             border-color: #808080 #fff #fff #808080;
             text-shadow: 0 0 4px rgba(0, 255, 0, 0.6);
+        }
+
+        /* 复古模式下徽标跟着时钟走（绿字黑底那套），别让它还是白色的 —— 白字压在
+           灰底卡片上会糊成一片。 */
+        body.retro-mode .clock-day-offset {
+            color: #00ff00;
+            text-shadow: 0 0 4px rgba(0, 255, 0, 0.6);
+            opacity: 1;
         }
 
         body.retro-mode .tz-cell {
@@ -5899,6 +5928,11 @@
                 <span id="pm-indicator" class="period-pm">午後</span>
             </div>
             <div id="clock" class="digital-clock" onclick="toggleRetroMode()" title="点击切换复古 / 现代模式">00:00:00</div>
+            <!-- 世界时间的日期偏移徽标（`【D+1】` / `【D-1】`），文案由 `updateClockDayOffset()` 写。
+                 ⚠ **这里必须留空**，别放「同日」之类的占位文字 —— 空文案靠 CSS 的 `:empty`
+                   完全收起；放了占位文字它就成了一个**永久显示**的假标记。
+                 ⚠ 「本地时间」下它永远是空的（基准不标自己），那是常态。 -->
+            <span id="clock-day-offset" class="clock-day-offset" title="所选时区的日期与本地日期相差的天数"></span>
         </div>
         <button id="clock-tz-toggle" class="tz-toggle" type="button" onclick="toggleTimezoneGrid()">
             <span id="clock-tz-label">本地时间</span> <span class="tz-toggle-icon">▾</span>
@@ -6551,6 +6585,60 @@
             };
         }
 
+        // 所选时区**当天是几号**（本地时区直接走本地字段）。
+        // ⚠ 跟 `getClockTimeParts()` 分开写：那个只取时/分/秒，这个要完整年月日。
+        //   两者都走 `Intl.DateTimeFormat`，但**取的字段不同**，合并不了。
+        function getClockDateParts() {
+            if (clockTimezone === 'local') {
+                const now = new Date();
+                return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+            }
+            const parts = new Intl.DateTimeFormat('en-US', {
+                timeZone: clockTimezone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).formatToParts(new Date());
+            const get = (t) => (parts.find(p => p.type === t) || {}).value || '0';
+            return {
+                year: parseInt(get('year'), 10),
+                month: parseInt(get('month'), 10) - 1,
+                day: parseInt(get('day'), 10)
+            };
+        }
+
+        // 世界时间的日期偏移：所选时区比**本地**晚几天（正）/ 早几天（负）。
+        // ⚠ 基准永远是**本地**日期，每帧拿本地重算 —— 不要「拿上一个时区累加」，那样会漂。
+        // ⚠⚠ 把两个日历日期各折成「当天 00:00 的 **UTC** 毫秒」再相减：
+        //   这样得到的必然是**整数天差**。直接拿两个 `Date` 相减会踩夏令时 ——
+        //   切换日那天的间隔是 23 或 25 小时，除不尽 86400000，`Math.round` 就会在
+        //   「只差 1 小时」的时候把它算成 1 天。
+        // ⚠ 理论上限：地球上时区跨度 26 小时（UTC+14 ~ UTC-12）⇒ |偏移| 最大到 2。
+        //   本机（UTC+8）配这份城市表只可能是 ±1，但**按真值输出**，别硬夹到 ±1（那是撒谎）。
+        function getClockDayOffset() {
+            const tz = getClockDateParts();
+            const now = new Date();
+            const tzMid = Date.UTC(tz.year, tz.month, tz.day);
+            const localMid = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+            return Math.round((tzMid - localMid) / 86400000);
+        }
+
+        // 把日期偏移写到时钟旁边那个小徽标上（`【D+1】` / `【D-1】`）。
+        // ⚠ 偏移为 0 时写**空字符串**，靠 CSS 的 `:empty` 完全收起 ——
+        //   别写「同日」「本地」之类的占位，那会变成永久挂着的假标记。
+        // ⚠ 缓存写在**元素自己的 `data-off`** 上，跟 `updateTodayBtn()` 同一个理由：
+        //   这个函数被 `updateClock()` 每秒调一次，无条件写 `textContent`
+        //   等于每秒触发一次样式失效（而且值几乎从不变）。
+        function updateClockDayOffset() {
+            const el = document.getElementById('clock-day-offset');
+            if (!el) return;
+            const off = getClockDayOffset();
+            const text = off === 0 ? '' : '【D' + (off > 0 ? '+' : '') + off + '】';
+            if (el.dataset.off === text) return;
+            el.dataset.off = text;
+            el.textContent = text;
+        }
+
         function updateClock() {
             const { hours, minutes, seconds } = getClockTimeParts();
 
@@ -6570,6 +6658,12 @@
             const formattedHours = String(h12).padStart(2, '0');
 
             document.getElementById('clock').textContent = `${formattedHours}:${minutes}:${seconds}`;
+
+            // 世界时间的日期偏移徽标（`【D+1】` / `【D-1】`）—— 跨 00:00 时它会自己翻。
+            // ⚠ 它跟下面 `updateTodayBtn()` **不同源**：这个取**所选时区**的日期，
+            //   那个取**本地**日期。切换时区时 `setClockTimezone()` 会调到 `updateClock()`，
+            //   所以徽标跟着走；而日历那个「今日」按钮**不该**跟着时区变。
+            updateClockDayOffset();
 
             // 顺带刷新日历那个「今日」按钮上的日子 —— 页面开着过夜时，跨过 00:00 它得自己翻到新的一天。
             // ⚠ 它取的是**本地**日期，跟上面这行 `getClockTimeParts()`（跟时区选择器走）**不同源**，
