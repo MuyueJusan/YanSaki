@@ -327,6 +327,25 @@ function check(name, actual, pred, expect) {
   await sleep(300);
   check('跨天的时区：徽标与独立算法一致（含方向）', await offBadge(), expectBadge(probe.diff));
 
+  // 需求是「时钟**旁边**」⇒ 只断言文案不够，还得断言**位置**：徽标的左边缘在时钟右边缘的右边。
+  // ⚠ 用 **rect 比较**（量出来的），别用 CSS 算 —— CSS 算不出「元素在视口里的 x」
+  //   （RULES 六之六十二：挂在按钮上的弹层在会折行的容器里必然出界，调 max-width 治不了）。
+  // ⚠ 徽标为空时 CSS 的 `:empty` 会把它 `display:none` ⇒ rect 全 0 ⇒ 这条**会红**。
+  //   那是对的（「在旁边」的前提是它真的显示出来了），所以 R1 / R3 也把它算进 `red`。
+  const badgeGeo = await ev(`(function(){
+      const c = document.getElementById('clock'), b = document.getElementById('clock-day-offset');
+      if (!c || !b) return '(缺元素)';
+      const rc = c.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      return { vis: getComputedStyle(b).display !== 'none',
+               gap: Math.round(rb.left - rc.right), bw: Math.round(rb.width) };
+    })()`);
+  // ⚠ 把量到的数打出来：断言只报「过 / 不过」，而这两个数才是「它真的在旁边」的证据
+  //   （也是唯一盯着**外观**的那点东西 —— 颜色仍然没有断言，见 RULES 六之八十五）。
+  console.log('  徽标几何：display=' + (badgeGeo && badgeGeo.vis) +
+    '  与时钟的间距=' + (badgeGeo && badgeGeo.gap) + 'px  宽=' + (badgeGeo && badgeGeo.bw) + 'px');
+  check('跨天的时区：徽标在时钟右边（不是压在上面 / 飘到别处）',
+    badgeGeo, g => !!g && g.vis === true && g.gap >= 0 && g.bw > 0, 'vis=true 且 gap>=0 且 bw>0');
+
   // 对照组：切回本地，徽标又变空 —— 证明上一条不是「反正一直有字」
   await ev(`(function(){ setClockTimezone('local'); return clockTimezone; })()`);
   await sleep(300);

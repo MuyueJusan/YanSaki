@@ -150,6 +150,7 @@ const N_BADGE = '前提：时钟卡片里有那个日期徽标元素';
 const N_GATE = '前提：城市表里至少有一个时区此刻跨了天';
 const N_LOCAL = '对照组：本地时间下徽标为空（基准不标自己）';
 const N_MATCH = '跨天的时区：徽标与独立算法一致（含方向）';
+const N_GEO = '跨天的时区：徽标在时钟右边（不是压在上面 / 飘到别处）';
 const N_BACK = '对照组：切回本地时间后徽标又变空';
 const N_CELLS = '前提：时区网格里有格子';
 const N_CLEAN = '时区格子上没有多余的 D+ / D- 标记';
@@ -160,7 +161,9 @@ const PROBES = [
         why: 'updateClockDayOffset() 里文案恒为空 ⇒ 徽标永远不写 = 用户要的功能没做',
         from: "            const text = off === 0 ? '' : '【D' + (off > 0 ? '+' : '') + off + '】';",
         to: "            const text = '';   /* 注入 R1：徽标永远不写文案 */",
-        red: [N_MATCH],
+        // ⚠ N_GEO 也红：文案为空 ⇒ CSS 的 `:empty` 把徽标 `display:none` ⇒ rect 全 0。
+        //   这不是「重复」，而是**同一个承诺的另一面**：没显示出来，就谈不上「在时钟旁边」。
+        red: [N_MATCH, N_GEO],
         // ⚠ 对照组：注入点没碰的那几条必须还是绿的 —— 它们绿着才说明红的是
         //   「徽标没写出来」，而不是「时钟 / 时区网格整个坏了」。
         green: [N_BADGE, N_GATE, N_LOCAL, N_BACK, N_CELLS, N_CLEAN]
@@ -172,17 +175,19 @@ const PROBES = [
         to: "            const off = -getClockDayOffset();   /* 注入 R2：方向反了 */",
         // ⚠ 这一针的徽标**不是空的、是反号的** ⇒ 它才是「断言真的在比方向」的证据。
         //   只断言「徽标非空」的写法在这一针下**照样绿**。
+        // ⚠ N_GEO 在这一针下**保持绿** —— 反号了但照样显示在时钟右边 ⇒ 它量的确实是「位置」，
+        //   不是「有没有字」。这正是它跟 N_MATCH 分工的地方。
         red: [N_MATCH],
-        green: [N_BADGE, N_GATE, N_LOCAL, N_BACK, N_CELLS, N_CLEAN]
+        green: [N_BADGE, N_GATE, N_LOCAL, N_GEO, N_BACK, N_CELLS, N_CLEAN]
     },
     {
         id: 'R3',
         why: 'updateClock() 里的调用点删掉 ⇒ 函数写好了但没人调（接线层）',
         from: "            updateClockDayOffset();",
         to: "            /* 注入 R3：函数还在，但没人调它 */",
-        // ⚠ 红签名与 R1 相同（都只有 N_MATCH），但这是**故意的**：R1 打实现层、R3 打接线层。
+        // ⚠ 红签名与 R1 相同（N_MATCH + N_GEO），但这是**故意的**：R1 打实现层、R3 打接线层。
         //   RULES 六之四十：「函数写好了」≠「被调用了」。
-        red: [N_MATCH],
+        red: [N_MATCH, N_GEO],
         green: [N_BADGE, N_GATE, N_LOCAL, N_BACK, N_CELLS, N_CLEAN]
     }
 ];
