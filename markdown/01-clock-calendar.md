@@ -100,7 +100,9 @@ const formattedHours = String(h12).padStart(2, '0');
         <div class="header-title-box">
             <span id="title-year"  class="clickable-title" onclick="switchMode('year')">2026年</span>
             <span id="title-month" class="clickable-title" onclick="switchMode('month')">09月</span>
-            <button class="cal-btn today-btn" onclick="resetToToday()">今日</button>
+            <button class="cal-btn today-btn" id="today-btn" onclick="resetToToday()">今日</button>
+            <!-- ⚠ 上面这个「今日」只是**脚本跑起来之前的兜底**：真跑起来时
+                 `updateTodayBtn()` 会把它改写成**当前日**（如 `2日` / `31日`）。 -->
         </div>
         <div style="display: flex; gap: 6px;">
             <button class="cal-btn" onclick="handleNext()">＞</button>
@@ -178,6 +180,29 @@ function switchMode(targetMode) {
 `renderDaysView()` 里比较 `viewYear === realYear && viewMonth === realMonth && day === realDate`。
 
 `resetToToday()` 把三个状态一次性还原并把 `currentMode` 强制设回 `'day'`。
+
+### 头部那个按钮：**显示当前日** + 点它回到今天
+
+按钮文案**不是**写死的「今日」（2026-10-02 改）—— `updateTodayBtn()` 把它写成 `<本地日>日`
+（`2日` / `31日`）。它由两个地方驱动，**两处都要在**：
+
+| 调用点 | 管什么 |
+|---|---|
+| `renderCalendar()` 里 | 初始化 + 每次翻页 / 切视图时刷新 |
+| `updateClock()` 里 | 页面开着过夜、跨过 00:00 时自己翻到新的一天（那个 tick 每秒一次） |
+
+⚠⚠ **日期取本地 `new Date().getDate()`，与 `resetToToday()` 同源。**
+**别**图省事改用 `getClockTimeParts()` —— 那个跟着**时区选择器**走（时钟可以切成东京 / 纽约时间），
+而日历的「今天」永远是本地的今天。两处判据不同源的症状是
+**「按钮写着 3 日、点下去跳到 2 日」**这种自相矛盾。
+
+⚠ 跨日缓存写在**元素自己的 `data-day`** 上，不用模块级 `let`：`updateClock()` 每秒都会来调它，
+不缓存就是每秒动一次 DOM；而 `updateClock()` 在 `setClockTimezone()` 里还有一处调用点，
+用外层 `let` 的话哪天被挪到脚本求值期就会撞 TDZ（`ReferenceError`，症状离现场很远）。
+
+⚠ 按钮文案**不跟着浏览的月份走** —— 翻到 9 月时它照样显示今天那个日子。
+`smoke.js` 里有一条专门盯这件事（配「点 ＜ 之后确实离开了当前月」作对照组）。
+反向测试：`_verify/_reverse22.js`（R1 = 文案永不写；R2 = `resetToToday` 不再回到今天）。
 
 ---
 

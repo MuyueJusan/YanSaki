@@ -273,6 +273,37 @@ function check(name, actual, pred, expect) {
   await ev('openStEditor()');
   check('重开后卡片还在', await ev(`!!stEditor.card`), true);
 
+  // ── 日历「今日」按钮：**显示当前日** + 点它仍然回到今天 ──────────────────
+  // 这个按钮原来写死「今日」两个字（2026-10-02 改），现在显示当前日（`2日` / `31日`）。
+  // ⚠ 判据必须**现算** `new Date().getDate()`，**不能写死数字** —— 写死的话明天就假红，
+  //   而假红久了就没人看（同族：文档里写死的数字没有断言盯着）。
+  // ⚠ 必须配对照组：只断言「点完回到当前月」，在**本来就在当前月**时永远为真 ⇒
+  //   先点 ＜ 离开当前月、断言「确实离开了」，再点回来。
+  // ⚠ 两处点击都**判空后再点**：元素不在时 `null.click()` 会抛异常 ⇒ 整个套件中断、
+  //   后面的断言一条都不跑、汇总行也不打 —— 「红」会悄悄变成「静默少走」。
+  console.log('== 日历「今日」按钮 ==');
+  const calDay = new Date().getDate();
+  const calDayText = () => ev(`document.getElementById('today-btn') ? document.getElementById('today-btn').textContent : '(无此按钮)'`);
+  check('按钮上显示的是当前日（' + calDay + '日）', await calDayText(), calDay + '日');
+  // 前提：`＜` 在「日」视图下退的是**月**；若视图被切到「月 / 年」，它退的成了年 ⇒
+  // 下面那条对照会**假红**（红的是前提，不是产品）。所以先把前提摆出来。
+  check('前提：日历处于「日」视图',
+    await ev(`(typeof currentMode === 'string') ? currentMode : '(取不到)'`), 'day');
+
+  const calMonth = () => ev(`document.getElementById('title-month').textContent`);
+  const calNowMonth = await calMonth();
+  await ev(`(function(){ const b = document.querySelector('#calendar-card .cal-btn[onclick="handlePrev()"]'); if (b) b.click(); return !!b; })()`);
+  await sleep(500);
+  const calPrevMonth = await calMonth();
+  check('对照组：点 ＜ 之后确实离开了当前月（' + calNowMonth + ' → ' + calPrevMonth + '）',
+    calPrevMonth !== calNowMonth, true);
+  // 「不该发生」的另一半：翻月**不该**动到按钮上那个日子 —— 它永远是今天，跟浏览到哪个月无关。
+  // （只断言「点完能回本月」的话，一个「跟着 viewMonth 走」的实现照样能绿。）
+  check('对照组：翻月之后按钮上的日子没变（仍是 ' + calDay + '日）', await calDayText(), calDay + '日');
+  await ev(`(function(){ const b = document.getElementById('today-btn'); if (b) b.click(); return !!b; })()`);
+  await sleep(500);
+  check('点「今日」回到当前月（' + calNowMonth + '）', await calMonth(), calNowMonth);
+
   // ── 手机比例下的入口菜单 ──────────────────────────────────────────────
   // 窄屏 / 极扁窗口下，`#ai-card` 与 `#st-card` 被 CSS 收起，改由左上角一个按钮呼出。
   // ⚠ 最要命的一条是「**全屏时 `display` 不能是 none**」：放大态就是给 `#ai-card` 加
