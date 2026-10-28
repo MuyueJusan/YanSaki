@@ -1878,6 +1878,38 @@ AI Studio 是 `/v1beta/models`；Vertex 按顺序试 ① `v1beta1/publishers/goo
    「已将「<名字>」追加为新的世界书条目（第 N 条）」/「已复制「<名字>」的人设」。
    名字统一走 `stPersonaOutName(out)`（取「姓名:」，取不到回落卡名）——
    四个按钮说的是同一个人。⚠ 两处都没有时**整段省掉**，不印一对空引号（「已将「」写入…」）。
+10. **「参考素材」：从世界书里挑条目喂给生成器**（第三十轮加的）。面板上多一个
+   **折叠块**「参考素材（世界书）」，两路来源**同构**：
+   - `'card'` —— 本卡世界书 `card.bookEntries`；
+   - `'imp'` —— 用户**额外导入**的那一本（`stEditor.personaLore`），
+     **只喂这一次生成、一个字都不进卡**。
+   勾中的条目会被 `stPersonaLoreBlock()` 折成一段塞进 `stPersonaUserPrompt()`，
+   位置在「用户的要求」和「模板」之间 —— 它跟要求一样是**输入**，而模板是**输出的形状**。
+   - ⚠⚠ **导入绝不写进 `card.bookEntries`。** 「额外导入」的全部意义就是「手上有一份书，
+     但不想把它塞进这张卡」；顺手 `push` 进去就等于**偷偷改卡**，而用户点的是
+     「导入来生成角色」。`_reverse24.js` 的 R2 专门钉这一条（它只让一个断言红，因为
+     这个承诺本来就只有一个断言盯着）。
+   - ⚠ **勾选键带来源前缀**（`'card:<id>'` / `'imp:<id>'`），不带下标 —— 下标会被世界书页的
+     增删挪走。前缀是因为两边的 `id` 各自独立生成（导入的是 `'e0' 'e1'…`），裸 id 会撞。
+   - ⚠⚠ **「已选 N 条」里的 N 必须是「能喂进去的」N，不是 `personaPick.length`。**
+     条目被删之后数组里**还留着那个键**（清理是懒的）⇒ 报长度会显示「已选 3 条」
+     而模型只收到 1 条。`stPersonaPickHintText()` 走 `stPersonaLoreResolve().items.length`。
+     `_reverse24.js` 的 R3 打的就是这个差。
+   - ⚠⚠ **少喂几条必须说出来。** `stPersonaLoreResolve()` 记三个数：`missing`（条目已不存在）/
+     `dropped`（正文为空）/ `truncated`（超出 `ST_PERSONA_LORE_MAX` = 12 000 字预算），
+     生成完的提示会**点名原因**。只说「有 2 条没进去」等于没说 —— 用户既不知道该去哪修，
+     也分不清是自己勾错了还是程序吞了（RULES 六之三十五）。
+     ⚠ 界面上勾着 5 条、模型只看到 3 条，而生成结果看起来**完全正常** —— 这是本功能最容易出的坑。
+   - ⚠ 折叠块**默认收起**（卡内世界书几十条，摊开会把「生成人设」按钮挤出屏幕），
+     列表 `.st-lore-list` 限高 224px 滚动。折叠态记在 `stEditor.personaPickOpen`，不落盘。
+   - ⚠ **勾一下不重绘**（只改状态 + 只改折叠头那行字）—— 重绘会把列表滚动位置弹回顶部，
+     勾第 12 条时特别难受。跟第 4 条「只改 class 不重绘」同一条理由。
+     「全选 / 清空」才重绘（一次动几十个勾选框，逐个写 `.checked` 更容易漏）。
+   - ⚠ 导入 `<input>` 的 `value` **每次都要清空** —— 不清的话同一个文件选第二次
+     不会再触发 `change`（浏览器认为值没变），症状是「导入过一次之后再导入就没反应」。
+   - ⚠ 导入失败（不是世界书 JSON）只报错、**不动已有状态** —— 别把 `personaLore` 写成半截。
+   - ⚠ 换卡 / 新建卡时 `stPersonaPickClear()` 把勾选**和**导入的那本书一起清掉
+     （上一张卡的条目 id 在新卡里一个都不存在）。它挂在 `stBookSelClear()` 旁边。
 
 ### 默认模板
 
@@ -1910,6 +1942,9 @@ AI Studio 是 `/v1beta/models`；Vertex 按顺序试 ① `v1beta1/publishers/goo
 | `personaNameUse` | 要不要把角色卡名字当人物姓名。**默认 `true`**，**不落盘**（见上面第 7 条） |
 | `personaBookRef` | 「追加到世界书」上一次写出的**条目 `id`**。**默认 `null`**，**不落盘**（见上面第 8 条）。存 id 不存下标 |
 | `personaBookAsk` | 非 `null` = 正弹着三选一，值是 `{ name }`。**不落盘**、**从状态渲染**（见上面第 8 条） |
+| `personaLore` | **额外导入**的那本世界书 `{ name, entries }`，`null` = 没导入。⚠ **只喂生成、不进卡**（见上面第 10 条）。**不落盘** |
+| `personaPick` | 勾中的条目键数组，`'card:<id>'` / `'imp:<id>'`。⚠ **带来源前缀、不带下标**；**不落盘**（条目删了之后这里会指向不存在的东西，所以「已选 N 条」只数能解析的） |
+| `personaPickOpen` | 「参考素材」折叠块展开没有。**默认 `false`（收起）**，**不落盘**（见上面第 10 条） |
 | `extractSrc` | 从别的角色卡 / 世界书里读出来的条目，等用户挑。`null` = 还没选过文件。**不落盘**（见 §十八） |
 | `extractSel` | 提取面板的勾选状态，按**索引**记 —— 这批条目的 `id` 要到「导入」那一下才生成。**不落盘** |
 | `extractMsg` | 提取区自己的一条提示 `{text, kind}`。⚠ **不跟 `stEditor.msg` 合并** —— 那条会被 `stPaintMsg` 分给常驻条 |
@@ -1945,6 +1980,17 @@ AI Studio 是 `/v1beta/models`；Vertex 按顺序试 ① `v1beta1/publishers/goo
 | `stPersonaBookStart()` | 「追加到世界书」的入口：上一次那条还在 ⇒ 弹三选一；不在 ⇒ 直接 `stPersonaBookWrite('new')` |
 | `stPersonaBookWrite(action)` | `'new'` 追加为新条目 / `'overwrite'` **只改 content / comment / keys**、条目对象留着（`id` 不变）。写完把 `personaBookRef` 更新成这一条的 `id`、关掉弹窗 |
 | `stPersonaBookAnswer(choice)` | 弹窗三个出口：`'overwrite'` / `'new'` 转给上面那个；**其余（含 `'cancel'`）什么都不做**（记账也不动） |
+| `stPersonaPickKey(src, id)` | 勾选键 `'card:<id>'` / `'imp:<id>'`。**唯一**一处拼这个键 —— 别在别处手拼 |
+| `stPersonaLoreSources()` | 现在能选的全部来源 `[{ src, name, entries }]`。空书不出现在列表里（免得出现一个 0 条的标题）。卡内和导入的两路**同构**，所以下面一套逻辑通吃 |
+| `stPersonaLoreResolve()` | 勾选 → `{ items, missing, dropped, truncated, chars }`。⚠ 后三个数是**必须说出来**的（见上面第 10 条） |
+| `stPersonaLoreBlock()` | 折成提示词里那段 `## 参考素材（世界书条目）`。没有可喂的条目时返回**空串**（调用方据此整段省掉） |
+| `stPersonaPickToggle(box)` | 勾选框。**只改状态 + 只改折叠头那行字，不重绘**（见上面第 10 条） |
+| `stPersonaPickHintText()` / `stPersonaPickHintPaint()` | 折叠头右侧那行字（「已选 N 条 · 约 M 字（另有 K 条没进去）」）。⚠ 数的是**能解析出来的**条数 |
+| `stSyncPersonaPickOpen()` / `stPersonaPickFoldToggle()` | 折叠态写进 DOM 的唯一一处 + 点一下切换（跟 `stSyncPersonaTplOpen` 同一个形状） |
+| `stPersonaPickAll(on)` | 全选 / 清空。**重绘**（一次动几十个勾选框） |
+| `stPersonaLorePick()` / `stPersonaLoreFilePicked(ev)` | 点隐藏 `<input>` / 读文件 → `parseWorldBook` → 存进 `stEditor.personaLore`。⚠ 跟聊天区的 `onLoreFilePicked` **是两回事**：那个会写 `aiConfig.tavernLore` 并进酒馆模式 |
+| `stPersonaLoreDrop()` | 移除导入的那本，**连带清掉 `imp:` 勾选**（不清的话折叠头会一直报「另有 N 条没进去」，而那 N 条已经无从勾掉） |
+| `stPersonaPickClear()` | 换卡 / 新建卡时清掉勾选 + 导入的书。挂在 `stBookSelClear()` 旁边 |
 | `stPersonaCopy()` | `navigator.clipboard`，失败退回 `textarea` + `execCommand` |
 | `stPanePersona()` | 面板本身 |
 
@@ -1959,6 +2005,21 @@ AI Studio 是 `/v1beta/models`；Vertex 按顺序试 ① `v1beta1/publishers/goo
 
 折叠那一组：`st-persona-tpl-fold`（外层，挂 `.st-fold` / `.st-fold-open`）/
 `st-persona-tpl-toggle`（折叠头，带 `aria-expanded`）/ `st-persona-tpl-body`（被折叠的网格）。
+
+参考素材那一组（第三十轮）：`st-persona-pick-fold`（外层，同样挂 `.st-fold` / `.st-fold-open`）/
+`st-persona-pick-toggle`（折叠头）/ `st-persona-pick-body`（被折叠的网格）/
+`st-persona-pick-hint`（折叠头右侧那行字，由 `stPersonaPickHintPaint()` 刷）/
+`st-persona-lore-import`（「📖 导入世界书 JSON」按钮）/ `st-persona-lore-file`
+（隐藏 `<input type="file">`，`.ai-hidden-file`）。列表容器 `.st-lore-list`（限高 224px 滚动），
+每条一个 `label.st-check`，里面的勾选框带 `data-key`。
+⚠ 那个 `<input>` 在面板里，`stRerender()` 会重建它 ⇒ **一律按 id 现取，别缓存节点**。
+
+`st-persona-empty`（**结果区的空态**，第三十轮加的）—— ⚠ 加它是因为人设页里现在有
+**第二个** `.st-empty`（「参考素材」里「这张卡还没有世界书条目」那句），
+`persona-verify.js` 原来用 `querySelector('#st-panes .st-empty')` 会先命中新的那个，
+报出三条**假红**（看着像产品坏了，其实是断言挑错了元素 —— RULES 六之六十三）。
+同理，那段里「状态提示排在按钮行前面」原来用 `pane.querySelector('.st-actions')` 取**第一个**
+按钮行，现在第一个是「参考素材」的工具栏 ⇒ 改成从 `#st-persona-run` 往上 `closest('.st-actions')`。
 
 三选一弹窗那一组（**只在 `personaBookAsk` 非 `null` 时才渲染**）：
 `st-persona-book-ask`（`position: fixed` 的整屏遮罩）/ `st-persona-book-ask-title`（标题）/
@@ -1976,6 +2037,19 @@ AI Studio 是 `/v1beta/models`；Vertex 按顺序试 ① `v1beta1/publishers/goo
 
 生成完那条提示会报 **「模板 N 项里对上了 M 项」**，漏项时是 `warn` 并说出漏了几项 ——
 跟预制块那边报「几条路径对得上」同一个口径：**只说「成功」的话，模型悄悄改写了标题用户是看不见的**。
+
+**用户提示词**是四段，顺序有讲究：`用户的要求：…` → `## 这张卡的现状（跟它保持一致，别冲突）`
+（开关打开、且卡里有名字时才有）→ `## 参考素材（世界书条目）`（勾了条目才有）→
+`## 模板（照它的结构逐项填）`。
+
+⚠ 参考素材排在模板**前面**：它跟要求一样是**输入**，而模板是**输出的形状** —— 先给料，再给表格。
+⚠ 那一段里明确写了「当成这个世界的**既有事实**，人设要跟它一致；但**不要照抄原文**，
+也**不要在人设里提「世界书」这三个字**」—— 不提最后那句，模型很容易写出一句
+「根据世界书设定，……」放进人设里。
+
+生成完的提示还会带上 **「参考素材 N 条（M 字）」**，有没进去的再加一句
+「另有 K 条参考素材没进去：…… 条已不存在 / …… 条正文为空 / …… 条超出 12000 字预算」
+（见上面第 10 条）。
 
 ---
 

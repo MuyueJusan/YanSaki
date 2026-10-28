@@ -391,8 +391,12 @@ window.fetch = async function (url, init) {
     check('还没生成 ⇒ 没有「写入」按钮', await ev(`!!document.getElementById('st-persona-write')`), false);
     check('还没生成 ⇒ 没有「追加」按钮', await ev(`!!document.getElementById('st-persona-append')`), false);
     check('还没生成 ⇒ 没有「复制」按钮', await ev(`!!document.getElementById('st-persona-copy')`), false);
+    // ⚠ 按 **id** 找，不用 `#st-panes .st-empty` —— 第二十九轮加了「参考素材」之后，
+    //   人设页里出现了**第二个** `.st-empty`（卡里还没有世界书时那句提示），
+    //   `querySelector` 会先命中它，于是这条断言报「产品坏了」，其实只是挑错了元素
+    //   （六之六十三：下标 / 首个匹配都是假设，先加结构锚点）
     check('空态说了「还没有生成结果」',
-      await ev(`(function(){ const e = document.querySelector('#st-panes .st-empty');
+      await ev(`(function(){ const e = document.getElementById('st-persona-empty');
         return e ? e.textContent : ''; })()`), v => /还没有生成结果/.test(v), '含「还没有生成结果」');
     await shot('persona-01-pane.png');
 
@@ -488,7 +492,12 @@ window.fetch = async function (url, init) {
       const box = document.getElementById('st-persona-tpl-fold');
       const st = document.getElementById('st-persona-ai-status');
       const pane = box.closest('.st-pane');
-      const act = pane.querySelector('.st-actions');
+      // ⚠ 别写 pane.querySelector('.st-actions') —— 那是**第一个**按钮行。
+      //   第二十九轮加了「参考素材」之后，人设页里多了一个按钮行（导入 / 全选 / 清空），
+      //   它排在模板**前面**，于是这条断言会拿「参考素材」的按钮行去比，报假红。
+      //   从「生成人设」按钮往上找，锚在**真正那一行**上
+      const run = document.getElementById('st-persona-run');
+      const act = run ? run.closest('.st-actions') : null;
       const all = [...document.querySelectorAll('#st-panes *')];
       return { fold: all.indexOf(box), status: all.indexOf(st), act: all.indexOf(act) };
     })()`);
@@ -498,6 +507,9 @@ window.fetch = async function (url, init) {
     //   任何 status 都「大于」它 ⇒ 主断言天然成立。所以对照要盯**两个节点都在表里**。
     check('（对照）两个节点都在顺序表里找到了（否则 indexOf 的 -1 会让上一条天然成立）',
       order.fold >= 0 && order.status >= 0, true);
+    // 同一个 -1 陷阱的第三面：`act` 找不到时是 -1，`status < -1` 恒假 ⇒ 下面那条会红，
+    // 但红的是「没找到」而不是「顺序不对」。单独一条把这两种红分开
+    check('（对照）按钮行也在顺序表里找到了', order.act >= 0, true);
     check('状态提示排在按钮行前面', order.status < order.act, true);
 
     // ============ C3. 工作状态贴着「生成人设」按钮（第十三轮）============
@@ -738,7 +750,7 @@ window.fetch = async function (url, init) {
     check('三个按钮都出来了',
       await ev(`['st-persona-write','st-persona-append','st-persona-copy']
         .every(id => !!document.getElementById(id))`), true);
-    check('空态没了', await ev(`!!document.querySelector('#st-panes .st-empty')`), false);
+    check('空态没了', await ev(`!!document.getElementById('st-persona-empty')`), false);
     check('提示说「对上了 3 项」', await msgText(), v => /对上了 3 项/.test(v), '含「对上了 3 项」');
     check('全中 ⇒ 提示是 ok（不是 warn）', await msgKind(), '');
     check('小标题报了几字符 + 对上几项',
@@ -1313,6 +1325,197 @@ window.fetch = async function (url, init) {
     check('模型回寒暄也不崩，原样收下（不做「智能」清洗）', await out(), '好的，这是人设。');
     check('提示照样是 warn（模板一项都没对上）', await msgKind(), 'warn');
     check('而且说出了几项没出现', await msgText(), v => /没出现/.test(v), '含「没出现」');
+
+    // ============ L. 参考素材（世界书）============
+    // 需求：「能够选择当前世界书某一条目(某些条目)来进行角色生成，或者额外导入世界书来生成角色」
+    //
+    // ⚠ 这一段的对照组是**另一条正文**，不是「没有正文」：只断言「勾中的进去了」的话，
+    //   一个「把整本世界书全塞进去」的实现照样全绿 —— 而那样勾选就没意义了。
+    section('L. 参考素材：勾本卡条目 / 额外导入世界书（第三十轮）');
+
+    const LORE_A = '雾港常年有雾，城里没有白天。';
+    const LORE_B = '雾港的居民不能说出自己的真名。';
+    const LORE_C = '灯塔每晚会亮三次。';
+    const LORE_D = '潮水一天退两次，退潮时能走到礁石。';
+
+    // 造三条已知条目，**id 写死**（后面按 id 拼勾选键，不按下标）
+    await ev(`(function(){
+      const mk = function(cm, body, keys) {
+        const e = stBlankEntry();
+        e.id = 'LB-' + cm;
+        e.comment = cm; e.content = body; e.keys = keys || [];
+        e.enabled = true;
+        return e;
+      };
+      const c = stEditor.card;
+      c.bookEntries = [
+        mk('雾港', ${JSON.stringify(LORE_A)}, ['雾港']),
+        mk('真名', ${JSON.stringify(LORE_B)}, ['真名']),
+        mk('空条', '', [])
+      ];
+      stEditor.personaPick = [];
+      stEditor.personaLore = null;
+      stEditor.personaPickOpen = false;
+      stRerender();
+      return c.bookEntries.length;
+    })()`);
+    await sleep(250);
+
+    check('参考素材的折叠块在', await ev(`!!document.getElementById('st-persona-pick-fold')`), true);
+    check('默认是收起的（卡内世界书几十条，摊开会把生成按钮挤下去）',
+      await ev(`document.getElementById('st-persona-pick-fold').classList.contains('st-fold-open')`), false);
+    check('收起时折叠头就报「未选」',
+      await ev(`document.getElementById('st-persona-pick-hint').textContent`),
+      v => /未选/.test(v), '含「未选」');
+
+    // 展开走**真按钮**
+    await ev(`document.getElementById('st-persona-pick-toggle').click()`);
+    await sleep(250);
+    check('点折叠头展开', await ev(`document.getElementById('st-persona-pick-fold').classList.contains('st-fold-open')`), true);
+    check('本卡的 3 条条目都列出来了',
+      await ev(`document.querySelectorAll('#st-persona-pick-body .st-lore-list .st-check').length`), 3);
+    await shot('persona-lore-list.png');
+
+    // 勾第一条（走真 click ⇒ 浏览器自己派发 change）
+    await ev(`document.querySelector('#st-persona-pick-body .st-lore-list .st-check input').click()`);
+    await sleep(150);
+    check('勾一条 ⇒ 状态里记的是带 card: 前缀的键',
+      await ev(`stEditor.personaPick`),
+      v => Array.isArray(v) && v.length === 1 && /^card:/.test(v[0]), '1 条且以 card: 开头');
+    check('勾一条 ⇒ 折叠头的计数跟着变（不重绘也要变）',
+      await ev(`document.getElementById('st-persona-pick-hint').textContent`),
+      v => /已选 1 条/.test(v), '含「已选 1 条」');
+
+    // —— 主断言：勾中的正文真的进了提示词 ——
+    const prompt1 = await ev(`stPersonaUserPrompt('随便写', '姓名:')`);
+    check('勾中的条目正文进了提示词', prompt1, v => v.indexOf(LORE_A) >= 0, '含「' + LORE_A + '」');
+    // ⚠ 对照组必须是**另一条真实正文** —— 同一条串会两条路径读同一个值
+    check('（对照）没勾的那条**不在**提示词里', prompt1, v => v.indexOf(LORE_B) < 0, '不含「' + LORE_B + '」');
+
+    // 再勾第二条
+    await ev(`(function(){
+      const b = document.querySelectorAll('#st-persona-pick-body .st-lore-list .st-check input');
+      b[1].click(); return true; })()`);
+    await sleep(150);
+    const prompt2 = await ev(`stPersonaUserPrompt('随便写', '姓名:')`);
+    check('再勾一条 ⇒ 两条都在提示词里',
+      prompt2, v => v.indexOf(LORE_A) >= 0 && v.indexOf(LORE_B) >= 0, '两句都在');
+
+    // 正文为空的那条：要算进「没进去」，而不是塞一个空标题
+    await ev(`(function(){
+      const b = document.querySelectorAll('#st-persona-pick-body .st-lore-list .st-check input');
+      b[2].click(); return true; })()`);
+    await sleep(150);
+    const lr = await ev(`stPersonaLoreResolve()`);
+    check('正文为空的条目算进 dropped（不硬塞空文本）', lr && lr.dropped, 1);
+    check('而且提示词里只多了 2 个小标题（空那条没生成标题）',
+      await ev(`stPersonaUserPrompt('随便写', '姓名:')`),
+      v => (v.match(/^### /gm) || []).length === 2, '2 个');
+
+    // 生成一次，看报告里有没有把「喂了几条 / 几条没进去」说出来
+    await typeIn('st-persona-req', '写个雾港的居民');
+    await script({ reply: '姓名: 雾行者\n背景故事: 住在雾港。', fail: '' });
+    await gen();
+    check('生成结果的提示里报了「参考素材 2 条」',
+      await msgText(), v => /参考素材 2 条/.test(v), '含「参考素材 2 条」');
+    check('并且点名了那 1 条为什么没进去（正文为空）',
+      await msgText(), v => /正文为空/.test(v), '含「正文为空」');
+    check('有东西没进去 ⇒ 提示降成 warn（不假装全成功）', await msgKind(), 'warn');
+
+    // ⚠ 「已选 N 条」必须等于**会喂进去的** N，不是 `personaPick` 的长度 ——
+    //   条目被删之后数组里还留着那个键（清理是懒的），直接报长度会显示「已选 3 条」
+    //   而模型只收到 1 条。这条盯的就是那个差
+    await ev(`(function(){
+      const c = stEditor.card;
+      c.bookEntries = c.bookEntries.filter(e => e.comment !== '真名');
+      stRerender();
+      return c.bookEntries.length;
+    })()`);
+    await sleep(250);
+    check('删掉一条已勾的条目 ⇒ 折叠头只数能喂进去的（不数数组长度）',
+      await ev(`document.getElementById('st-persona-pick-hint').textContent`),
+      v => /已选 1 条/.test(v), '含「已选 1 条」');
+
+    // —— 额外导入一本世界书（走真 <input> + DataTransfer，不是直接调函数）——
+    const IMPORT_JSON = JSON.stringify({
+      name: '导入测试书',
+      entries: [
+        { uid: 1, comment: '灯塔', content: LORE_C, key: ['灯塔'], keysecondary: [] },
+        { uid: 2, comment: '潮汐', content: LORE_D, key: ['潮汐'], keysecondary: [] }
+      ]
+    });
+    const beforeLen = await ev(`stEditor.card.bookEntries.length`);
+    await ev(`(function(){
+      const el = document.getElementById('st-persona-lore-file');
+      const dt = new DataTransfer();
+      dt.items.add(new File([${JSON.stringify(IMPORT_JSON)}], '导入测试书.json',
+        { type: 'application/json' }));
+      el.files = dt.files;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return true; })()`);
+    await waitFor(`!!stEditor.personaLore`, 8000);
+    check('导入之后那本书进了会话状态',
+      await ev(`stEditor.personaLore && stEditor.personaLore.name`), '导入测试书');
+    check('导入的条目数对', await ev(`stEditor.personaLore.entries.length`), 2);
+    // ⚠ 这条是「额外导入」的**定义**：它不进卡。只测「能导入」的话，
+    //   一个顺手 push 进 bookEntries 的实现也绿，而那正是用户不想要的
+    check('⚠ 卡内世界书**一条都没多**（导入不写卡）',
+      await ev(`stEditor.card.bookEntries.length`), beforeLen);
+    check('导入之后列表里变成两个来源',
+      await ev(`document.querySelectorAll('#st-persona-pick-body .st-lore-list').length`), 2);
+    // 复古皮肤下的样子 —— 颜色没有断言盯着（六之八十五），留一张图给人看
+    await ev(`document.body.classList.add('retro-mode')`);
+    await sleep(500);
+    await shot('persona-lore-retro.png');
+    await ev(`document.body.classList.remove('retro-mode')`);
+    await sleep(500);
+
+    // 勾一条导入的条目
+    await ev(`(function(){
+      const ls = document.querySelectorAll('#st-persona-pick-body .st-lore-list');
+      ls[ls.length - 1].querySelector('.st-check input').click();
+      return true; })()`);
+    await sleep(150);
+    check('导入条目的勾选键带 imp: 前缀',
+      await ev(`stEditor.personaPick`), v => Array.isArray(v) && v.some(k => /^imp:/.test(k)),
+      '有 imp: 开头的键');
+    const prompt3 = await ev(`stPersonaUserPrompt('随便写', '姓名:')`);
+    check('导入条目的正文也进了提示词', prompt3, v => v.indexOf(LORE_C) >= 0, '含「' + LORE_C + '」');
+    check('（对照）导入书里**没勾**的那条不在提示词里',
+      prompt3, v => v.indexOf(LORE_D) < 0, '不含「' + LORE_D + '」');
+
+    // 移除导入的书
+    const pickBefore = await ev(`stEditor.personaPick.length`);
+    await ev(`stPersonaLoreDrop()`);
+    await sleep(250);
+    check('移除导入的书 ⇒ 会话状态清空', await ev(`stEditor.personaLore`), null);
+    check('移除时连带清掉 imp: 勾选',
+      await ev(`stEditor.personaPick`),
+      v => Array.isArray(v) && v.length === pickBefore - 1 && v.every(k => /^card:/.test(k)),
+      '只剩 card: 的 ' + (pickBefore - 1) + ' 条');
+
+    // 导入一个不是世界书的东西 ⇒ 报错、状态别写坏
+    await ev(`(function(){
+      const el = document.getElementById('st-persona-lore-file');
+      const dt = new DataTransfer();
+      dt.items.add(new File(['{"nope":1}'], '坏书.json', { type: 'application/json' }));
+      el.files = dt.files;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return true; })()`);
+    await sleep(600);
+    check('导入非世界书 ⇒ 报「世界书读取失败」',
+      await msgText(), v => /世界书读取失败/.test(v), '含「世界书读取失败」');
+    check('导入失败不会留下半截状态', await ev(`stEditor.personaLore`), null);
+
+    // 换卡要清干净（上一张卡勾的 id 在新卡里一个都不存在）
+    check('新建卡会清掉勾选和导入的书', await ev(`(function(){
+      stNewCard(false);
+      return JSON.stringify({ pick: stEditor.personaPick, lore: stEditor.personaLore });
+    })()`), v => v === '{"pick":[],"lore":null}', '[] / null');
+
+    // ⚠ 本段为了跑生成，把「需求」改成了「写个雾港的居民」。K 段要检查的还是原来那句，
+    //   所以这里**还回去** —— 否则 K 会红，而红的是本段的副作用，不是产品
+    await ev(`stPersonaReqSet(${JSON.stringify(REQ)})`);
 
     // ============ K. 收尾 ============
     section('K. 收尾零报错');
