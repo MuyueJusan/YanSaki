@@ -3977,6 +3977,79 @@
             color: #33546b;
         }
 
+        /* —— 世界书的搜索与筛选 ——
+           跟 .st-batch 同一副长相（同一块浅蓝卡片里），只是它排在批量栏上面。
+           ⚠ 被筛掉的条目用 .st-entry-hide 藏起来，**不是从 DOM 里删掉** ——
+             卡片里有输入框，重建节点会让正在编辑的那条丢光标。 */
+        .st-find {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 7px 9px;
+            margin-bottom: 8px;
+            border: 1px solid rgba(120, 150, 180, 0.45);
+            border-radius: 9px;
+            background: rgba(238, 246, 253, 0.85);
+        }
+
+        .st-find-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 搜索框吃掉一行里剩下的宽度，但窄屏下要能缩，否则会把「重置」挤出去 */
+        .st-find-q {
+            flex: 1 1 160px;
+            min-width: 0;
+            font-family: inherit;
+            font-size: 0.82rem;
+            color: #1a2b3c;
+            background: #ffffff;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            border-radius: 8px;
+            padding: 6px 9px;
+            outline: none;
+            user-select: text;
+            text-shadow: none;
+        }
+
+        .st-find-q:focus {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.18);
+        }
+
+        .st-find-row select {
+            font-family: inherit;
+            font-size: 0.76rem;
+            color: #1a2b3c;
+            background: #ffffff;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            border-radius: 8px;
+            padding: 5px 7px;
+            outline: none;
+            max-width: 100%;
+        }
+
+        .st-find-info {
+            font-size: 0.74rem;
+            color: #33546b;
+            white-space: nowrap;
+        }
+
+        /* 被筛掉的条目。用 !important 是因为 `.st-entry` 本身有 display 相关规则，
+           光加 hidden 属性会被同权重的东西盖掉（这个坑踩过，见 [hidden] 那条兜底） */
+        .st-entry-hide { display: none !important; }
+
+        /* 「筛出来一条都没有」的提示。⚠ 故意**不复用 .st-empty**：
+           那是个「首个匹配」型选择器，多一个实例会让别人的断言挑错元素 */
+        .st-find-empty {
+            font-size: 0.78rem;
+            color: #5b7488;
+            padding: 10px 0;
+        }
+
         /* 关键词标签（世界书条目的 keys / secondary_keys）。
            长得像社交软件里的标签：一个词一个圆角矩形，回车落一个、点 × 删一个。
            外框照抄 .st-field input 那副长相（边框 / 圆角 / 内边距），
@@ -4476,6 +4549,24 @@
             border-color: #808080;
             background: #ffffff;
         }
+
+        /* 搜索筛选栏照抄同一套：方角、Win98 灰边框、纯白底 */
+        body.retro-mode .st-find {
+            border-radius: 0;
+            border-color: #808080;
+            background: #ffffff;
+        }
+
+        body.retro-mode .st-find-q,
+        body.retro-mode .st-find-row select {
+            border-radius: 0;
+            border-color: #808080;
+            background: #ffffff;
+            color: #000000;
+        }
+
+        body.retro-mode .st-find-info,
+        body.retro-mode .st-find-empty { color: #000000; }
 
         body.retro-mode .st-sel-box { accent-color: #000080; }
 
@@ -16744,6 +16835,13 @@
             //   这边条目早就在卡里了，id 是稳的。
             // ⚠ 会话级界面状态：不落盘、不进卡、不进任何导出的 JSON
             bookSel: [],
+            // —— 世界书的搜索与筛选 ——
+            // ⚠ 也是**会话级界面状态**：不落盘、不进卡、不出现在任何导出的 JSON 里。
+            //   落盘的话下次打开会莫名其妙只剩几条，用户以为条目丢了。
+            // ⚠ 筛选**只影响显示**，不改 `bookEntries` 的顺序、不改下标 ——
+            //   卡片是按 index 寻址的（`st-entry-<i>` / `stDupEntry(i)` / `stMoveEntry(i)`），
+            //   筛完重排会让「复制」「上移」作用到另一条上。
+            bookFind: { q: '', state: 'all', constant: 'all', pos: 'all', keys: 'all' },
             // ⚠ **「这一次点导入是干嘛的」故意不放在这里**，放在 `<input>` 的
             //   `dataset.mode` 上。理由：用户点了「提取条目」又**在文件框里点取消**时，
             //   `change` 事件**根本不触发** ⇒ 存在 stEditor 上的模式**没有机会被清掉**，
@@ -25452,6 +25550,9 @@
             const c = stEditor.card;
             const entries = c.bookEntries;
             const on = entries.filter(e => e.enabled).length;
+            // 命中集只算一次：条目多的时候每条都算一遍关键词匹配会明显卡
+            const hitSet = new Set(stBookFindIdx(entries));
+            const noHit = entries.length > 0 && stBookFindActive() && hitSet.size === 0;
             return stPaneHead('📖 世界书',
                 '卡内世界书 <code>character_book</code>。这里写好的条目会跟着卡一起导出，' +
                 '酒馆模式导入这张卡时会自动读进来。条目的字段和 SillyTavern 的世界书编辑器一一对应。') +
@@ -25466,9 +25567,16 @@
                     }) +
                 '</div>' +
                 '<div class="st-sub">条目（' + entries.length + ' 条 · 启用 ' + on + ' 条）</div>' +
+                (entries.length ? stBookFindBar(entries) : '') +
                 (entries.length ? stBookBatchBar(entries) : '') +
                 (entries.length
-                    ? entries.map((e, i) => stEntryHtml(e, i)).join('')
+                    ? entries.map((e, i) => stEntryHtml(e, i, !hitSet.has(i))).join('') +
+                      // ⚠ 独立的 class + id，**不复用 .st-empty**：那是个「首个匹配」
+                      //   型选择器，多一个实例会让别处的断言挑错元素
+                      '<div class="st-find-empty" id="st-book-find-empty"' +
+                          (noHit ? '' : ' hidden') + '>' +
+                          '没有匹配的条目（共 ' + entries.length + ' 条被筛掉）。' +
+                          '换个词，或者点上面的「重置」。</div>'
                     : '<div class="st-empty">还没有条目。点下面的「✚ 添加条目」。</div>') +
                 '<div class="st-actions">' +
                     '<button class="st-big" type="button" onclick="stAddEntry()">✚ 添加条目</button>' +
@@ -25479,7 +25587,7 @@
                 '</div>';
         }
 
-        function stEntryHtml(e, i) {
+        function stEntryHtml(e, i, hide) {
             const p = 'card.bookEntries[' + i + ']';
             const keys = e.keys.join('、');
             const sum = '<span class="st-chip' + (e.enabled ? ' st-on' : '') + '">' +
@@ -25497,7 +25605,8 @@
                 (stBookSelIds().has(e.id) ? ' checked' : '') +
                 ' onclick="event.stopPropagation()"' +
                 ' onchange="stBookSelToggle(this)" title="选中这一条">';
-            return '<details class="st-entry' + (e.enabled ? '' : ' st-entry-off') + '" id="st-entry-' + i + '">' +
+            return '<details class="st-entry' + (e.enabled ? '' : ' st-entry-off') +
+                (hide ? ' st-entry-hide' : '') + '" id="st-entry-' + i + '">' +
                 '<summary>' + box + sum + '</summary>' +
                 '<div class="st-entry-body">' +
                     stAiEntryPanel(e, i) +
@@ -29038,6 +29147,132 @@
             stRerender();
         }
 
+        // ===== 世界书搜索与筛选 =====
+        //
+        // ⚠⚠ 这个功能**只改显示，不改数据**：
+        //   · 不重排 `bookEntries`、不改下标 —— 卡片是按 index 寻址的
+        //     （`st-entry-<i>`、`stDupEntry(i)`、`stMoveEntry(i)`、`stDelEntry(i)`），
+        //     筛完重排会让这些操作作用到**另一条**上，而且不会有任何报错。
+        //   · 不删 DOM 节点 —— 被筛掉的卡片只是加了 `.st-entry-hide`。
+        //     卡片里有输入框，重建节点会让正在编辑的那条丢光标、丢展开状态。
+        //
+        // ⚠ 状态是**会话级**的（`stEditor.bookFind`），跟 bookSel 同类：不落盘、不进卡。
+
+        const ST_BOOK_FIND_DEF = { q: '', state: 'all', constant: 'all', pos: 'all', keys: 'all' };
+
+        // 读归一化之后的筛选条件。⚠ 老草稿 / 新卡里可能没有这个字段，
+        //   直接 `stEditor.bookFind.q` 会在那种时候抛异常 —— 一律走这里
+        function stBookFind() {
+            const raw = (stEditor && stEditor.bookFind) || {};
+            const out = {};
+            for (const k in ST_BOOK_FIND_DEF) {
+                out[k] = (typeof raw[k] === 'string') ? raw[k] : ST_BOOK_FIND_DEF[k];
+            }
+            return out;
+        }
+
+        function stBookFindActive(f) {
+            f = f || stBookFind();
+            return !!(f.q || f.state !== 'all' || f.constant !== 'all' ||
+                f.pos !== 'all' || f.keys !== 'all');
+        }
+
+        // 一条条目命中不命中。⚠ 关键词**不只看 keys**：
+        //   用户搜「雾港」时心里想的是「哪条跟雾港有关」，正文里提到也算
+        function stBookFindMatch(e, f) {
+            if (!e) return false;
+            f = f || stBookFind();
+            if (f.state === 'on' && !e.enabled) return false;
+            if (f.state === 'off' && e.enabled) return false;
+            if (f.constant === 'yes' && !e.constant) return false;
+            if (f.constant === 'no' && e.constant) return false;
+            if (f.pos !== 'all' && String(e.position) !== f.pos) return false;
+            const nk = Array.isArray(e.keys) ? e.keys.length : 0;
+            if (f.keys === 'has' && nk === 0) return false;
+            if (f.keys === 'none' && nk > 0) return false;
+            const q = String(f.q || '').trim().toLowerCase();
+            if (q) {
+                const hay = [
+                    e.comment || '',
+                    Array.isArray(e.keys) ? e.keys.join(' ') : '',
+                    Array.isArray(e.secondaryKeys) ? e.secondaryKeys.join(' ') : '',
+                    e.content || '',
+                    e.group || ''
+                ].join('\n').toLowerCase();
+                if (hay.indexOf(q) < 0) return false;
+            }
+            return true;
+        }
+
+        // 命中的**原始下标**（升序）。⚠ 返回的是下标，不是筛完之后的序号 ——
+        //   调用方拿它去 `bookEntries[i]` 才是同一条
+        function stBookFindIdx(entries) {
+            const a = entries || ((stEditor.card && Array.isArray(stEditor.card.bookEntries))
+                ? stEditor.card.bookEntries : []);
+            const f = stBookFind();
+            const out = [];
+            a.forEach((e, i) => { if (stBookFindMatch(e, f)) out.push(i); });
+            return out;
+        }
+
+        // 改一个筛选条件。⚠ **不重画整页**：搜索框每敲一个字都重画的话，
+        //   正在编辑的卡片会被换掉（光标飞、展开状态丢）
+        function stBookFindSet(key, val) {
+            if (!(key in ST_BOOK_FIND_DEF)) return;
+            const f = stBookFind();
+            f[key] = String(val);
+            stEditor.bookFind = f;
+            stBookFindApply();
+        }
+
+        function stBookFindReset() {
+            stEditor.bookFind = Object.assign({}, ST_BOOK_FIND_DEF);
+            // ⚠ 控件自己的值也要退回去 —— 只改状态不重画的话，
+            //   输入框和下拉框还显示着旧的筛选条件，看起来像「点了没反应」
+            const q = document.getElementById('st-find-q');
+            if (q) q.value = '';
+            [['state', 'st-find-state'], ['constant', 'st-find-const'],
+             ['pos', 'st-find-pos'], ['keys', 'st-find-keys']].forEach(pair => {
+                const el = document.getElementById(pair[1]);
+                if (el) el.value = 'all';
+            });
+            stBookFindApply();
+        }
+
+        // 只切隐藏类 + 改计数，不碰卡片本身
+        function stBookFindApply() {
+            const a = (stEditor.card && Array.isArray(stEditor.card.bookEntries))
+                ? stEditor.card.bookEntries : [];
+            const hit = new Set(stBookFindIdx(a));
+            document.querySelectorAll('#st-panes .st-entry').forEach(d => {
+                const m = /^st-entry-(\d+)$/.exec(d.id || '');
+                if (!m) return;
+                d.classList.toggle('st-entry-hide', !hit.has(Number(m[1])));
+            });
+            stBookFindPaint();
+        }
+
+        // 改「命中 N / 共 M 条」、「重置」的可用态、以及空态那块
+        function stBookFindPaint() {
+            const a = (stEditor.card && Array.isArray(stEditor.card.bookEntries))
+                ? stEditor.card.bookEntries : [];
+            const f = stBookFind();
+            const act = stBookFindActive(f);
+            const hit = stBookFindIdx(a);
+            const info = document.getElementById('st-find-info');
+            if (info) {
+                info.textContent = act
+                    ? '命中 ' + hit.length + ' / 共 ' + a.length + ' 条'
+                    : '共 ' + a.length + ' 条';
+            }
+            const rb = document.getElementById('st-find-reset');
+            if (rb) rb.disabled = !act;
+            const emp = document.getElementById('st-book-find-empty');
+            if (emp) emp.hidden = !(act && a.length > 0 && hit.length === 0);
+            // 「全选」的勾选态 / 半选态跟着**可见集**变，不能还按全集算
+            stBookSelPaint();
+        }
+
         // ===== 世界书多选管理 =====
         //
         // 选中状态按**条目 id** 记，不按下标 —— 下标在增删 / 上下移动之后就失效了，
@@ -29084,16 +29319,27 @@
             stBookSelPaint();
         }
 
+        // ⚠⚠ 筛选生效时，「全选」只选**看得见的那些**。
+        //   全选把看不见的也勾上的话，接下来一次「批量删除」就会删掉
+        //   用户根本没在屏幕上见过的条目 —— 而确认框只报个数，救不回来。
+        //   筛选关掉时 vis === 全集，行为跟以前一模一样。
         function stBookSelAll(on) {
             const a = stEditor.card ? stEditor.card.bookEntries : [];
-            stBookSelPut(new Set(on ? a.map(e => e.id) : []));
+            const vis = stBookFindIdx(a).map(i => a[i].id);
+            const set = stBookSelIds();
+            if (on) vis.forEach(id => set.add(id));
+            else vis.forEach(id => set.delete(id));
+            stBookSelPut(set);
             stBookSelPaint();
         }
 
+        // 反选同理：只在可见集里翻，看不见的那些保持原样
         function stBookSelInvert() {
             const a = stEditor.card ? stEditor.card.bookEntries : [];
+            const vis = stBookFindIdx(a).map(i => a[i].id);
             const set = stBookSelIds();
-            stBookSelPut(new Set(a.filter(e => !set.has(e.id)).map(e => e.id)));
+            vis.forEach(id => { if (set.has(id)) set.delete(id); else set.add(id); });
+            stBookSelPut(set);
             stBookSelPaint();
         }
 
@@ -29107,15 +29353,29 @@
             document.querySelectorAll('#st-panes .st-sel-box').forEach(box => {
                 box.checked = set.has(box.getAttribute('data-id'));
             });
+            // ⚠ 分母用**可见集**：「全选」的勾选态只描述屏幕上这一批。
+            //   用全集算的话，筛出 2 条、全勾上之后「全选」还是半选态，看着像没勾全
+            const vis = stBookFindIdx(a).map(i => a[i].id);
+            const visSel = vis.filter(id => set.has(id)).length;
             const all = document.getElementById('st-sel-all');
             if (all) {
-                all.checked = a.length > 0 && set.size === a.length;
+                all.checked = vis.length > 0 && visSel === vis.length;
                 // ⚠ indeterminate 只能靠 JS 设，没有对应的 HTML 属性 ——
                 //   光靠渲染出来的字符串是设不出来的，必须在这里补
-                all.indeterminate = set.size > 0 && set.size < a.length;
+                all.indeterminate = visSel > 0 && visSel < vis.length;
             }
             const info = document.getElementById('st-sel-info');
-            if (info) info.textContent = '已选 ' + set.size + ' / ' + a.length + ' 条';
+            if (info) {
+                // ⚠ 没筛选时**保持原来那句一字不差**（「已选 N / M 条」）——
+                //   好几句断言盯着这个格式，改它等于让它们假红
+                let txt = '已选 ' + set.size + ' / ' + a.length + ' 条';
+                if (stBookFindActive()) {
+                    const hiddenSel = set.size - visSel;
+                    txt += '（命中 ' + vis.length + ' 条' +
+                        (hiddenSel > 0 ? '，另有 ' + hiddenSel + ' 条已选被筛掉' : '') + '）';
+                }
+                info.textContent = txt;
+            }
             document.querySelectorAll('#st-book-batch .st-need-sel').forEach(b => {
                 b.disabled = set.size === 0;
             });
@@ -29246,6 +29506,50 @@
             } catch (e) {
                 stExportMsg('❌ 导出失败：' + (e && e.message ? e.message : e), 'bad');
             }
+        }
+
+        // 搜索与筛选那一栏。⚠ 每个选项的文字自带维度名（「状态：启用」），
+        // 这样不用额外加 <label>，窄屏下也不会因为 label 换行而错位
+        function stBookFindBar(entries) {
+            const f = stBookFind();
+            const act = stBookFindActive(f);
+            const opt = (key, v, label) => '<option value="' + escapeHtml(String(v)) + '"' +
+                (String(f[key]) === String(v) ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+            return '<div class="st-find" id="st-book-find">' +
+                '<div class="st-find-row">' +
+                    '<input class="st-find-q" type="search" id="st-find-q" autocomplete="off"' +
+                        ' placeholder="搜备注 / 关键词 / 正文…"' +
+                        ' value="' + escapeHtml(f.q) + '"' +
+                        ' oninput="stBookFindSet(\'q\', this.value)">' +
+                    '<span class="st-find-info" id="st-find-info">共 ' + entries.length + ' 条</span>' +
+                    '<button class="st-mini" type="button" id="st-find-reset"' +
+                        (act ? '' : ' disabled') +
+                        ' onclick="stBookFindReset()">重置</button>' +
+                '</div>' +
+                '<div class="st-find-row">' +
+                    '<select id="st-find-state" title="按启用状态筛选"' +
+                        ' onchange="stBookFindSet(\'state\', this.value)">' +
+                        opt('state', 'all', '状态：全部') + opt('state', 'on', '状态：启用') +
+                        opt('state', 'off', '状态：停用') +
+                    '</select>' +
+                    '<select id="st-find-const" title="按是否常驻筛选"' +
+                        ' onchange="stBookFindSet(\'constant\', this.value)">' +
+                        opt('constant', 'all', '常驻：全部') + opt('constant', 'yes', '常驻：只常驻') +
+                        opt('constant', 'no', '常驻：非常驻') +
+                    '</select>' +
+                    '<select id="st-find-keys" title="按有没有关键词筛选"' +
+                        ' onchange="stBookFindSet(\'keys\', this.value)">' +
+                        opt('keys', 'all', '关键词：全部') + opt('keys', 'has', '关键词：有') +
+                        opt('keys', 'none', '关键词：无') +
+                    '</select>' +
+                    '<select id="st-find-pos" title="按插入位置筛选"' +
+                        ' onchange="stBookFindSet(\'pos\', this.value)">' +
+                        opt('pos', 'all', '位置：全部') +
+                        WI_POS_ORDER.map(v =>
+                            opt('pos', String(v), '位置：' + (WI_POS_LABEL[v] || '?'))).join('') +
+                    '</select>' +
+                '</div>' +
+            '</div>';
         }
 
         // 批量操作那一栏。**一条都没选时按钮只是 disabled，不隐藏** ——
@@ -29533,6 +29837,9 @@
             stEditor.extractMsg = '';
             // 世界书的多选同理 —— 上一张卡勾中的那些条目 id 在新卡里一个都不存在
             stBookSelClear();
+            // 搜索筛选也要清。不清的话新卡一打开就只剩「命中 0 条」，
+            // 看起来像条目没导进来 —— 而且用户完全不记得自己筛过什么
+            stEditor.bookFind = Object.assign({}, ST_BOOK_FIND_DEF);
             // 人设生成器的「参考素材」同理，而且连**导入的那本书**也一起丢掉：
             // 它是「为这张卡准备的额外素材」，换卡之后跟新卡没关系
             stPersonaPickClear();
