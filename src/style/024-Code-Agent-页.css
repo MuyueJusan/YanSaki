@@ -1,0 +1,364 @@
+        /* ==========================================================================
+           Code（Agent）页
+             —— 常规比例：左「角色卡 JSON」右「Agent 会话」双栏
+             —— 手机 / 竖屏：单栏，靠工具条上的分段控件在两者之间切
+           整页要占满 .st-main 的高度，所以下面会先把 #st-panes 的滚动关掉，
+           让左右两栏各自滚（不然外层滚 + 内层滚会互相顶）
+           ========================================================================== */
+        #st-panes.st-code-mode {
+            overflow: hidden;
+            padding: 0;
+        }
+
+        /* 中间那层 .st-pane 默认高度由内容决定，Code 页得把它撑满 */
+        #st-panes.st-code-mode > .st-pane {
+            height: 100%;
+            min-height: 0;
+        }
+
+        .st-code {
+            height: 100%;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* —— 顶部工具条：四个折叠菜单 + 窄屏切换 —— */
+        .st-code-bar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            padding: 7px 12px;
+            border-bottom: 1px solid rgba(120, 150, 180, 0.28);
+            background: rgba(233, 244, 248, 0.92);
+        }
+
+        .st-code-menu { position: relative; }
+
+        .st-code-menu > summary {
+            list-style: none;
+            cursor: pointer;
+            font-size: 0.74rem;
+            padding: 5px 9px;
+            border-radius: 8px;
+            border: 1px solid rgba(120, 160, 190, 0.5);
+            background: #ffffff;
+            color: #29465b;
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        .st-code-menu > summary::-webkit-details-marker { display: none; }
+        /* ⚠ 光有 list-style:none 不够 —— Chrome 用的是 ::marker，
+           不显式清掉的话左边会多一个小三角，跟 summary 里的 emoji 挤在一起 */
+        .st-code-menu > summary::marker { content: ''; }
+        .st-code-menu > summary:hover { border-color: #2f66b3; }
+        .st-code-menu[open] > summary { background: #29465b; color: #ffffff; border-color: #29465b; }
+
+        .st-code-pop {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            z-index: 40;
+            width: 340px;
+            max-width: 78vw;
+            max-height: 60vh;
+            overflow: auto;
+            background: #ffffff;
+            border: 1px solid rgba(120, 160, 190, 0.6);
+            border-radius: 10px;
+            box-shadow: 0 6px 22px rgba(40, 70, 100, 0.22);
+            padding: 10px;
+        }
+
+        /* 靠右边的菜单往下弹会溢出，往左对齐 */
+        .st-code-pop-r { left: auto; right: 0; }
+
+        .st-code-btn {
+            font-family: inherit;
+            font-size: 0.74rem;
+            padding: 5px 9px;
+            border-radius: 8px;
+            border: 1px solid rgba(120, 160, 190, 0.5);
+            background: #ffffff;
+            color: #29465b;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .st-code-btn:hover { border-color: #2f66b3; background: #f2f8ff; }
+        .st-code-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .st-code-btn.st-main-btn {
+            background: #2f66b3;
+            border-color: #2f66b3;
+            color: #ffffff;
+            font-weight: bold;
+        }
+
+        .st-code-btn.st-main-btn:hover { background: #24507f; }
+        .st-code-btn.st-danger { color: #a33333; border-color: #e0b0b0; }
+        .st-code-btn.st-danger:hover { background: #fff2f2; }
+        .st-code-btn.st-tiny { padding: 3px 7px; font-size: 0.68rem; }
+
+        .st-code-grow { flex: 1 1 auto; }
+        .st-code-stat { font-size: 0.7rem; color: #4a6578; }
+
+        /* —— 窄屏才出现的「Code / Agent」切换 —— */
+        .st-code-view {
+            display: none;
+            gap: 0;
+            border: 1px solid rgba(120, 160, 190, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .st-code-vbtn {
+            font-family: inherit;
+            font-size: 0.74rem;
+            padding: 5px 11px;
+            border: none;
+            background: #ffffff;
+            color: #29465b;
+            cursor: pointer;
+        }
+
+        .st-code-vbtn + .st-code-vbtn { border-left: 1px solid rgba(120, 160, 190, 0.4); }
+        .st-code-vbtn.st-on { background: #2f66b3; color: #ffffff; font-weight: bold; }
+
+        /* —— 双栏 —— */
+        .st-code-split {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+        }
+
+        .st-code-card {
+            flex: 0 0 42%;
+            min-width: 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid rgba(120, 150, 180, 0.28);
+            background: rgba(248, 252, 254, 0.9);
+        }
+
+        .st-code-agent {
+            flex: 1 1 auto;
+            min-width: 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .st-code-head {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            padding: 5px 10px;
+            font-size: 0.7rem;
+            color: #4a6578;
+            background: rgba(233, 244, 248, 0.7);
+            border-bottom: 1px solid rgba(120, 150, 180, 0.2);
+        }
+
+        .st-code-head b { color: #14384f; }
+
+        .st-code-json {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            margin: 0;
+            padding: 9px 11px;
+            font-family: ui-monospace, Consolas, "Courier New", monospace;
+            font-size: 0.7rem;
+            line-height: 1.62;
+            color: #1f3a4d;
+            white-space: pre;
+            tab-size: 2;
+        }
+
+        .st-code-json .j-k { color: #8a3fbf; }
+        .st-code-json .j-s { color: #1f7a4d; }
+        .st-code-json .j-n { color: #b35c00; }
+        .st-code-json .j-b { color: #2f66b3; font-weight: bold; }
+
+        /* —— 会话 —— */
+        .st-code-log {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .st-code-empty {
+            margin: auto;
+            text-align: center;
+            font-size: 0.76rem;
+            color: #6b8497;
+            line-height: 1.9;
+            padding: 20px;
+        }
+
+        .st-code-msg {
+            border-radius: 10px;
+            padding: 7px 10px;
+            font-size: 0.78rem;
+            line-height: 1.75;
+            border: 1px solid rgba(120, 160, 190, 0.35);
+            background: #ffffff;
+            color: #1f3a4d;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+        }
+
+        .st-code-msg.st-u { background: #eaf4ff; border-color: #b8d8f5; }
+        .st-code-msg.st-a { background: #ffffff; }
+        .st-code-msg.st-t { background: #f4f9f4; border-color: #cfe4cf; }
+        .st-code-msg.st-e { background: #fff3f3; border-color: #f0c4c4; color: #8a2b2b; }
+        .st-code-msg.st-n { background: #fffbe8; border-color: #e8dca8; color: #6b5b16; }
+
+        .st-code-role {
+            font-size: 0.64rem;
+            letter-spacing: 0.5px;
+            color: #6b8497;
+            margin-bottom: 3px;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .st-code-role .st-code-tag {
+            padding: 1px 6px;
+            border-radius: 6px;
+            background: rgba(120, 160, 190, 0.2);
+            color: #29465b;
+        }
+
+        .st-code-body { white-space: pre-wrap; word-break: break-word; }
+
+        .st-code-body code {
+            background: rgba(120, 160, 190, 0.16);
+            padding: 0 4px;
+            border-radius: 4px;
+            font-family: ui-monospace, Consolas, monospace;
+            font-size: 0.92em;
+        }
+
+        .st-code-tool {
+            margin-top: 6px;
+            border: 1px solid rgba(120, 160, 190, 0.4);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .st-code-tool > summary {
+            cursor: pointer;
+            font-size: 0.68rem;
+            padding: 4px 8px;
+            background: rgba(120, 160, 190, 0.14);
+            color: #29465b;
+            list-style: none;
+        }
+
+        .st-code-tool > summary::-webkit-details-marker { display: none; }
+
+        .st-code-tool pre {
+            margin: 0;
+            padding: 7px 9px;
+            font-family: ui-monospace, Consolas, monospace;
+            font-size: 0.68rem;
+            line-height: 1.6;
+            overflow: auto;
+            max-height: 260px;
+            background: #fbfdfe;
+        }
+
+        /* 流式输出时跟在最后的那根光标 */
+        .st-code-cursor::after {
+            content: '▍';
+            animation: stCodeBlink 1s steps(2) infinite;
+            color: #2f66b3;
+        }
+
+        @keyframes stCodeBlink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        /* skill 自报的进度（host.progress）。⚠ 和消息流**分开**：它是一次 run 里的
+           临时状态，不是一条消息 —— 所以它没有气泡、没有角色名，只有一行会变的字。
+           刻意做得比消息轻（小字 + 左竖线），否则用户会以为那是 Agent 说的话 */
+        .st-code-prog {
+            flex: 0 0 auto;
+            display: flex;
+            gap: 6px;
+            align-items: flex-start;
+            margin: 2px 0 6px;
+            padding: 3px 10px 3px 8px;
+            border-left: 3px solid rgba(47, 102, 179, 0.55);
+            background: rgba(233, 244, 248, 0.72);
+            color: #29465b;
+            font-size: 0.7rem;
+        }
+
+        .st-code-prog-ico { opacity: 0.75; }
+
+        .st-code-prog-t {
+            min-width: 0;
+            word-break: break-word;
+        }
+
+        /* —— 任务清单（set_tasks）——
+           夹在消息流和输入框中间。刻意做得**比消息矮、比输入框轻** ——
+           它是进度条，不是内容，抢了注意力反而碍事 */
+        .st-code-tasks {
+            flex: 0 0 auto;
+            border-top: 1px solid rgba(120, 150, 180, 0.24);
+            background: rgba(246, 251, 255, 0.92);
+            font-size: 0.7rem;
+        }
+
+        .st-code-tasks > summary {
+            cursor: pointer;
+            list-style: none;
+            padding: 5px 10px;
+            color: #29465b;
+            user-select: none;
+        }
+
+        .st-code-tasks > summary::-webkit-details-marker { display: none; }
+        .st-code-tasks > summary::marker { content: ''; }
+        .st-code-tasks > summary b { color: #2f66b3; }
+        .st-code-tasks > summary:hover { background: rgba(233, 244, 248, 0.9); }
+
+        .st-code-tasks ol {
+            margin: 0;
+            padding: 0 10px 8px 10px;
+            list-style: none;
+            max-height: 30vh;
+            overflow: auto;
+        }
+
+        .st-code-tasks li {
+            display: flex;
+            gap: 6px;
+            padding: 2px 0;
+            line-height: 1.65;
+            color: #1f3a4d;
+        }
+
+        .st-code-tasks li > span:first-child {
+            flex: 0 0 auto;
+            width: 1em;
+            color: #6b8497;
+        }
+

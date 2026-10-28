@@ -1,0 +1,454 @@
+        /* 三栏：图层 / 画布 / 属性。窄屏会竖过来（见下面的 @media） */
+        .st-sb-split {
+            display: grid;
+            grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.45fr) minmax(0, 1.1fr);
+            gap: 10px;
+            margin-top: 10px;
+            align-items: start;
+        }
+
+        .st-sb-layers,
+        .st-sb-canvas-wrap,
+        .st-sb-insp {
+            border: 1px solid rgba(120, 150, 180, 0.35);
+            border-radius: 9px;
+            padding: 8px;
+            min-width: 0;
+        }
+
+        .st-sb-layers {
+            max-height: 560px;
+            overflow: auto;
+        }
+
+        /* 画布：方格纸底，跟真状态栏自己的底色区分开，一眼能看出边界 */
+        .st-sb-canvas {
+            background-color: #eef3f7;
+            background-image:
+                linear-gradient(rgba(120, 150, 180, 0.16) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(120, 150, 180, 0.16) 1px, transparent 1px);
+            background-size: 14px 14px;
+            border-radius: 8px;
+            padding: 10px;
+            min-height: 150px;
+            overflow: auto;
+        }
+
+        .st-sb-slide-tag {
+            font-size: 0.68rem;
+            letter-spacing: 0.04em;
+            color: #5b7488;
+            margin-bottom: 5px;
+        }
+
+        /* 真机预览：一个真的 iframe，跟运行时用的同一套包装。
+           底色调成画布同系的浅灰 —— 状态栏自己不设底色时就透出这个，
+           一眼能看出「这块我没上色」 */
+        .st-sb-frame-wrap {
+            border: 1px solid rgba(120, 150, 180, 0.45);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #e9eef3;
+        }
+
+        .st-sb-frame {
+            display: block;
+            width: 100%;
+            height: 340px;
+            border: 0;
+            background: #e9eef3;
+        }
+
+        body.retro-mode .st-sb-frame-wrap,
+        body.retro-mode .st-sb-frame {
+            background: #ffffff;
+        }
+
+        .st-sb-dropend {
+            margin-top: 8px;
+            padding: 7px;
+            border: 1px dashed rgba(120, 150, 180, 0.7);
+            border-radius: 7px;
+            text-align: center;
+            font-size: 0.7rem;
+            color: #6b8398;
+        }
+
+        .st-sb-dropend.st-sb-db {
+            border-color: #e8749b;
+            background: rgba(232, 116, 155, 0.12);
+            color: #b34a6e;
+        }
+
+        .st-sb-blank {
+            padding: 14px 4px;
+            text-align: center;
+            font-size: 0.74rem;
+            color: #6b8398;
+        }
+
+        /* 画布上的一个块。命中框只加轮廓，不动块自己的内联样式 */
+        .st-sb-hit {
+            position: relative;
+            border-radius: 5px;
+            cursor: grab;
+            transition: box-shadow 0.12s ease;
+        }
+
+        .st-sb-hit:hover { box-shadow: 0 0 0 1px rgba(121, 174, 210, 0.9) inset; }
+        .st-sb-hit.st-sb-on { box-shadow: 0 0 0 2px #3b7dd8 inset; }
+        .st-sb-hit.st-sb-drag { opacity: 0.4; }
+        /* 落点指示：前 / 后 / 放进分组 */
+        .st-sb-hit.st-sb-db { box-shadow: 0 -3px 0 0 #e8749b inset; }
+        .st-sb-hit.st-sb-da { box-shadow: 0 3px 0 0 #e8749b inset; }
+        .st-sb-hit.st-sb-di { box-shadow: 0 0 0 2px #e8749b inset; }
+
+        .st-sb-badge {
+            display: none;
+            position: absolute;
+            top: -8px;
+            left: 0;
+            z-index: 3;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 10px;
+            line-height: 1.5;
+            padding: 1px 6px;
+            border-radius: 999px;
+            background: #3b7dd8;
+            color: #ffffff;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .st-sb-hit:hover > .st-sb-badge,
+        .st-sb-hit.st-sb-on > .st-sb-badge { display: block; }
+
+        /* 挪过位置的块：徽章**一直**挂着，颜色换成琥珀色。
+           不然过一会儿就忘了哪几块是手摆的，也没法一眼看出该归位哪个 */
+        .st-sb-hit.st-sb-off > .st-sb-badge {
+            display: block;
+            background: #d98324;
+        }
+
+        /* 自由摆放：块自己就是把手。舞台要能聚焦 —— 方向键微调靠它接事件 */
+        .st-sb-stage { outline: none; }
+        .st-sb-free .st-sb-hit { cursor: move; }
+        .st-sb-free .st-sb-hit.st-sb-drag { cursor: grabbing; }
+
+        /* 调大小的八向把手。只在**选中**那一块上出现 —— 八个小方块铺满画布
+           会把排版整个糊掉。位置靠 -50% 的负外边距把方块压到边的正中间 */
+        .st-sb-h {
+            position: absolute;
+            width: 9px;
+            height: 9px;
+            margin: -5px 0 0 -5px;
+            border: 1px solid #2f66b3;
+            border-radius: 2px;
+            background: #ffffff;
+            box-sizing: border-box;
+            z-index: 4;
+        }
+
+        .st-sb-h[data-h="nw"] { left: 0; top: 0; cursor: nwse-resize; }
+        .st-sb-h[data-h="n"] { left: 50%; top: 0; cursor: ns-resize; }
+        .st-sb-h[data-h="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+        .st-sb-h[data-h="e"] { left: 100%; top: 50%; cursor: ew-resize; }
+        .st-sb-h[data-h="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+        .st-sb-h[data-h="s"] { left: 50%; top: 100%; cursor: ns-resize; }
+        .st-sb-h[data-h="sw"] { left: 0; top: 100%; cursor: nesw-resize; }
+        .st-sb-h[data-h="w"] { left: 0; top: 50%; cursor: ew-resize; }
+
+        .st-sb-h:hover { background: #3b7dd8; border-color: #24507f; }
+
+        /* 有把手的时候徽章往右让一格 —— 左上角那个把手正好压在徽章头上 */
+        .st-sb-hit.st-sb-hh > .st-sb-badge { left: 11px; }
+
+        .st-sb-cvbar {
+            margin: 0 0 6px;
+            align-items: center;
+        }
+
+        .st-sb-cvbar .st-mini.st-on {
+            background: #3b7dd8;
+            border-color: #2f66b3;
+            color: #ffffff;
+        }
+
+        .st-sb-col {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+
+        .st-sb-slot {
+            flex: 1 1 auto;
+            padding: 8px;
+            border: 1px dashed rgba(120, 150, 180, 0.8);
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.7rem;
+            color: #6b8398;
+        }
+
+        .st-sb-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 6px;
+        }
+
+        /* 预制块：分类小标题。块库那边是一整排原子块，预制块按用途分了几组，
+           不分行的话十几二十个按钮糊成一片，找「好感度」得一个个读 */
+        .st-sb-pf-cat {
+            margin: 9px 0 0;
+            font-size: 0.68rem;
+            color: #5c7a91;
+            letter-spacing: 0.02em;
+        }
+
+        /* 一个「我的预制块」= 插入按钮 + 删除按钮，两者贴在一起当一项 */
+        .st-sb-pf-item {
+            display: inline-flex;
+            align-items: stretch;
+            gap: 2px;
+        }
+
+        .st-sb-pf-save {
+            display: flex;
+            gap: 5px;
+            margin-top: 6px;
+        }
+
+        /* 跟 .st-field input 同一副长相 —— 它不在 .st-field 里，得自己写一遍 */
+        .st-sb-pf-save input {
+            font-family: inherit;
+            font-size: 0.78rem;
+            color: #1a2b3c;
+            background: #ffffff;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            border-radius: 8px;
+            padding: 6px 8px;
+            outline: none;
+            flex: 1 1 auto;
+            min-width: 0;
+            user-select: text;
+            text-shadow: none;
+        }
+
+        .st-sb-pf-save input:focus {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.18);
+        }
+
+        .st-sb-color {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .st-sb-color input[type="color"] {
+            width: 44px;
+            height: 26px;
+            padding: 0;
+            border: 1px solid rgba(120, 150, 180, 0.55);
+            border-radius: 6px;
+            background: #ffffff;
+            cursor: pointer;
+        }
+
+        .st-chip {
+            font-size: 0.68rem;
+            padding: 1px 6px;
+            border-radius: 999px;
+            border: 1px solid rgba(120, 150, 180, 0.6);
+            background: rgba(255, 255, 255, 0.85);
+            color: #33546b;
+            flex: 0 0 auto;
+        }
+
+        .st-chip.st-on {
+            border-color: rgba(90, 170, 130, 0.8);
+            background: rgba(200, 240, 220, 0.85);
+            color: #1c5a3c;
+        }
+
+        .st-chip.st-const {
+            border-color: rgba(200, 160, 80, 0.85);
+            background: rgba(250, 238, 205, 0.9);
+            color: #7a5410;
+        }
+
+        /* 世界书条目的多选：每条摘要前面一个勾选框 + 条目列表上面一条批量操作栏。
+           ⚠ 勾选框必须待在 <summary> 里（要跟摘要排在同一行），而点它**不能**把
+             条目一起开合 —— 靠 onclick 里 stopPropagation 挡住冒泡，见 stEntryHtml */
+        .st-sel-box {
+            flex: 0 0 auto;
+            width: 15px;
+            height: 15px;
+            margin: 0;
+            accent-color: #3a7bd5;
+            cursor: pointer;
+        }
+
+        .st-batch {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            padding: 7px 9px;
+            margin-bottom: 8px;
+            border: 1px solid rgba(120, 150, 180, 0.45);
+            border-radius: 9px;
+            background: rgba(238, 246, 253, 0.85);
+        }
+
+        .st-batch-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 全选那个勾选框：借 .st-check 的长相，但不要它上下那圈留白 */
+        .st-batch-all { padding: 0; margin-right: 2px; }
+
+        .st-batch-info {
+            font-size: 0.74rem;
+            color: #33546b;
+        }
+
+        /* —— 世界书的搜索与筛选 ——
+           跟 .st-batch 同一副长相（同一块浅蓝卡片里），只是它排在批量栏上面。
+           ⚠ 被筛掉的条目用 .st-entry-hide 藏起来，**不是从 DOM 里删掉** ——
+             卡片里有输入框，重建节点会让正在编辑的那条丢光标。 */
+        .st-find {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 7px 9px;
+            margin-bottom: 8px;
+            border: 1px solid rgba(120, 150, 180, 0.45);
+            border-radius: 9px;
+            background: rgba(238, 246, 253, 0.85);
+        }
+
+        .st-find-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 搜索框吃掉一行里剩下的宽度，但窄屏下要能缩，否则会把「重置」挤出去 */
+        .st-find-q {
+            flex: 1 1 160px;
+            min-width: 0;
+            font-family: inherit;
+            font-size: 0.82rem;
+            color: #1a2b3c;
+            background: #ffffff;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            border-radius: 8px;
+            padding: 6px 9px;
+            outline: none;
+            user-select: text;
+            text-shadow: none;
+        }
+
+        .st-find-q:focus {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.18);
+        }
+
+        .st-find-row select {
+            font-family: inherit;
+            font-size: 0.76rem;
+            color: #1a2b3c;
+            background: #ffffff;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            border-radius: 8px;
+            padding: 5px 7px;
+            outline: none;
+            max-width: 100%;
+        }
+
+        .st-find-info {
+            font-size: 0.74rem;
+            color: #33546b;
+            white-space: nowrap;
+        }
+
+        /* 被筛掉的条目。用 !important 是因为 `.st-entry` 本身有 display 相关规则，
+           光加 hidden 属性会被同权重的东西盖掉（这个坑踩过，见 [hidden] 那条兜底） */
+        .st-entry-hide { display: none !important; }
+
+        /* 「筛出来一条都没有」的提示。⚠ 故意**不复用 .st-empty**：
+           那是个「首个匹配」型选择器，多一个实例会让别人的断言挑错元素 */
+        .st-find-empty {
+            font-size: 0.78rem;
+            color: #5b7488;
+            padding: 10px 0;
+        }
+
+        /* 关键词标签（世界书条目的 keys / secondary_keys）。
+           长得像社交软件里的标签：一个词一个圆角矩形，回车落一个、点 × 删一个。
+           外框照抄 .st-field input 那副长相（边框 / 圆角 / 内边距），
+           这样它跟旁边的普通输入框上下排在一起时不会一跳一跳的 */
+        .st-tags {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px;
+            min-height: 34px;
+            padding: 4px 6px;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            border-radius: 8px;
+            background: #ffffff;
+            cursor: text;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .st-tags:focus-within {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.18);
+        }
+
+        .st-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            max-width: 100%;
+            font-size: 0.74rem;
+            line-height: 1.6;
+            padding: 1px 3px 1px 9px;
+            border: 1px solid rgba(120, 150, 180, 0.7);
+            border-radius: 999px;
+            background: rgba(226, 240, 250, 0.95);
+            color: #24455c;
+        }
+
+        /* 长词要能截断 —— 不然一个超长关键词会把整行撑破 */
+        .st-tag > span {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .st-tag-x {
+            flex: 0 0 auto;
+            width: 15px;
+            height: 15px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: #6b8698;
+            font-family: inherit;
+            font-size: 0.7rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .st-tag-x:hover {
+            background: rgba(200, 80, 80, 0.18);
+            color: #a03030;
+        }
+

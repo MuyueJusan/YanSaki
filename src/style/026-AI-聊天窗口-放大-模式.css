@@ -1,0 +1,113 @@
+        /* ==========================================================================
+           AI 聊天窗口「放大」模式
+             手机 / 窄屏（≤600px）：铺满整个浏览器窗口
+             桌面 / 宽屏（>600px）：按手机比例（9 : 19.5）竖向居中显示
+           统一用 body 前缀选择器，保证能压过 body.retro-mode .glass-card
+           ========================================================================== */
+        .ai-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ai-max-btn.active {
+            background: rgba(255, 255, 255, 0.55);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+        }
+
+        /* 放大时的背景遮罩（挂在 body 的伪元素上，不新增 DOM 节点） */
+        body.ai-max-on { overflow: hidden; }
+
+        body.ai-max-on::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: rgba(8, 32, 48, 0.5);
+            backdrop-filter: blur(3px);
+            z-index: 900;
+        }
+
+        /* 放大后让聊天区撑满剩余高度，而不是被 max-height: 300px 卡住 */
+        body .ai-container.ai-maximized {
+            z-index: 950;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            overflow: visible;
+        }
+
+        body .ai-container.ai-maximized .ai-collapse-wrapper {
+            flex: 1;
+            min-height: 0;
+        }
+
+        body .ai-container.ai-maximized .ai-collapse-inner {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: visible;
+        }
+
+        /* 放大时若把设置面板展开，限制其高度并允许内部滚动 */
+        body .ai-container.ai-maximized .ai-settings-collapse-inner {
+            max-height: 45vh;
+            overflow-y: auto;
+        }
+
+        body .ai-container.ai-maximized .ai-chat {
+            flex: 1;
+            min-height: 0;
+        }
+
+        body .ai-container.ai-maximized .ai-messages {
+            flex: 1;
+            min-height: 0;
+            max-height: none;
+        }
+
+        /* 放大时隐藏「展开/折叠」按钮，避免把内容折进去 */
+        body .ai-container.ai-maximized .ai-collapse-toggle { display: none; }
+
+        /* —— 手机 / 窄屏 / 极扁窗口：铺满整个浏览器窗口 ——
+           max-height 那条是为了兜住「手机横屏」（如 844×390，宽度会误判成桌面） */
+        @media (max-width: 600px), (max-height: 480px) {
+            body .ai-container.ai-maximized {
+                position: fixed;
+                inset: 0;
+                margin: 0;
+                width: 100%;
+                max-width: none;
+                height: 100dvh;
+                border-radius: 0;
+                padding: 0.6rem 0.6rem calc(0.6rem + env(safe-area-inset-bottom, 0px)) 0.6rem;
+            }
+        }
+
+        /* —— 桌面 / 宽屏：竖向居中，宽度按窗口百分比（带上限）—— */
+        @media (min-width: 601px) and (min-height: 481px) {
+            body .ai-container.ai-maximized {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                margin: 0;
+                /* 宽度 = 窗口宽度的 85%，且不超过上限；
+                   最后一项只是保证「竖向」——窗口很矮时跟着收窄，正常屏幕上不生效 */
+                width: min(
+                    var(--ai-max-width-pct),
+                    var(--ai-max-width-max),
+                    calc((100dvh - 2rem) * 0.9)
+                );
+                max-width: none;
+                height: calc(100dvh - 2rem);
+                border-radius: 28px;
+                padding: clamp(0.75rem, 1.6vw, 1.1rem);
+                box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+            }
+        }
+
+        /* 复古皮肤下要避开窗口标题栏（.glass-card 的 padding-top: 26px） */
+        body.retro-mode .ai-container.ai-maximized {
+            padding-top: 28px;
+            border-radius: 0;
+        }

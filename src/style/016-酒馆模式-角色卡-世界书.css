@@ -1,0 +1,590 @@
+        /* ===== 酒馆模式 · 角色卡 / 世界书 ===== */
+        .ai-hidden-file { display: none !important; }
+
+        .ai-tavern-body {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 0.25s ease;
+        }
+
+        .ai-tavern-body.ai-tavern-off { opacity: 0.45; pointer-events: none; }
+
+        .ai-tavern-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+        .ai-tavern-status {
+            font-size: 0.75rem;
+            line-height: 1.5;
+            min-height: 1em;
+            color: #d6f5ff;
+            text-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+            word-break: break-word;
+        }
+        .ai-tavern-status.ok { color: #d8ffe4; }
+        .ai-tavern-status.err { color: #ffd9dc; }
+
+        .ai-tv-empty {
+            font-size: 0.74rem;
+            line-height: 1.6;
+            opacity: 0.75;
+            padding: 6px 2px;
+        }
+
+        .ai-tv-card {
+            background: rgba(255, 255, 255, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 8px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .ai-tv-name { font-size: 0.88rem; font-weight: bold; word-break: break-word; }
+        .ai-tv-meta { font-size: 0.72rem; opacity: 0.85; line-height: 1.5; }
+
+        .ai-tv-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+        .ai-tv-tag {
+            font-size: 0.68rem;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        /* 可折叠的字段（描述 / 性格 / 示例对话…） */
+        details.ai-tv-field {
+            border-top: 1px dashed rgba(255, 255, 255, 0.3);
+            padding-top: 5px;
+            font-size: 0.74rem;
+        }
+        details.ai-tv-field > summary {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            list-style: none;
+            font-size: 0.72rem;
+            opacity: 0.92;
+        }
+        details.ai-tv-field > summary::-webkit-details-marker { display: none; }
+        details.ai-tv-field > summary::before {
+            content: '▸';
+            font-size: 0.7rem;
+            transition: transform 0.15s ease;
+        }
+        details.ai-tv-field[open] > summary::before { transform: rotate(90deg); }
+        details.ai-tv-field > summary b { letter-spacing: 1px; }
+        .ai-tv-len { margin-left: auto; opacity: 0.7; font-size: 0.68rem; }
+        .ai-tv-text {
+            display: block;
+            margin-top: 4px;
+            font-size: 0.74rem;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+            opacity: 0.92;
+            max-height: 12em;
+            overflow-y: auto;
+        }
+
+        .ai-tv-field { display: flex; flex-direction: column; gap: 3px; font-size: 0.74rem; }
+        .ai-tv-field > b { font-size: 0.72rem; letter-spacing: 1px; opacity: 0.9; }
+
+        .ai-tv-lore-head { font-size: 0.78rem; word-break: break-word; }
+
+        .ai-tv-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 10px;
+            align-items: center;
+            font-size: 0.72rem;
+        }
+        .ai-tv-grid > label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.72rem;
+            opacity: 0.9;
+        }
+        .ai-tv-grid select,
+        .ai-tv-grid input[type="number"] {
+            font-family: inherit;
+            font-size: 0.72rem;
+            color: #1a2b3c;
+            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 5px;
+            padding: 3px 5px;
+            outline: none;
+        }
+        .ai-tv-grid input[type="number"] { width: 52px; }
+        .ai-tv-grid input[type="checkbox"] { accent-color: #3a7bd5; }
+
+        .ai-tv-lore-list {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            max-height: 280px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .ai-tv-entry {
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            font-size: 0.74rem;
+        }
+        .ai-tv-entry.off { opacity: 0.5; }
+        .ai-tv-entry > summary {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 7px;
+            cursor: pointer;
+            list-style: none;
+        }
+        .ai-tv-entry > summary::-webkit-details-marker { display: none; }
+        .ai-tv-entry .ai-tv-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex: 0 0 auto;
+            background: #7ee08a;
+        }
+        .ai-tv-entry .ai-tv-dot.key { background: #8fd0ff; }
+        .ai-tv-entry .ai-tv-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .ai-tv-entry .ai-tv-pos {
+            flex: 0 0 auto;
+            font-size: 0.66rem;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.22);
+            white-space: nowrap;
+        }
+        .ai-tv-entry .ai-tv-body {
+            padding: 0 7px 7px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .ai-tv-keys { font-size: 0.7rem; line-height: 1.55; opacity: 0.92; word-break: break-word; }
+        .ai-tv-content {
+            font-size: 0.72rem;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: rgba(0, 0, 0, 0.16);
+            border-radius: 5px;
+            padding: 5px 7px;
+            max-height: 10em;
+            overflow-y: auto;
+        }
+
+        .ai-tv-preview {
+            font-family: 'Fusion Pixel 12px Proportional JA', 'Share Tech Mono', monospace;
+            font-size: 0.7rem;
+            line-height: 1.6;
+            background: rgba(0, 0, 0, 0.24);
+            border-radius: 6px;
+            padding: 7px 9px;
+            max-height: 240px;
+            overflow: auto;
+            word-break: break-word;
+        }
+        .ai-tv-preview .p-sys { color: #ffd98a; }
+        .ai-tv-preview .p-user { color: #9fe8b0; }
+        .ai-tv-preview .p-ai { color: #9fd0ff; }
+        .ai-tv-preview .p-wi { color: #ffb3e6; }
+        .ai-tv-preview .p-an { color: #ffd28a; }
+        /* 来源细类：颜色区分「这条系统消息是从哪来的」 */
+        .ai-tv-preview .p-main { color: #ffe08a; font-weight: 600; }
+        /* 「第一段」——这一轮新加的那一条，颜色单独给，一眼能看出它在最前面 */
+        .ai-tv-preview .p-first { color: #ffb454; font-weight: 600; }
+        .ai-tv-preview .p-char { color: #c9b6ff; }
+        .ai-tv-preview .p-example { color: #9fe8b0; }
+        .ai-tv-preview .p-chat { color: #9fd0ff; }
+        .ai-tv-preview .p-post { color: #ffb3e6; }
+        .ai-tv-preview .p-dim { opacity: 0.6; }
+        .ai-tv-preview .p-line { display: block; }
+        .ai-tv-preview .p-body {
+            display: block;
+            opacity: 0.62;
+            padding-left: 1.4em;
+            margin-bottom: 3px;
+        }
+
+        .ai-tv-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 12px;
+            font-size: 0.68rem;
+            opacity: 0.85;
+            margin: -2px 0 2px;
+        }
+
+        .ai-tv-legend span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .ai-tv-legend i {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #7ee08a;
+            flex: 0 0 auto;
+        }
+
+        .ai-tv-legend i.key { background: #8fd0ff; }
+        .ai-tv-legend i.live { background: #ffb44d; }
+
+        /* —— 世界书全局设置：默认收起，免得把条目列表挤到看不见 —— */
+        .ai-tv-global {
+            border: 1px solid rgba(140, 160, 200, 0.28);
+            border-radius: 7px;
+            padding: 6px 8px;
+            font-size: 0.78rem;
+        }
+
+        .ai-tv-global > summary {
+            cursor: pointer;
+            font-weight: 600;
+            opacity: 0.9;
+        }
+
+        .ai-tv-global .ai-tv-grid { margin-top: 7px; }
+
+        /* —— 作者注释：↑AT / ↓AT 夹住的宿主，设置直接决定这两个位置落哪 ——
+           用户人设描述面板跟它长得一样（人设有两个位置就是搭着注释走的） */
+        .ai-tv-an,
+        .ai-tv-persona {
+            border: 1px solid rgba(140, 160, 200, 0.28);
+            border-radius: 7px;
+            padding: 6px 8px;
+            font-size: 0.78rem;
+        }
+
+        .ai-tv-an > summary,
+        .ai-tv-persona > summary {
+            cursor: pointer;
+            font-weight: 600;
+            opacity: 0.9;
+        }
+
+        .ai-tv-an .ai-tv-grid,
+        .ai-tv-persona .ai-tv-grid { margin-top: 7px; }
+
+        .ai-tv-an-text {
+            box-sizing: border-box;
+            width: 100%;
+            margin-top: 7px;
+            padding: 5px 6px;
+            border: 1px solid rgba(140, 160, 200, 0.4);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.55);
+            color: inherit;
+            font: inherit;
+            line-height: 1.5;
+            resize: vertical;
+        }
+
+        /* 书里声明了、但 SillyTavern 不会自动采纳的设置 */
+        .ai-tv-declared {
+            font-size: 0.72rem;
+            line-height: 1.5;
+            opacity: 0.85;
+            border-left: 3px solid #d8a34a;
+            padding: 4px 0 4px 8px;
+            margin: 3px 0;
+        }
+
+        /* —— 条目本轮会不会插入 —— */
+        .ai-tv-act {
+            font-size: 0.72rem;
+            opacity: 0.7;
+        }
+
+        .ai-tv-act.on { opacity: 1; font-weight: 600; color: #2f9e56; }
+        .ai-tv-entry.live > summary { background: rgba(255, 180, 77, 0.13); }
+        .ai-tv-entry .ai-tv-dot.live { background: #ffb44d; }
+
+        .ai-tv-facts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px 6px;
+            font-size: 0.68rem;
+        }
+
+        .ai-tv-facts span {
+            background: rgba(140, 160, 200, 0.16);
+            border-radius: 4px;
+            padding: 1px 5px;
+            opacity: 0.9;
+        }
+
+        /* —— 提示词预设：槽位列表 + 排序 / 编辑 —— */
+        .ai-tv-preset {
+            border: 1px solid rgba(140, 160, 200, 0.28);
+            border-radius: 7px;
+            padding: 6px 8px;
+            font-size: 0.78rem;
+        }
+
+        .ai-tv-preset > summary {
+            cursor: pointer;
+            font-weight: 600;
+            opacity: 0.9;
+        }
+
+        .ai-tv-preset .ai-tv-grid { margin-top: 7px; }
+        .ai-tv-preset select { max-width: 100%; }
+        .ai-tv-preset-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 7px;
+        }
+        .ai-tv-preset-note {
+            font-size: 0.7rem;
+            line-height: 1.5;
+            opacity: 0.82;
+            margin-top: 6px;
+        }
+
+        .ai-tv-preset-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 7px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        /* 一行 = 一个槽。顺序就是 prompt_order 的顺序 */
+        .ai-tv-slot {
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            border-radius: 6px;
+            font-size: 0.74rem;
+        }
+        .ai-tv-slot.off { opacity: 0.48; }
+        .ai-tv-slot > summary {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 7px;
+            cursor: pointer;
+            list-style: none;
+        }
+        .ai-tv-slot > summary::-webkit-details-marker { display: none; }
+        .ai-tv-slot .ai-tv-slot-chk {
+            flex: 0 0 auto;
+            width: 18px;
+            height: 18px;
+            margin: 0;
+            accent-color: #3a7bd5;
+        }
+        /* 原生 checkbox 不吃 padding（appearance:auto 下 padding 无效），
+           所以外面套一层 label 来撑触控命中区。点 label 会转发给 input，
+           点事件在 label 上就停住，不会连带把外层折叠面板也开合了 */
+        .ai-tv-slot .ai-tv-slot-chkwrap {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px;
+            cursor: pointer;
+        }
+        .ai-tv-slot .ai-tv-slot-idx {
+            flex: 0 0 auto;
+            font-size: 0.64rem;
+            opacity: 0.6;
+            min-width: 1.2em;
+            text-align: right;
+        }
+        .ai-tv-slot .ai-tv-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .ai-tv-slot .ai-tv-pos {
+            flex: 0 0 auto;
+            font-size: 0.64rem;
+            padding: 1px 5px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.22);
+            white-space: nowrap;
+        }
+        /* 内容由应用填的槽（世界书 / 角色卡字段 / 聊天记录） */
+        .ai-tv-slot .ai-tv-pos.marker { background: rgba(143, 208, 255, 0.32); }
+        /* 从顺序流里摘出来、按深度注进对话的槽 */
+        .ai-tv-slot .ai-tv-pos.abs { background: rgba(255, 180, 77, 0.34); }
+        .ai-tv-slot .ai-tv-slot-move {
+            flex: 0 0 auto;
+            display: flex;
+            gap: 2px;
+        }
+        .ai-tv-slot .ai-tv-slot-move button {
+            font: inherit;
+            font-size: 0.66rem;
+            line-height: 1;
+            padding: 3px 4px;
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            color: inherit;
+            cursor: pointer;
+        }
+        .ai-tv-slot .ai-tv-slot-move button:disabled { opacity: 0.35; cursor: default; }
+        .ai-tv-slot .ai-tv-body {
+            padding: 0 7px 7px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .ai-tv-slot .ai-tv-slot-content {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 5px 6px;
+            border: 1px solid rgba(140, 160, 200, 0.4);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.55);
+            color: inherit;
+            font: inherit;
+            line-height: 1.5;
+            resize: vertical;
+            min-height: 3.4em;
+        }
+        .ai-tv-slot .ai-tv-slot-namewrap {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.72rem;
+        }
+        .ai-tv-slot .ai-tv-slot-name {
+            flex: 1;
+            min-width: 0;
+            box-sizing: border-box;
+            padding: 4px 6px;
+            border: 1px solid rgba(140, 160, 200, 0.4);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.55);
+            color: inherit;
+            font: inherit;
+        }
+        .ai-tv-slot .ai-tv-slot-name-ro {
+            font-size: 0.74rem;
+            opacity: 0.85;
+        }
+        .ai-tv-slot .ai-tv-slot-del { align-self: flex-start; }
+        .ai-tv-slot .ai-tv-slot-tip {
+            font-size: 0.68rem;
+            line-height: 1.5;
+            opacity: 0.78;
+        }
+
+        /* 触屏 / 窄屏：酒馆面板的控件要够大才点得准 */
+        @media (max-width: 600px), (hover: none) {
+            /* 开关轨道只有 36×20，把标签本身撑高（轨道仍垂直居中，视觉不变） */
+            .ai-switch { padding: 12px 6px; }
+            .ai-tavern-actions .ai-btn-mini { padding: 9px 12px; font-size: 0.78rem; }
+            .ai-tv-grid select,
+            .ai-tv-grid input[type="number"] { padding: 8px 7px; font-size: 0.78rem; }
+            .ai-tv-grid input[type="number"] { width: 66px; }
+            .ai-tv-entry > summary { padding: 9px 7px; }
+            .ai-tv-entry .ai-tv-body { padding: 9px 9px 11px; }
+            .ai-tv-entry .ai-tv-dot { width: 10px; height: 10px; }
+            .ai-tv-global > summary { padding: 6px 2px; }
+            .ai-tv-an > summary { padding: 6px 2px; }
+            .ai-tv-persona > summary { padding: 6px 2px; }
+            .ai-tv-preset > summary { padding: 6px 2px; }
+            .ai-tv-preset-actions .ai-btn-mini { padding: 9px 12px; font-size: 0.78rem; }
+            .ai-tv-slot > summary { padding: 9px 7px; }
+            .ai-tv-slot .ai-tv-body { padding: 9px 9px 11px; }
+            /* 移动端把上 / 下按钮和勾选框撑到能戳中（勾选框外面套了 label 撑命中区，
+               因为原生 checkbox 在 appearance:auto 下不吃 padding） */
+            .ai-tv-slot .ai-tv-slot-move button { padding: 10px 12px; font-size: 0.8rem; }
+            .ai-tv-slot .ai-tv-slot-chkwrap { padding: 7px; }
+            .ai-tv-slot .ai-tv-slot-name { padding: 9px 7px; font-size: 0.78rem; }
+        }
+
+        /* 温度滑块 */
+        .ai-field input[type="range"] {
+            padding: 0;
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            accent-color: #3a7bd5;
+        }
+
+        .ai-status {
+            font-size: 0.75rem;
+            min-height: 1em;
+            color: #d6f5ff;
+            text-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 聊天界面（浅蓝色背景 + 圆润气泡） */
+        .ai-chat {
+            display: flex;
+            width: 100%;
+            margin-top: clamp(0.6rem, 2vh, 1rem);
+            background: #e3f0ff;
+            border-radius: 16px;
+            padding: 12px;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ai-messages {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 4px;
+            text-shadow: none;
+            color: #1a2b3c;
+        }
+
+        .ai-bubble {
+            max-width: 78%;
+            padding: 10px 14px;
+            border-radius: 18px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            word-break: break-word;
+            white-space: pre-wrap;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            user-select: text;
+        }
+
+        .ai-bubble.ai {
+            align-self: flex-start;
+            background: #ffffff;
+            color: #1a2b3c;
+            border-bottom-left-radius: 6px;
+        }
+
+        .ai-bubble.user {
+            align-self: flex-end;
+            background: #3a7bd5;
+            color: #ffffff;
+            border-bottom-right-radius: 6px;
+        }
+
+        .ai-bubble.loading {
+            color: #7a9bb5;
+            font-style: italic;
+        }
+

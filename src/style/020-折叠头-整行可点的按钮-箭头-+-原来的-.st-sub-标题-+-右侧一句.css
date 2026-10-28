@@ -1,0 +1,479 @@
+        /* 折叠头 = 整行可点的按钮：箭头 + 原来的 `.st-sub` 标题 + 右侧一句提示。
+           ⚠ 标题**保留 `.st-sub` 类**：它是「这份是默认模板还是自定义」的可见标签，
+             而且套件正是按 `.st-sub` 找它、读它的 textContent —— 换类名那些断言会红。 */
+        .st-fold-head {
+            display: flex;
+            align-items: baseline;
+            gap: 7px;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: none;
+            font-family: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .st-fold-head .st-sub { flex: 1 1 auto; }
+
+        .st-fold-ico {
+            display: inline-block;
+            font-size: 0.62rem;
+            color: #14384f;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 收起时箭头朝下（`▲` 转 180°）—— 跟顶栏「≡ 选项卡」那个展开键同一套手感 */
+        .st-fold:not(.st-fold-open) .st-fold-ico { transform: rotate(-180deg); }
+
+        .st-fold-hint {
+            font-size: 0.7rem;
+            color: #33546b;
+            opacity: 0.72;
+            white-space: nowrap;
+            letter-spacing: 0;
+        }
+
+        .st-fold-head:hover .st-fold-hint { opacity: 1; }
+
+        /* —— 首页的「模块块」——
+           首页的内容不再是一长条拼起来的字符串，而是四个各自独立的模块：
+           每个模块 = 一行可点的头（图标 + 标题 + 一句提示）+ 一个体。
+           ⚠ 折叠机制**复用上面 `.st-fold` 那一套**（`grid-template-rows: 0fr → 1fr`），
+             别为它另起 `max-height` —— 两套手感会不一样。
+           ⚠ 跟 `.st-fold` 的**方向相反**：模块**默认展开**（第一眼要看内容，不是先点开四个块），
+             所以「不带 class」= 展开态，加了 `.st-mod-closed` 才收起。
+           ⚠ 内边距放在 `.st-mod-pad` 上、**不放在 `.st-mod-inner` 上**：
+             `.st-mod-inner` 是被 `0fr` 那一行压成 0 高的那个元素，
+             它自己带 padding 的话，收起后仍会留下一条 padding 高的空档。 */
+        .st-mod {
+            border: 1px solid rgba(120, 150, 180, 0.32);
+            border-radius: 11px;
+            background: rgba(255, 255, 255, 0.55);
+            margin: 0 0 10px;
+            overflow: hidden;
+        }
+
+        .st-mod-head {
+            display: flex;
+            align-items: baseline;
+            gap: 7px;
+            width: 100%;
+            margin: 0;
+            padding: 9px 11px;
+            border: none;
+            background: none;
+            font-family: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .st-mod-head:hover { background: rgba(121, 174, 210, 0.13); }
+
+        .st-mod-ico { font-size: 0.8rem; }
+
+        .st-mod-title {
+            font-size: 0.78rem;
+            color: #14384f;
+            font-weight: bold;
+            letter-spacing: 0.02em;
+        }
+
+        .st-mod-hint {
+            flex: 1 1 auto;
+            font-size: 0.68rem;
+            color: #33546b;
+            opacity: 0.7;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .st-mod-head:hover .st-mod-hint { opacity: 1; }
+
+        .st-mod-arrow {
+            display: inline-block;
+            font-size: 0.6rem;
+            color: #14384f;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .st-mod.st-mod-closed .st-mod-arrow { transform: rotate(-180deg); }
+
+        .st-mod-body {
+            display: grid;
+            grid-template-rows: 1fr;
+            transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .st-mod.st-mod-closed .st-mod-body { grid-template-rows: 0fr; }
+
+        .st-mod-inner { overflow: hidden; }
+
+        .st-mod-pad { padding: 1px 11px 11px; }
+
+        /* 复古皮肤下别是半透明白 —— Win9x 那边是一块实心面板 */
+        body.retro-mode .st-mod {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        .st-big {
+            font-family: inherit;
+            font-size: 0.85rem;
+            padding: 9px 16px;
+            border-radius: 9px;
+            border: 1px solid rgba(121, 174, 210, 0.9);
+            background: linear-gradient(135deg, #79d2b3, #79aed2);
+            color: #ffffff;
+            cursor: pointer;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        .st-big:hover { filter: brightness(1.06); }
+
+        .st-big.st-plain {
+            background: #ffffff;
+            color: #29465b;
+            border-color: rgba(120, 150, 180, 0.55);
+            text-shadow: none;
+        }
+
+        .st-big:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+
+        /* 条目 / 脚本卡片 */
+        .st-entry {
+            border: 1px solid rgba(120, 150, 180, 0.4);
+            border-radius: 9px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.75);
+        }
+
+        .st-entry > summary {
+            cursor: pointer;
+            padding: 8px 10px;
+            font-size: 0.8rem;
+            color: #29465b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            list-style: none;
+        }
+
+        .st-entry > summary::-webkit-details-marker { display: none; }
+
+        .st-entry > summary::before {
+            content: '▸';
+            flex: 0 0 auto;
+            transition: transform 0.18s ease;
+        }
+
+        .st-entry[open] > summary::before { transform: rotate(90deg); }
+
+        .st-entry-sum {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .st-entry-body {
+            padding: 4px 10px 12px;
+            border-top: 1px solid rgba(120, 150, 180, 0.28);
+        }
+
+        .st-entry-off { opacity: 0.55; }
+
+        /* 酒馆助手脚本：文件夹里的脚本缩进一层 + 左边一道竖线，归属一眼看清。
+           （ScriptFolder.scripts 装的是 Script 而不是 ScriptTree，
+             所以树最多两层，缩进也只需要这一条规则） */
+        .st-th-folder > .st-entry-body > .st-entry {
+            margin-left: 12px;
+            border-left: 3px solid rgba(123, 159, 212, 0.55);
+        }
+
+        .st-th-folder > summary .st-entry-sum { font-weight: 600; }
+
+        /* 悬浮按钮那一行：名字 + 可见 + 删 */
+        .st-th-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 5px;
+        }
+
+        .st-th-btn > input[type="text"] {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .st-th-btn > .st-check {
+            flex: 0 0 auto;
+            padding: 0;
+        }
+
+        .st-th-btn > .st-mini {
+            flex: 0 0 auto;
+            padding: 5px 8px;
+        }
+
+        /* —— MVU 变量框架 —— */
+        .st-mvu-status {
+            border: 1px dashed rgba(120, 150, 180, 0.55);
+            border-radius: 9px;
+            padding: 10px 12px;
+            margin: 10px 0;
+            background: rgba(255, 255, 255, 0.45);
+        }
+
+        .st-mvu-status.st-on {
+            border-style: solid;
+            border-color: rgba(110, 190, 150, 0.7);
+        }
+
+        .st-mvu-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 8px;
+        }
+
+        .st-mvu-chip {
+            font-size: 0.68rem;
+            padding: 2px 7px;
+            border-radius: 999px;
+            border: 1px solid rgba(190, 110, 110, 0.55);
+            background: rgba(230, 140, 140, 0.14);
+            color: #8a3a3a;
+            white-space: nowrap;
+        }
+
+        .st-mvu-chip.st-on {
+            border-color: rgba(110, 180, 140, 0.7);
+            background: rgba(120, 200, 160, 0.18);
+            color: #2c6b4a;
+        }
+
+        .st-mvu-state {
+            font-size: 0.75rem;
+            line-height: 1.75;
+            color: #3f5b70;
+        }
+
+        .st-mvu-presets {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            margin: 12px 0 4px;
+        }
+
+        .st-mvu-presets-label {
+            font-size: 0.74rem;
+            color: #5b7488;
+            flex: 0 0 auto;
+        }
+
+        /* 左大纲 + 右检查器。窄屏会竖过来（见下面的 @media） */
+        .st-mvu-split {
+            display: grid;
+            grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+            gap: 10px;
+            margin-top: 10px;
+            align-items: start;
+        }
+
+        .st-mvu-outline,
+        .st-mvu-insp {
+            border: 1px solid rgba(120, 150, 180, 0.35);
+            border-radius: 9px;
+            padding: 8px;
+            min-width: 0;
+        }
+
+        .st-mvu-outline {
+            max-height: 460px;
+            overflow: auto;
+        }
+
+        .st-mvu-col-head {
+            font-size: 0.72rem;
+            letter-spacing: 0.06em;
+            color: #5b7488;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(120, 150, 180, 0.28);
+        }
+
+        .st-mvu-row,
+        .st-mvu-crow {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 6px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.76rem;
+            color: #2f4a5e;
+            line-height: 1.4;
+        }
+
+        .st-mvu-row:hover,
+        .st-mvu-crow:hover { background: rgba(140, 190, 220, 0.18); }
+
+        .st-mvu-sel { background: rgba(121, 174, 210, 0.28); }
+
+        .st-mvu-tw {
+            flex: 0 0 auto;
+            width: 13px;
+            text-align: center;
+            opacity: 0.7;
+            font-size: 0.7rem;
+        }
+
+        .st-mvu-tw-x { visibility: hidden; }
+
+        .st-mvu-ico {
+            flex: 0 0 auto;
+            font-size: 0.72rem;
+        }
+
+        .st-mvu-name {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .st-mvu-tag {
+            flex: 0 0 auto;
+            font-size: 0.66rem;
+            padding: 1px 6px;
+            border-radius: 999px;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            color: #456a85;
+            background: rgba(255, 255, 255, 0.7);
+        }
+
+        .st-mvu-n {
+            flex: 0 0 auto;
+            font-size: 0.66rem;
+            color: #6b8398;
+            min-width: 12px;
+            text-align: right;
+        }
+
+        .st-mvu-clink {
+            flex: 1 1 auto;
+            min-width: 0;
+            text-align: left;
+            font-family: inherit;
+            font-size: 0.76rem;
+            color: #2f4a5e;
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .st-mvu-cbtns {
+            flex: 0 0 auto;
+            display: flex;
+            gap: 3px;
+        }
+
+        .st-mvu-cbtns .st-mini {
+            padding: 2px 6px;
+            font-size: 0.68rem;
+        }
+
+        .st-mvu-form { min-width: 0; }
+
+        .st-mvu-opt {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 5px;
+        }
+
+        .st-mvu-opt input[type="text"] {
+            flex: 1 1 auto;
+            min-width: 0;
+            font-family: inherit;
+            font-size: 0.76rem;
+            padding: 5px 7px;
+            border-radius: 7px;
+            border: 1px solid rgba(120, 150, 180, 0.55);
+            background: rgba(255, 255, 255, 0.9);
+            color: #29465b;
+        }
+
+        .st-mvu-code {
+            font-size: 0.7rem;
+            line-height: 1.5;
+            max-height: 260px;
+            overflow: auto;
+            margin: 4px 0 10px;
+        }
+
+        .st-mvu-preview { margin-top: 12px; }
+
+        /* —— MVU 状态栏外观编辑器（像编辑 PPT：图层 / 画布 / 属性）—— */
+        .st-sb-top {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 10px 0 4px;
+            align-items: stretch;
+        }
+
+        .st-sb-panel {
+            flex: 1 1 260px;
+            min-width: 0;
+            border: 1px solid rgba(120, 150, 180, 0.35);
+            border-radius: 9px;
+            padding: 8px 10px;
+        }
+
+        .st-sb-tpls,
+        .st-sb-themes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .st-sb-theme {
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 9px 5px 6px;
+            border-radius: 8px;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            background: rgba(255, 255, 255, 0.8);
+            color: #2f4a5e;
+            font-size: 0.72rem;
+            cursor: pointer;
+        }
+
+        .st-sb-theme.st-on {
+            border-color: #3b7dd8;
+            box-shadow: 0 0 0 1px #3b7dd8 inset;
+            font-weight: bold;
+        }
+
+        .st-sb-sw {
+            flex: 0 0 auto;
+            width: 22px;
+            height: 14px;
+            border-radius: 4px;
+            border: 1px solid rgba(0, 0, 0, 0.25);
+        }
+

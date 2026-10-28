@@ -1,0 +1,102 @@
+    <style>
+        :root {
+            --color-1: #79d2b3;
+            --color-2: #79d2ca;
+            --color-3: #79c4d2;
+            --color-4: #79aed2;
+            --color-5: #7998d2;
+            /* 放大模式（电脑）：宽度 = 窗口宽度的这个比例，但不超过上限。
+               注意 85vw 只在窗口较窄时起作用，桌面上实际由上限值决定宽度。
+               想调宽度，改下面这两个数就行 */
+            --ai-max-width-pct: 85vw;
+            --ai-max-width-max: 640px;
+        }
+
+        /* 本地像素字体 fusion-pixel 12px proportional JA。
+           路径相对本文件：G:\saki\saki.html → G:\saki\fonts\...
+           注意 CSS 里的 URL 必须用正斜杠 —— 反斜杠在 CSS 里是转义符，
+           写 '.\fonts\...' 会被吃掉 */
+        @font-face {
+            font-family: 'Fusion Pixel 12px Proportional JA';
+            src: url('./fonts/fusion-pixel-12px-proportional-ja.ttf') format('truetype');
+            font-style: normal;
+            /* 声明覆盖全部字重。这字体只有一款，不这么写的话
+               font-weight: bold 会让浏览器合成「伪粗体」——
+               像素字被糊一层，12px 下基本就毁了 */
+            font-weight: 100 900;
+            font-display: swap;
+        }
+
+        /* 全局像素字体设置 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Fusion Pixel 12px Proportional JA', 'Silkscreen', 'DotGothic16', 'ZCOOL Gaodeng', monospace;
+            user-select: none;
+        }
+
+        /* 时钟整卡保持原有字体（需求是「除时钟外」才换字）。
+           数字那一条有自己更靠后的规则，所以这里用 :not() 把它排除掉，
+           免得 (0,2,0) 的优先级反过来盖掉 .digital-clock 的 Share Tech Mono */
+        .clock-container,
+        .clock-container *:not(.digital-clock) {
+            font-family: 'Silkscreen', 'DotGothic16', 'ZCOOL Gaodeng', monospace;
+        }
+
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            background: linear-gradient(135deg, var(--color-1), var(--color-2), var(--color-3), var(--color-4), var(--color-5));
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            padding: 0 1rem 2.5rem 1rem;
+            transition: background 0.5s ease;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* 顶部控制栏 (固定在右上角) */
+        .top-controls-container {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+            border: 1.5px solid rgba(255, 255, 255, 0.5);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        /* 小游戏入口按钮（位于日历下方，居中） */
+        .game-entry-btn {
+            margin-top: clamp(1rem, 3vh, 2rem);
+        }
+

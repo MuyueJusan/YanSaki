@@ -1,0 +1,474 @@
+        /* 输入框融进标签框里：没边框、没背景，光标就贴在最后一个标签后面。
+           选择器必须压过 .st-field input —— 那一条是给普通输入框用的
+           （元素 + 类 = 0,1,1，光写 .st-tags-in 是 0,1,0，压不住） */
+        .st-field .st-tags-in,
+        .st-field .st-tags-in:focus {
+            flex: 1 1 70px;
+            min-width: 70px;
+            width: auto;
+            padding: 3px 2px;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+            font-family: inherit;
+            font-size: 0.82rem;
+            color: #1a2b3c;
+        }
+
+        .st-empty {
+            font-size: 0.78rem;
+            color: #5b7488;
+            padding: 10px 0;
+        }
+
+        .st-note {
+            font-size: 0.75rem;
+            line-height: 1.75;
+            color: #3f5b70;
+            background: rgba(120, 170, 200, 0.14);
+            border-left: 3px solid rgba(120, 170, 200, 0.7);
+            border-radius: 0 7px 7px 0;
+            padding: 8px 10px;
+            margin: 10px 0;
+        }
+
+        .st-note.st-warn {
+            background: rgba(230, 190, 120, 0.2);
+            border-left-color: rgba(200, 150, 60, 0.85);
+            color: #6b4a12;
+        }
+
+        .st-note.st-bad {
+            background: rgba(230, 140, 140, 0.18);
+            border-left-color: rgba(200, 90, 90, 0.85);
+            color: #7a2626;
+        }
+
+        .st-note code {
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 4px;
+            padding: 0 3px;
+        }
+
+        /* 顶栏下面那条常驻提示：顶栏的按钮在任何选项卡下都能点，
+           反馈不能只写在「导出」页里 —— 那页没渲染时提示会直接消失 */
+        .st-status {
+            flex: 0 0 auto;
+            font-size: 0.74rem;
+            line-height: 1.7;
+            color: #3f5b70;
+            background: rgba(120, 170, 200, 0.14);
+            border-left: 3px solid rgba(120, 170, 200, 0.7);
+            border-radius: 0 7px 7px 0;
+            padding: 7px 10px;
+            margin: 8px 10px 0;
+            word-break: break-word;
+        }
+
+        .st-status.st-warn {
+            background: rgba(230, 190, 120, 0.2);
+            border-left-color: rgba(200, 150, 60, 0.85);
+            color: #6b4a12;
+        }
+
+        .st-status.st-bad {
+            background: rgba(230, 140, 140, 0.18);
+            border-left-color: rgba(200, 90, 90, 0.85);
+            color: #7a2626;
+        }
+
+        .st-json {
+            font-family: 'Fusion Pixel 12px Proportional JA', 'Share Tech Mono', monospace;
+            font-size: 0.72rem;
+            line-height: 1.6;
+            color: #1a2b3c;
+            background: #f4f8fb;
+            border: 1px solid rgba(120, 150, 180, 0.4);
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 320px;
+            overflow: auto;
+            white-space: pre;
+            user-select: text;
+            margin: 0;
+        }
+
+        .st-avatar-box {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .st-avatar-prev {
+            width: 96px;
+            height: 144px;
+            border-radius: 8px;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            background: repeating-conic-gradient(#e8eef3 0% 25%, #ffffff 0% 50%) 50% / 16px 16px;
+            object-fit: cover;
+            flex: 0 0 auto;
+        }
+
+        .st-avatar-meta { font-size: 0.75rem; color: #4a6478; line-height: 1.8; }
+
+        .st-crumb {
+            font-size: 0.72rem;
+            color: #5b7488;
+            margin-bottom: 8px;
+        }
+
+        .st-kv {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 3px 10px;
+            font-size: 0.76rem;
+            color: #33546b;
+        }
+
+        .st-kv b { color: #14384f; font-weight: normal; opacity: 0.8; }
+
+        .st-greet-num {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            margin-left: 6px;
+        }
+
+        @media (max-width: 760px) {
+            /* 窄屏也把选项卡留在左边 —— 需求就是「放在左侧」，横过来就不是左侧了。
+               代价是栏宽要收窄，所以图标在上、文字在下，一列竖排 */
+            .st-tabs,
+            .st-tabs.st-tabs-collapsed {
+                flex: 0 0 auto;
+                width: 62px;
+                flex-direction: column;
+                overflow-x: hidden;
+                overflow-y: auto;
+                padding: 6px 4px;
+            }
+
+            .st-tab {
+                flex-direction: column;
+                align-items: center;
+                gap: 3px;
+                padding: 8px 2px;
+                font-size: 0.68rem;
+                text-align: center;
+            }
+
+            .st-tab-label { white-space: normal; line-height: 1.2; }
+
+            /* 竖排之后徽章会掉到文字下面占一整行，钉到右上角去 */
+            .st-tab { position: relative; }
+
+            .st-tab-count {
+                position: absolute;
+                top: 4px;
+                right: 4px;
+                margin-left: 0;
+                font-size: 0.6rem;
+            }
+
+            /* 窄屏本来就窄，折叠后只剩图标，宽度再收一点
+               （标签 / 徽章的隐藏规则在基础样式里已经有了） */
+            .st-tabs.st-tabs-collapsed { width: 40px; }
+
+            .st-topbar-sub { max-width: 100%; }
+
+            .st-main { padding: 12px 12px 40px; }
+
+            /* MVU 的左大纲 + 右检查器在窄屏竖过来 —— 并排会把两边都挤成
+               一条缝，检查器的输入框根本点不到 */
+            .st-mvu-split {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .st-mvu-outline { max-height: 260px; }
+
+            .st-mvu-cbtns .st-mini { padding: 6px 9px; }
+
+            /* 状态栏编辑器同理：三栏并排会把画布挤成一条缝 */
+            .st-sb-split {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .st-sb-layers { max-height: 240px; }
+
+            /* 块库在窄屏是主要入口，默认的 5px 内边距太薄，点不准 */
+            .st-sb-palette .st-mini { padding: 9px 12px; font-size: 0.76rem; }
+        }
+
+        @media (hover: none) {
+            .st-mini { padding: 8px 12px; }
+            .st-tab { padding: 10px 12px; }
+        }
+
+        /* 复古皮肤：浮层也要跟着变成老终端配色 */
+        body.retro-mode .st-shell {
+            background: #c0c0c0;
+            color: #000000;
+        }
+
+        body.retro-mode .st-tabs {
+            background: #d4d0c8;
+            border-right-color: #808080;
+        }
+
+        body.retro-mode .st-tab { color: #000000; }
+
+        body.retro-mode .st-tab:hover { background: #ffffff; }
+
+        body.retro-mode .st-tab.active {
+            background: #000080;
+            color: #ffffff;
+            border-color: #000080;
+            box-shadow: none;
+        }
+
+        body.retro-mode .st-pane-title,
+        body.retro-mode .st-sub,
+        body.retro-mode .st-hint { color: #000000; }
+        /* 折叠头那两格（箭头 / 右侧提示）不在上面那串里，retro 下要自己压成纯黑 */
+        body.retro-mode .st-fold-ico,
+        body.retro-mode .st-fold-hint { color: #000000; opacity: 1; }
+        body.retro-mode .st-field > label { color: #000000; }
+
+        body.retro-mode .st-pane-desc,
+        body.retro-mode .st-avatar-meta,
+        body.retro-mode .st-crumb,
+        body.retro-mode .st-kv,
+        body.retro-mode .st-kv b,
+        body.retro-mode .st-empty { color: #000000; opacity: 1; }
+
+        body.retro-mode .st-field input,
+        body.retro-mode .st-field select,
+        body.retro-mode .st-field textarea {
+            background: #ffffff;
+            color: #000000;
+            border-color: #808080;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .st-entry {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        /* 人设生成器「参考素材」的勾选列表：跟 .st-entry 同一套 Win95 观感 */
+        body.retro-mode .st-lore-list {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-lore-list .st-check {
+            border-bottom-color: #808080;
+            color: #000000;
+        }
+
+        /* 预制块那两处也不吃 .st-field 那套，复古皮肤下要单独压一遍 */
+        body.retro-mode .st-sb-pf-save input {
+            background: #ffffff;
+            color: #000000;
+            border-color: #808080;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .st-sb-pf-cat { color: #000000; }
+
+        body.retro-mode .st-entry > summary { color: #000000; }
+
+        body.retro-mode .st-mini {
+            background: #d4d0c8;
+            color: #000000;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-big {
+            background: #000080;
+            color: #ffffff;
+            border-radius: 0;
+            text-shadow: none;
+        }
+
+        body.retro-mode .st-big.st-plain {
+            background: #d4d0c8;
+            color: #000000;
+        }
+
+        body.retro-mode .st-json {
+            background: #ffffff;
+            color: #000000;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-note,
+        body.retro-mode .st-status {
+            background: #ffffff;
+            color: #000000;
+            border-left-color: #000080;
+            border-radius: 0;
+        }
+
+        /* MVU：复古皮肤下一律白底黑字，选中态用 Win95 的深蓝反白 */
+        body.retro-mode .st-mvu-status,
+        body.retro-mode .st-mvu-outline,
+        body.retro-mode .st-mvu-insp {
+            background: #ffffff;
+            border-color: #000080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-mvu-state,
+        body.retro-mode .st-mvu-name,
+        body.retro-mode .st-mvu-clink,
+        body.retro-mode .st-mvu-col-head,
+        body.retro-mode .st-mvu-presets-label { color: #000000; }
+
+        body.retro-mode .st-mvu-row,
+        body.retro-mode .st-mvu-crow { color: #000000; border-radius: 0; }
+
+        body.retro-mode .st-mvu-row:hover,
+        body.retro-mode .st-mvu-crow:hover { background: #d4d0c8; }
+
+        body.retro-mode .st-mvu-sel { background: #000080; }
+
+        body.retro-mode .st-mvu-sel .st-mvu-name,
+        body.retro-mode .st-mvu-sel .st-mvu-clink { color: #ffffff; }
+
+        body.retro-mode .st-mvu-chip,
+        body.retro-mode .st-mvu-tag {
+            border-radius: 0;
+            background: #ffffff;
+            border-color: #800000;
+            color: #800000;
+        }
+
+        body.retro-mode .st-mvu-chip.st-on {
+            background: #ffffff;
+            border-color: #008000;
+            color: #008000;
+        }
+
+        body.retro-mode .st-mvu-tag { border-color: #000080; color: #000080; }
+
+        /* 复古皮肤下的状态栏编辑器。画布是「真状态栏的预览」，
+           底色不能跟着变灰 —— 否则看不出暗色主题实际长什么样 */
+        body.retro-mode .st-sb-panel,
+        body.retro-mode .st-sb-layers,
+        body.retro-mode .st-sb-canvas-wrap,
+        body.retro-mode .st-sb-insp { border-color: #808080; border-radius: 0; }
+
+        body.retro-mode .st-sb-slide-tag,
+        body.retro-mode .st-sb-dropend,
+        body.retro-mode .st-sb-blank { color: #000000; }
+
+        body.retro-mode .st-sb-theme {
+            background: #d4d0c8;
+            color: #000000;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-sb-theme.st-on {
+            border-color: #000080;
+            box-shadow: 0 0 0 1px #000080 inset;
+        }
+
+        body.retro-mode .st-sb-hit.st-sb-on { box-shadow: 0 0 0 2px #000080 inset; }
+        body.retro-mode .st-sb-hit.st-sb-off > .st-sb-badge {
+            background: #a06000;
+            border-radius: 0;
+        }
+        body.retro-mode .st-sb-cvbar .st-mini.st-on {
+            background: #000080;
+            border-color: #000000;
+        }
+        body.retro-mode .st-sb-h {
+            border-radius: 0;
+            border-color: #000000;
+            background: #c0c0c0;
+        }
+        body.retro-mode .st-sb-h:hover { background: #000080; }
+
+        body.retro-mode .st-sb-color input[type="color"] { border-radius: 0; }
+
+        body.retro-mode .st-chip {
+            background: #d4d0c8;
+            color: #000000;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-chip.st-on { background: #a8e0c0; }
+
+        /* 标签也走 95 那套方角。输入框要显式压过
+           body.retro-mode .st-field input（0,2,2）—— 它是白的、有边框 */
+        body.retro-mode .st-tags {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-tag {
+            background: #d4d0c8;
+            color: #000000;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-tag-x { color: #000000; }
+        body.retro-mode .st-tag-x:hover { background: #800000; color: #ffffff; }
+
+        /* 多选栏 / 勾选框也走方角那套 —— 不补的话复古皮肤下会冒出一条圆角的
+           浅蓝色卡片贴在 Win98 灰的页面里 */
+        body.retro-mode .st-batch {
+            border-radius: 0;
+            border-color: #808080;
+            background: #ffffff;
+        }
+
+        /* 搜索筛选栏照抄同一套：方角、Win98 灰边框、纯白底 */
+        body.retro-mode .st-find {
+            border-radius: 0;
+            border-color: #808080;
+            background: #ffffff;
+        }
+
+        body.retro-mode .st-find-q,
+        body.retro-mode .st-find-row select {
+            border-radius: 0;
+            border-color: #808080;
+            background: #ffffff;
+            color: #000000;
+        }
+
+        body.retro-mode .st-find-info,
+        body.retro-mode .st-find-empty { color: #000000; }
+
+        body.retro-mode .st-sel-box { accent-color: #000080; }
+
+        body.retro-mode .st-field .st-tags-in,
+        body.retro-mode .st-field .st-tags-in:focus {
+            background: transparent;
+            color: #000000;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .st-tbtn {
+            background: #d4d0c8;
+            color: #000000;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-tbtn-close { background: #ffffff; }
+

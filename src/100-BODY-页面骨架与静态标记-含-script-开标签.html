@@ -1,0 +1,662 @@
+</head>
+<body>
+
+    <!-- 手机比例下的入口菜单：左上角一个按钮，点开才露出那两个被收起来的入口。
+         只在窄屏 / 极扁窗口出现（判据见上面那条 @media，三处必须逐字一致）。
+         ⚠ 卡名 `#mobile-nav-name` 放在面板**里面**、紧跟在「角色卡编写器」下面 ——
+           跟主页那张编写器卡片上的「当前草稿」是**同一份数据**（`stEditor.card`）。
+           （2026-09-20 第二十二轮改的：原来标在按钮旁边、常显，用户要求收进菜单里。）
+         ⚠ `.mobile-nav-box` 有两个作用：复古模式靠它画 Win98 立体边框；平时靠它的
+           `align-items: stretch` 把两个入口拉成等宽（`<button>` 自己只按 fit-content 算）。
+           边框/底色**不能**挂到 `.mobile-nav-panel` / `.mobile-nav-inner` 上 ——
+           那两个是折叠动画的容器，收起来时高度是 0，边框和 padding 会**留在原地**，
+           于是菜单关着也会在左上角留一道灰条。 -->
+    <div class="mobile-nav" id="mobile-nav">
+        <button class="mobile-nav-btn" id="mobile-nav-btn" type="button"
+                onclick="toggleMobileNav()" aria-label="展开菜单" aria-expanded="false">
+            <span class="mobile-nav-ico" id="mobile-nav-ico">☰</span>
+        </button>
+        <div class="mobile-nav-panel">
+            <div class="mobile-nav-inner">
+                <div class="mobile-nav-box">
+                    <button class="mobile-nav-item" type="button" onclick="mobileOpenAi()">🤖 AI 对话</button>
+                    <button class="mobile-nav-item" type="button" onclick="mobileOpenSt()">🃏 角色卡编写器</button>
+                    <span class="mobile-nav-name" id="mobile-nav-name"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h1 class="title">YanSaki的小屋</h1>
+
+    <!-- 时钟卡片 -->
+    <div class="clock-container glass-card tz-collapsed" id="clock-tz-card">
+        <div class="clock-display">
+            <div class="period-box">
+                <span id="am-indicator" class="period-am">午前</span>
+                <span id="pm-indicator" class="period-pm">午後</span>
+            </div>
+            <div id="clock" class="digital-clock" onclick="toggleRetroMode()" title="点击切换复古 / 现代模式">00:00:00</div>
+            <!-- 世界时间的日期偏移徽标（`【D+1】` / `【D-1】`），文案由 `updateClockDayOffset()` 写。
+                 ⚠ **这里必须留空**，别放「同日」之类的占位文字 —— 空文案靠 CSS 的 `:empty`
+                   完全收起；放了占位文字它就成了一个**永久显示**的假标记。
+                 ⚠ 「本地时间」下它永远是空的（基准不标自己），那是常态。 -->
+            <span id="clock-day-offset" class="clock-day-offset" title="所选时区的日期与本地日期相差的天数"></span>
+        </div>
+        <button id="clock-tz-toggle" class="tz-toggle" type="button" onclick="toggleTimezoneGrid()">
+            <span id="clock-tz-label">本地时间</span> <span class="tz-toggle-icon">▾</span>
+        </button>
+        <div class="tz-collapse-wrapper">
+            <div class="tz-collapse-inner">
+                <div id="clock-tz-grid" class="tz-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 交互式日历卡片 (默认折叠) -->
+    <div class="calendar-container glass-card collapsed" id="calendar-card">
+        <div class="calendar-header">
+            <button class="cal-btn" onclick="handlePrev()">＜</button>
+            <div class="header-title-box">
+                <span id="title-year" class="clickable-title" onclick="switchMode('year')">2026年</span>
+                <span id="title-month" class="clickable-title" onclick="switchMode('month')">09月</span>
+                <!-- 「今日」按钮：**文案由 `updateTodayBtn()` 改写成当前日**（如 `2日` / `31日`），
+                     这里的「今日」只是**脚本跑起来之前的兜底**，不是最终显示内容。
+                     ⚠ 别把它当成「功能没做」而删掉 —— 真跑起来它会被覆盖成当前日。 -->
+                <button class="cal-btn today-btn" id="today-btn" onclick="resetToToday()">今日</button>
+            </div>
+            <div style="display: flex; gap: 6px;">
+                <button class="cal-btn" onclick="handleNext()">＞</button>
+                <button class="cal-btn toggle-btn" onclick="toggleCalendar()" title="展开/折叠日历">
+                    <span class="toggle-icon">▲</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="calendar-collapse-wrapper">
+            <div class="calendar-collapse-inner">
+                <div class="calendar-body" id="calendar-body">
+                    <!-- JS 动态渲染 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 对话区域 -->
+    <div class="ai-container glass-card ai-collapsed ai-settings-collapsed ai-adv-collapsed" id="ai-card">
+        <div class="ai-header">
+            <span class="ai-title">🤖 AI 对话</span>
+            <div class="ai-header-actions">
+                <button class="cal-btn toggle-btn" id="ai-new-btn" type="button" onclick="newAiConversation()" title="新对话">
+                    <span>✚</span>
+                </button>
+                <button class="cal-btn toggle-btn ai-max-btn" id="ai-max-btn" type="button" onclick="toggleAiMaximize()" title="放大聊天窗口">
+                    <span class="ai-max-icon">⛶</span>
+                </button>
+                <button class="cal-btn toggle-btn ai-collapse-toggle" type="button" onclick="toggleAiArea()" title="展开/折叠">
+                    <span class="toggle-icon ai-toggle-icon">▲</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 主折叠（整个 AI 对话区域：模型设置 + 聊天） -->
+        <div class="ai-collapse-wrapper">
+            <div class="ai-collapse-inner">
+
+                <!-- 模型设置（子展开，位于对话上方） -->
+                <div class="ai-settings-panel">
+                    <button class="ai-settings-toggle" type="button" onclick="toggleAiSettings()">
+                        ⚙ 模型设置 <span class="ai-src-badge" id="ai-src-badge"></span> <span class="ai-adv-icon">▾</span>
+                    </button>
+                    <div class="ai-settings-collapse">
+                        <div class="ai-settings-collapse-inner">
+                            <div class="ai-settings">
+                                <!-- 配置来源：跟随时下面那批 API 字段是**只读镜像** -->
+                                <div class="ai-field">
+                                    <label>配置来源</label>
+                                    <div class="ai-cfg-src" id="ai-cfg-src">
+                                        <button class="ai-src-btn" type="button" data-follow="1"
+                                                onclick="setAiCfgSource(true)">🔗 跟随 API 全局配置</button>
+                                        <button class="ai-src-btn" type="button" data-follow="0"
+                                                onclick="setAiCfgSource(false)">🔑 独立配置</button>
+                                    </div>
+                                    <div class="ai-cfg-src-hint" id="ai-cfg-src-hint">
+                                        下面几格是<b>只读镜像</b> —— 它们跟着主页的【🔌 API 全局配置】走。
+                                        <button class="ai-src-open" type="button" onclick="openApiGlobalModal()">打开 API 全局配置</button>
+                                    </div>
+                                </div>
+                                <div class="ai-field">
+                                    <label>服务商</label>
+                                    <select id="ai-provider" onchange="syncAiProviderUI()"></select>
+                                </div>
+                                <div class="ai-field">
+                                    <label>Base URL（自定义时填写）</label>
+                                    <input id="ai-base-url" type="text" placeholder="https://api.example.com/v1" oninput="customBaseUrlDraft=this.value">
+                                </div>
+                                <!-- ⚠ 带 id：Vertex 完整模式（Service Account）下这一格要藏起来
+                                     —— 那一档用 SA JSON 换 token，根本没有 Key 可填。
+                                     见 syncAiVertexHint() -->
+                                <div class="ai-field" id="ai-key-field">
+                                    <label>API Key</label>
+                                    <input id="ai-api-key" type="password" placeholder="sk-..." autocomplete="off">
+                                </div>
+                                <div class="ai-field">
+                                    <label>模型</label>
+                                    <!-- ⚠ 第十八轮从死下拉改成 input + datalist：能选，也能手输。
+                                         「获取模型」拉到的列表进 datalist；手输的值照样能存
+                                         （有些服务商的 /models 不返全，或者压根没有这个接口） -->
+                                    <input id="ai-model" list="ai-model-list" type="text"
+                                           placeholder="选一个，或直接手输模型名" autocomplete="off">
+                                    <datalist id="ai-model-list"></datalist>
+                                </div>
+                                <button class="ai-btn" id="ai-fetch-btn" onclick="fetchModels()">获取模型</button>
+
+                                <!-- 独立配置 + Vertex 时出现：这个面板没有那几格，得说出来，
+                                     别让用户以为「选了 Vertex 就只能用 API Key」 -->
+                                <div class="ai-cfg-src-hint" id="ai-vertex-hint" style="display:none">
+                                    Vertex 的<b>项目 / 位置 / 认证方式</b>沿用【🔌 API 全局配置】里那份
+                                    （这个面板改不了）。要用<b>完整模式（Service Account）</b>
+                                    就去那个弹窗里配。
+                                </div>
+
+                                <!-- 高级设置（折叠） -->
+                                <button class="ai-adv-toggle" type="button" onclick="toggleAiAdvanced()">
+                                    ⚙ 高级设置 <span class="ai-adv-icon">▾</span>
+                                </button>
+                                <div class="ai-adv-panel">
+                                    <div class="ai-adv-inner">
+                                        <div class="ai-adv-grid">
+                                            <label class="ai-switch">
+                                                <input type="checkbox" id="ai-stream" onchange="updateAiStreamLabel()">
+                                                <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                                                <span class="ai-switch-label" id="ai-stream-label">流式输出</span>
+                                            </label>
+                                            <div class="ai-field">
+                                                <label>温度：<span id="ai-temp-value">0.7</span></label>
+                                                <input id="ai-temperature" type="range" min="0" max="2" step="0.1" value="0.7" oninput="updateAiTempLabel()">
+                                            </div>
+                                            <div class="ai-field">
+                                                <label>回复长度（max_tokens）</label>
+                                                <input id="ai-max-tokens" type="number" min="1" max="32768" value="1024">
+                                            </div>
+
+                                            <!-- SillyTavern 风格 {{user}} 宏 -->
+                                            <div class="ai-adv-divider"></div>
+                                            <div class="ai-adv-group ai-macro-group" id="ai-user-macro-group">
+                                                <div class="ai-adv-group-title">
+                                                    <span>🎭 用户人设 · {{user}} 宏</span>
+                                                    <label class="ai-switch ai-switch-mini" title="启用 / 关闭宏替换">
+                                                        <input type="checkbox" id="ai-user-macro" onchange="onUserMacroFieldChange()">
+                                                        <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="ai-hint ai-macro-locked-hint" id="ai-macro-locked-hint" style="display:none">
+                                                    酒馆模式开着，这里<b>只剩「你的昵称」</b>能用 —— 它就是你的用户身份，
+                                                    <b>用户人设描述</b>也取自它。称呼修饰 / 称呼模板 / AI 角色名在酒馆模式下没意义
+                                                    （{{char}} 由角色卡决定），已经清空并锁住。要改回普通模式的玩法，
+                                                    把酒馆模式关掉就行。
+                                                </div>
+
+                                                <div class="ai-macro-body" id="ai-macro-body">
+                                                    <div class="ai-row">
+                                                        <div class="ai-field">
+                                                            <label>你的昵称</label>
+                                                            <input id="ai-user-name" type="text" placeholder="阿月" oninput="onUserMacroFieldChange()">
+                                                        </div>
+                                                        <div class="ai-field">
+                                                            <label>AI 角色名</label>
+                                                            <input id="ai-char-name" type="text" placeholder="Saki" oninput="onUserMacroFieldChange()">
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="ai-field">
+                                                        <label>称呼方式</label>
+                                                        <select id="ai-address-style" onchange="onUserMacroFieldChange()">
+                                                            <option value="plain">直接称呼昵称</option>
+                                                            <option value="prefix">前缀修饰（小 + 昵称）</option>
+                                                            <option value="suffix">后缀修饰（昵称 + 酱）</option>
+                                                            <option value="custom">自定义模板</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div class="ai-field" id="ai-address-affix-field">
+                                                        <label id="ai-address-affix-label">前缀修饰词</label>
+                                                        <input id="ai-address-affix" type="text" placeholder="小" oninput="onUserMacroFieldChange()">
+                                                    </div>
+
+                                                    <div class="ai-field" id="ai-address-template-field">
+                                                        <label>称呼模板（{{user}} 代表昵称）</label>
+                                                        <input id="ai-address-template" type="text" placeholder="{{user}}大人" oninput="onUserMacroFieldChange()">
+                                                    </div>
+
+                                                    <div class="ai-macro-preview" id="ai-macro-preview"></div>
+
+                                                    <label class="ai-switch">
+                                                        <input type="checkbox" id="ai-address-inject" onchange="onUserMacroFieldChange()">
+                                                        <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                                                        <span class="ai-switch-label">自动把称呼指令写入系统提示词</span>
+                                                    </label>
+
+                                                    <div class="ai-hint">
+                                                        系统提示词中可用 <code>{{user}}</code>（你的称呼）与 <code>{{char}}</code>（AI 角色名），发送时自动替换；你也可以直接在自己发的消息里写 <code>{{user}}</code>。
+                                                    </div>
+
+                                                    <div class="ai-actions">
+                                                        <button class="ai-btn ai-btn-mini" type="button" onclick="insertAiMacro('{{user}}')">插入 {{user}}</button>
+                                                        <button class="ai-btn ai-btn-mini" type="button" onclick="insertAiMacro('{{char}}')">插入 {{char}}</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="ai-adv-divider"></div>
+
+                                            <div class="ai-adv-group">
+                                                <div class="ai-adv-group-title">
+                                                    <span>📌 第一段</span>
+                                                </div>
+
+                                                <div class="ai-prompt-body" id="ai-firstseg-body">
+                                                    <div class="ai-field">
+                                                        <textarea id="ai-first-seg" rows="3" placeholder="比如：以下是一段角色扮演对话。请始终保持角色的语气，不要替用户做决定。" oninput="onFirstSegInput()"></textarea>
+                                                        <div class="ai-hint">
+                                                            这一段会作为<b>发给模型的最前面那一条</b>（system 角色）原样发出 —— 排在系统提示词、酒馆模式拼出来的提示词、以及全部聊天记录<b>之前</b>。<br>
+                                                            适合放「总纲 / 全局规则 / 输出约定」这类想永远压在最前面的东西。<br>
+                                                            <b>留空就等于没有</b>，不会占位置；它也不受下面「系统提示词」和「酒馆模式」两个开关的影响。
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="ai-adv-divider"></div>
+
+                                            <div class="ai-adv-group">
+                                                <div class="ai-adv-group-title">
+                                                    <span>📝 系统提示词</span>
+                                                    <label class="ai-switch ai-switch-mini" title="启用 / 关闭原系统提示词">
+                                                        <input type="checkbox" id="ai-prompt-enabled" onchange="onPromptToggle()">
+                                                        <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="ai-prompt-body" id="ai-prompt-body">
+                                                    <div class="ai-field">
+                                                        <div class="ai-preset-row" id="ai-preset-row"></div>
+                                                        <div class="ai-preset-desc" id="ai-preset-desc"></div>
+                                                        <textarea id="ai-system-prompt" rows="5" placeholder="设定 AI 的角色与语气…" oninput="onSystemPromptInput()"></textarea>
+                                                        <div class="ai-hint">
+                                                            点上面的预设一键套用；手动改过之后会自动切到「✎ 自定义」，你写的内容会留着，随时能点回预设。<br>
+                                                            和<b>酒馆模式互斥</b>：开这个就会关掉酒馆模式，改用你这里的提示词。<br>
+                                                            换人设之后想重开会话，点标题栏的 <b>✚</b> 就行。
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="ai-adv-divider"></div>
+
+                                            <div class="ai-adv-group">
+                                                <div class="ai-adv-group-title">
+                                                    <span>🎭 酒馆模式 · 角色卡</span>
+                                                    <label class="ai-switch ai-switch-mini">
+                                                        <input type="checkbox" id="ai-tavern-enabled" onchange="onTavernToggle()">
+                                                        <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="ai-tavern-body" id="ai-tavern-body">
+                                                    <div class="ai-tavern-actions">
+                                                        <button class="ai-btn ai-btn-mini" type="button" onclick="document.getElementById('ai-card-file').click()">📇 导入角色卡</button>
+                                                        <button class="ai-btn ai-btn-mini" type="button" onclick="document.getElementById('ai-lore-file').click()">📖 导入世界书</button>
+                                                        <button class="ai-btn ai-btn-mini" type="button" id="ai-tavern-clear" onclick="clearTavernData()">✕ 清除</button>
+                                                    </div>
+                                                    <input type="file" id="ai-card-file" class="ai-hidden-file" accept=".png,.json,image/png,application/json" onchange="onCardFilePicked(event)">
+                                                    <input type="file" id="ai-lore-file" class="ai-hidden-file" accept=".json,application/json" onchange="onLoreFilePicked(event)">
+
+                                                    <div class="ai-tavern-status" id="ai-tavern-status"></div>
+                                                    <div id="ai-tavern-card"></div>
+                                                    <div id="ai-tavern-lore"></div>
+                                                    <div id="ai-tavern-preset"></div>
+
+                                                    <div class="ai-tv-field">
+                                                        <b>实际提示词结构</b>
+                                                        <div class="ai-tv-preview" id="ai-tavern-preview"></div>
+                                                    </div>
+
+                                                    <div class="ai-hint">
+                                                        角色卡支持 SillyTavern 的 <b>PNG 卡</b>（读 <code>chara</code> / <code>ccv3</code> 数据块）与 <b>JSON 卡</b>（V1 / V2 / V3）。<br>
+                                                        卡里自带的世界书会自动读入，也能单独导入世界书 JSON。<br>
+                                                        世界书的<b>激活规则</b>（关键词 / 次关键词逻辑 / 常驻 / 概率 / 包含组 / 递归 / 黏性冷却延迟 / 装饰器 <code>@@activate</code>）与<b>插入位置和深度</b>（↑Char / ↓Char / ↑AT / ↓AT / @D / ↑EM / ↓EM / Outlet）都按 SillyTavern 的语义执行：每个位置会像 ST 一样拼成一条消息，↑AT / ↓AT 则夹住<b>作者注释</b>整体注入，<b>并且不做 token 预算截断</b> —— 命中的条目会全部插入。<br>
+                                                        <b>提示词预设</b>决定「提示词由哪些槽组成、按什么顺序排、插在哪」—— 和 ST 的 Chat Completion 预设同一套模型（<code>prompts</code> + <code>prompt_order</code>），ST 导出的预设 JSON 可以直接导入。内置预设只读，一编辑就自动生成你自己的副本。<br>
+                                                        和<b>系统提示词互斥</b>：开启后只用角色卡里的提示词（<code>system_prompt</code> / 描述 / 性格 / 场景 / 示例对话 / 历史后指令），原系统提示词会被关掉。
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="ai-status" id="ai-status"></div>
+
+                                <div class="ai-actions">
+                                    <button class="ai-btn" onclick="saveAiSettings()">保存</button>
+                                    <button class="ai-btn primary" onclick="applyAiSettings()">应用</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 聊天界面 -->
+                <div class="ai-chat" id="ai-chat">
+                    <div class="ai-messages" id="ai-messages"></div>
+                    <div class="ai-input-row">
+                        <input id="ai-input" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter')sendAiMessage()">
+                        <button class="ai-send-btn" id="ai-send-btn" onclick="sendAiMessage()">发送</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SillyTavern 角色卡编写器 ===== -->
+    <div class="ai-container st-container glass-card ai-collapsed" id="st-card">
+        <div class="ai-header">
+            <span class="ai-title st-title-click" onclick="openStEditor()" title="点击全屏打开编写器">
+                🃏 SillyTavern 角色卡编写器
+            </span>
+            <div class="ai-header-actions">
+                <button class="cal-btn toggle-btn st-open-btn" id="st-open-btn" type="button" onclick="openStEditor()" title="全屏打开编写器">
+                    <span class="ai-max-icon">⛶</span>
+                </button>
+                <button class="cal-btn toggle-btn ai-collapse-toggle" type="button" onclick="toggleStArea()" title="展开/折叠">
+                    <span class="toggle-icon st-toggle-icon">▲</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 折叠起来时只剩标题栏，所以当前编的是哪张卡要单独占一行写出来。
+             放在折叠区外面 = 收起来也看得见；不塞进标题栏 = 不用跟标题抢宽度
+             （页面是 500px 窄栏，塞进标题栏会把标题挤到换行） -->
+        <div class="st-head-sub" id="st-head-sub"></div>
+
+        <div class="ai-collapse-wrapper">
+            <div class="ai-collapse-inner">
+                <div class="ai-hint st-card-hint">
+                    新建一张卡，或者把已有的 PNG / JSON 卡导进来改写。左侧十五个选项卡分别管
+                    <b>名字</b> / <b>类型</b> / <b>角色描述</b> / <b>系统提示词</b> / <b>元信息</b> /
+                    <b>AI 助手</b> / <b>世界书</b> / <b>开场白</b> / <b>正则</b> / <b>酒馆助手</b> /
+                    <b>MVU</b> / <b>状态栏</b> / <b>Code</b> / <b>人设生成器</b> / <b>导出</b>，
+                    最后能写成 <b>PNG 角色卡</b>（<code>chara</code> / <code>ccv3</code> 数据块）或 <b>JSON</b>。
+                    选项卡栏可以折叠成一条图标。
+                </div>
+                <div id="st-card-summary"></div>
+                <div class="st-card-actions">
+                    <button class="ai-btn st-btn" type="button" onclick="openStEditor()">⛶ 打开编写器</button>
+                    <button class="ai-btn st-btn st-btn-ghost" type="button" onclick="stNewCard(true)">✚ 新建空卡</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 角色卡编写器：全屏浮层 -->
+    <div class="st-overlay" id="st-overlay" aria-hidden="true">
+        <div class="st-shell" id="st-shell">
+            <div class="st-topbar">
+                <span class="st-topbar-title">🃏 角色卡编写器</span>
+                <span class="st-topbar-sub" id="st-topbar-sub"></span>
+                <div class="st-topbar-actions">
+                    <button class="st-tbtn" type="button" onclick="stToggleTabs()" id="st-tabs-btn" title="折叠 / 展开左侧选项卡">≡ 选项卡<span class="st-tabs-ico">▲</span></button>
+                    <button class="st-tbtn" type="button" onclick="stImportPick()" title="导入 PNG / JSON 角色卡">📥 导入</button>
+                    <button class="st-tbtn" type="button" onclick="stLoadFromTavern()" title="把酒馆模式当前的角色卡读进编辑器">📇 当前卡</button>
+                    <button class="st-tbtn" type="button" onclick="stNewCard(true)" title="清空成一张新卡">✚ 新建</button>
+                    <button class="st-tbtn st-tbtn-close" type="button" onclick="closeStEditor()" title="关闭（Esc）">✕</button>
+                </div>
+            </div>
+            <div class="st-status" id="st-status" style="display:none"></div>
+            <div class="st-body">
+                <aside class="st-tabs" id="st-tabs"></aside>
+                <main class="st-main" id="st-panes"></main>
+            </div>
+            <input type="file" id="st-import-file" accept=".png,.json,image/png,application/json" style="display:none" onchange="stOnImportPicked(event)">
+            <input type="file" id="st-th-import-file" accept=".json,application/json" style="display:none" onchange="stOnThImportPicked(event)">
+            <input type="file" id="st-avatar-file" accept="image/*" style="display:none" onchange="stOnAvatarPicked(event)">
+        </div>
+    </div>
+
+    <!-- API 全局配置按钮（在小游戏按钮**上方**）。
+         ⚠ 跟下面那个共用 `.game-entry-btn`（就是那条 margin-top）—— 所以文档里的
+           `.game-entry-btn` 类锚点会指向**第一处**，要精确就认这两个 id -->
+    <button class="action-btn game-entry-btn" id="api-global-btn" onclick="openApiGlobalModal()">
+        <span>🔌 API 全局配置</span>
+    </button>
+
+    <!-- 小游戏按钮 -->
+    <button class="action-btn game-entry-btn" id="game-entry-btn" onclick="openCatGame()">
+        <span>🐱 小游戏</span>
+    </button>
+
+    <!-- 贴贴按钮 -->
+    <a href="https://discord.gg/7uTWKYv36w" target="_blank" rel="noopener noreferrer" class="hug-button">
+        点击与Saki贴贴
+    </a>
+
+    <!-- 小游戏 Modal 弹窗 -->
+    <div class="modal-overlay" id="gameModal">
+        <div class="game-card" id="gameCard">
+            <div class="game-card-header">
+                <div class="game-title-box">
+                    <button class="nav-back-btn" id="backMenuBtn" onclick="showGameMenu()">＜ 返回菜单</button>
+                    <span class="game-title" id="gameModalTitle">Arcade Select.exe</span>
+                </div>
+                <button class="close-game-btn" onclick="closeCatGame()">×</button>
+            </div>
+
+            <!-- 游戏选择菜单 -->
+            <div class="game-menu-list" id="gameMenuList">
+                <div class="game-item-btn" onclick="launchGame('runner')">
+                    <div class="game-item-info">
+                        <span class="game-item-title">Cat Runner</span>
+                        <span class="game-item-desc">经典横版跳跃避障游戏</span>
+                    </div>
+                    <span class="game-item-icon">🏃</span>
+                </div>
+                <div class="game-item-btn" onclick="launchGame('doodle')">
+                    <div class="game-item-info">
+                        <span class="game-item-title">Cat Doodle Jump</span>
+                        <span class="game-item-desc">竖版无限踏板涂鸦跳跃</span>
+                    </div>
+                    <span class="game-item-icon">🚀</span>
+                </div>
+                <div class="game-item-btn" onclick="launchGame('parade')">
+                    <div class="game-item-info">
+                        <span class="game-item-title">Cat Parade</span>
+                        <span class="game-item-desc">贪吃蛇风：猫猫大游行</span>
+                    </div>
+                    <span class="game-item-icon">🐈‍⬛</span>
+                </div>
+                <div class="game-item-btn" onclick="launchGame('shooter')">
+                    <div class="game-item-info">
+                        <span class="game-item-title">Retro Vector Shooter</span>
+                        <span class="game-item-desc">复古线框战机 · 纵向弹幕射击</span>
+                    </div>
+                    <span class="game-item-icon">🛸</span>
+                </div>
+            </div>
+
+            <!-- 游戏画布区域 -->
+            <div class="game-viewport" id="gameViewport">
+                <canvas id="catGameCanvas" width="480" height="260"></canvas>
+                
+                <!-- Doodle Jump 双向控制按键 -->
+                <div class="touch-controls" id="touchControls">
+                    <button class="touch-btn" id="btnLeft">◀</button>
+                    <button class="touch-btn" id="btnRight">▶</button>
+                </div>
+
+                <!-- 猫猫游行 十字按键 -->
+                <div class="dpad-controls" id="dpadControls">
+                    <button class="dpad-btn dpad-up" id="btnUp">▲</button>
+                    <button class="dpad-btn dpad-left" id="btnDpadLeft">◀</button>
+                    <button class="dpad-btn dpad-right" id="btnDpadRight">▶</button>
+                    <button class="dpad-btn dpad-down" id="btnDown">▼</button>
+                </div>
+
+                <div class="game-hint" id="gameControlHint">SUPPORT KEYBOARD & TOUCH</div>
+            </div>
+
+            <!-- 复古线框战机（整页游戏）：iframe 挂在这里，见 stShooterMount() -->
+            <div class="game-shooter-wrap" id="gameShooterWrap">
+                <div id="gameShooterFrameHost" style="width: 100%;"></div>
+                <div class="game-hint">
+                    键盘 WASD / 方向键移动，J / 空格开火 ｜ 鼠标或手指按住画面 = 自动开火<br>
+                    P 暂停 · ⚠ 先用鼠标点一下画面，键盘才会接管
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔌 API 全局配置 Modal 弹窗 -->
+    <div class="modal-overlay" id="apiGlobalModal">
+        <div class="game-card api-global-card">
+            <div class="game-card-header">
+                <div class="game-title-box">
+                    <span class="game-title">API Global Config</span>
+                </div>
+                <button class="close-game-btn" onclick="closeApiGlobalModal()">×</button>
+            </div>
+
+            <div class="apig-body">
+                <div class="apig-note">
+                    这里是<b>全站唯一真相源</b>：<b>【AI 对话】</b>默认跟随它，
+                    <b>【角色卡编写器】</b>的「跟随」也指向它 —— 在别处改都只是各自的副本。<br>
+                    ⚠ 只存在浏览器本地（<code>localStorage</code>），<b>不会写进角色卡</b>，
+                    草稿和导出的 JSON 里都不会出现 API Key。
+                </div>
+
+                <div class="apig-grid">
+                    <div class="ai-field">
+                        <label for="apig-provider">服务商</label>
+                        <select id="apig-provider" onchange="syncApigProviderUI()"></select>
+                    </div>
+                    <div class="ai-field">
+                        <label for="apig-base-url">Base URL（自定义时填写）</label>
+                        <input id="apig-base-url" type="text" placeholder="https://api.example.com/v1"
+                               oninput="apigBaseDraft=this.value">
+                    </div>
+                </div>
+
+                <!-- Google Vertex AI 专用。只有服务商选到 Vertex 才显示（syncApigProviderUI 控制） -->
+                <div id="apig-vertex-box" class="apig-vertex-box" hidden>
+                    <div class="apig-grid">
+                        <div class="ai-field">
+                            <label for="apig-auth-mode">验证模式</label>
+                            <select id="apig-auth-mode" onchange="syncApigAuthUI()">
+                                <option value="key">快速模式（API Key）</option>
+                                <option value="sa">完整模式（Service Account）</option>
+                            </select>
+                        </div>
+                        <div class="ai-field" id="apig-location-field">
+                            <label for="apig-location">区域 location</label>
+                            <input id="apig-location" type="text" list="apig-location-list"
+                                   placeholder="global" oninput="apigLocationDraft=this.value">
+                            <datalist id="apig-location-list">
+                                <option value="global"></option>
+                                <option value="us-central1"></option>
+                                <option value="us-east1"></option>
+                                <option value="us-east4"></option>
+                                <option value="us-west1"></option>
+                                <option value="europe-west1"></option>
+                                <option value="europe-west4"></option>
+                                <option value="asia-east1"></option>
+                                <option value="asia-northeast1"></option>
+                                <option value="asia-southeast1"></option>
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <div class="ai-field" id="apig-project-field">
+                        <label for="apig-project">项目 ID project</label>
+                        <input id="apig-project" type="text" placeholder="my-gcp-project-id"
+                               oninput="apigProjectDraft=this.value">
+                    </div>
+
+                    <div class="ai-field" id="apig-sa-field">
+                        <label for="apig-sa">Service Account JSON</label>
+                        <!-- 掩码态：存过之后就只显示「存的是哪一份」，不把私钥明文摊在屏幕上
+                             （照酒馆的做法）。⚠ 只是把 textarea 藏起来，value 一直留着 ⇒
+                             打开面板看一眼再点保存，密钥不会因此丢掉 -->
+                        <div id="apig-sa-masked" class="apig-sa-masked" hidden>
+                            <span class="apig-sa-who" id="apig-sa-who"></span>
+                            <button class="apig-btn apig-btn-mini" type="button"
+                                    onclick="apigSaEditMode()">🔑 换一份</button>
+                        </div>
+                        <textarea id="apig-sa" rows="4" spellcheck="false"
+                                  placeholder='把下载的密钥 JSON 整个粘进来（含 type / project_id / private_key / client_email）'
+                                  oninput="apigSaDraft=this.value"></textarea>
+                        <div class="apig-actions" style="justify-content:flex-start">
+                            <button class="apig-btn" type="button" id="apig-verify-btn"
+                                    onclick="apigVerifyJson()">✅ 验证 JSON（分步）</button>
+                        </div>
+                        <div class="apig-verify-out" id="apig-verify-out" hidden></div>
+                        <div class="apig-hint" id="apig-vertex-note"></div>
+                    </div>
+                </div>
+
+                <div class="ai-field" id="apig-key-field">
+                    <label for="apig-api-key">API Key</label>
+                    <input id="apig-api-key" type="password" placeholder="sk-..." autocomplete="off">
+                </div>
+
+                <div class="ai-field">
+                    <label for="apig-model">模型 model</label>
+                    <input id="apig-model" type="text" list="apig-model-list" autocomplete="off"
+                           placeholder="可以直接输入，也可以点下面的「获取模型列表」再挑">
+                    <datalist id="apig-model-list"></datalist>
+                    <div class="apig-hint">
+                        模型名可以<b>手动输入</b> —— 列表接口拿不到（或还没拉过）时，直接照官方文档写进去就行。
+                    </div>
+                </div>
+
+                <div class="apig-actions" style="justify-content:flex-start">
+                    <button class="apig-btn" id="apig-fetch-btn" type="button" onclick="apigFetchModels()">🔄 获取模型列表</button>
+                </div>
+
+                <div class="apig-grid">
+                    <label class="ai-switch" style="flex:1">
+                        <input type="checkbox" id="apig-stream" onchange="updateApigStreamLabel()">
+                        <span class="ai-switch-track"><span class="ai-switch-thumb"></span></span>
+                        <span id="apig-stream-label">流式输出</span>
+                    </label>
+                </div>
+
+                <div class="apig-grid">
+                    <div class="ai-field">
+                        <label for="apig-temperature">温度：<span id="apig-temp-value">0.7</span></label>
+                        <input id="apig-temperature" type="range" min="0" max="2" step="0.1" value="0.7"
+                               oninput="updateApigTempLabel()">
+                    </div>
+                    <div class="ai-field">
+                        <label for="apig-max-tokens">回复长度（max_tokens）</label>
+                        <input id="apig-max-tokens" type="number" min="1" max="32768" value="1024">
+                    </div>
+                </div>
+
+                <div class="ai-field">
+                    <label for="apig-first-seg">第一段</label>
+                    <textarea id="apig-first-seg" rows="3"
+                              placeholder="比如：以下是一段角色扮演对话。请始终保持角色的语气，不要替用户做决定。"></textarea>
+                    <div class="apig-hint">
+                        留空 = 不发送。它永远原封不动排在发给模型的最前面，支持
+                        <code>{{char}}</code>（角色名）与 <code>{{user}}</code>（你的昵称）。
+                    </div>
+                </div>
+
+                <div class="apig-actions">
+                    <div class="apig-status" id="apig-status"></div>
+                    <button class="apig-btn" id="apig-test-btn" type="button" onclick="apigTestConnection()">测试连接</button>
+                    <button class="apig-btn apig-btn-primary" type="button" onclick="saveApiGlobal()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>

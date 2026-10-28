@@ -1,0 +1,49 @@
+        /* ===== 系统提示词预设 ===== */
+        .ai-preset-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .ai-preset-chip {
+            font-family: inherit;
+            font-size: 0.74rem;
+            line-height: 1;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.25);
+            color: #fff;
+            cursor: pointer;
+            outline: none;
+            white-space: nowrap;
+            transition: background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+
+        .ai-preset-chip:hover {
+            background: rgba(255, 255, 255, 0.42);
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.55);
+        }
+
+        .ai-preset-chip.active {
+            background: #3a7bd5;
+            border-color: #3a7bd5;
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(58, 123, 213, 0.5);
+        }
+
+        .ai-preset-desc {
+            font-size: 0.72rem;
+            line-height: 1.6;
+            opacity: 0.85;
+            min-height: 1.15em;
+        }
+
+        /* 触屏 / 窄屏上 chip 要够大才好点（桌面 26px 的高度手指按着难受） */
+        @media (max-width: 600px), (hover: none) {
+            .ai-preset-chip {
+                padding: 10px 13px;
+                font-size: 0.78rem;
+            }
+        }
+

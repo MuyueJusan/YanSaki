@@ -1,0 +1,348 @@
+        /* ===== 编写器里的 AI 助手 =====
+           「AI 配置」是一个独立选项卡，「世界书扩写」「开场白生成」是两个面板，
+           三者共用下面这套外壳 —— 面板本身长得像一条折叠卡片，展开才露出参数。 */
+        .st-ai-box {
+            border: 1px solid rgba(120, 150, 180, 0.45);
+            border-radius: 9px;
+            background: rgba(240, 247, 252, 0.7);
+            padding: 10px 12px;
+            margin: 10px 0 14px;
+        }
+
+        .st-ai-box > summary {
+            cursor: pointer;
+            font-size: 0.84rem;
+            letter-spacing: 1px;
+            color: #14384f;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            flex-wrap: wrap;
+        }
+
+        .st-ai-box > summary::-webkit-details-marker { display: none; }
+
+        .st-ai-box > summary::before {
+            content: '▸';
+            font-size: 0.7rem;
+            opacity: 0.65;
+            transition: transform 0.15s ease;
+        }
+
+        .st-ai-box[open] > summary::before { transform: rotate(90deg); }
+
+        .st-ai-box-body { padding-top: 10px; }
+
+        .st-ai-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin: 5px 0 4px;
+        }
+
+        /* 可点的小标签。选中 = 蓝底白字，跟 .st-sb-theme 一个语感 */
+        .st-ai-chip {
+            font-size: 0.72rem;
+            line-height: 1.5;
+            padding: 3px 9px;
+            border-radius: 999px;
+            border: 1px solid rgba(120, 150, 180, 0.6);
+            background: rgba(255, 255, 255, 0.9);
+            color: #33546b;
+            cursor: pointer;
+            user-select: none;
+            font-family: inherit;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .st-ai-chip:hover { border-color: #3a7bd5; }
+
+        .st-ai-chip.st-on {
+            background: #3a7bd5;
+            border-color: #2b5ea8;
+            color: #ffffff;
+        }
+
+        /* 状态条：跟 .st-status 同款，但更紧凑，因为它会出现在面板里 */
+        .st-ai-status {
+            font-size: 0.74rem;
+            line-height: 1.7;
+            color: #3f5b70;
+            background: rgba(120, 170, 200, 0.14);
+            border-left: 3px solid rgba(120, 170, 200, 0.7);
+            border-radius: 0 7px 7px 0;
+            padding: 6px 10px;
+            margin: 8px 0;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .st-ai-status.st-warn {
+            background: rgba(230, 190, 120, 0.2);
+            border-left-color: rgba(200, 150, 60, 0.85);
+            color: #6b4a12;
+        }
+
+        .st-ai-status.st-bad {
+            background: rgba(230, 140, 140, 0.18);
+            border-left-color: rgba(200, 90, 90, 0.85);
+            color: #7a2626;
+        }
+
+        .st-ai-status.st-ok {
+            background: rgba(190, 235, 210, 0.35);
+            border-left-color: rgba(90, 170, 130, 0.85);
+            color: #1c5a3c;
+        }
+
+        /* 生成结果的一条预览卡片 */
+        .st-ai-card {
+            border: 1px solid rgba(120, 150, 180, 0.4);
+            border-radius: 8px;
+            background: #ffffff;
+            padding: 8px 10px;
+            margin: 7px 0;
+        }
+
+        .st-ai-card-head {
+            font-size: 0.76rem;
+            color: #14384f;
+            display: flex;
+            gap: 7px;
+            flex-wrap: wrap;
+            align-items: baseline;
+            margin-bottom: 4px;
+        }
+
+        .st-ai-card-body {
+            font-size: 0.75rem;
+            line-height: 1.7;
+            color: #2c4658;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 240px;
+            overflow: auto;
+            user-select: text;
+        }
+
+        .st-ai-card-body.st-yaml {
+            font-family: 'Fusion Pixel 12px Proportional JA', 'Share Tech Mono', monospace;
+            font-size: 0.72rem;
+            background: #f4f8fb;
+            border-radius: 6px;
+            padding: 7px 9px;
+        }
+
+        .st-ai-kv {
+            font-size: 0.72rem;
+            color: #5b7488;
+            letter-spacing: 0;
+        }
+
+        /* 生成中：面板整体压暗一点，按钮转圈 */
+        .st-ai-box.st-busy { opacity: 0.75; }
+
+        .st-ai-box.st-busy .st-ai-chip { pointer-events: none; }
+
+        /* 嵌在世界书条目里的那一份（单条改写）。比顶部的批量面板紧凑一档 ——
+           它长在 .st-entry-body 里，四周已经有 .st-entry 的留白，再撑开就比正文还重 */
+        .st-ai-box.st-ai-inline {
+            margin: 0 0 10px;
+            padding: 8px 10px;
+            background: rgba(238, 245, 252, 0.55);
+        }
+
+        .st-ai-box.st-ai-inline > summary { font-size: 0.78rem; }
+
+        /* 「会参考哪些条目」那一小坨。只是一份清单，不需要卡片那么重，
+           但条目多的时候要给个高度上限，免得把下面的字段顶出屏幕 */
+        .st-ai-refs {
+            font-size: 0.72rem;
+            line-height: 1.7;
+            color: #3d5a70;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(120, 150, 180, 0.3);
+            border-radius: 6px;
+            padding: 6px 9px;
+            margin: 6px 0;
+            max-height: 132px;
+            overflow: auto;
+            white-space: pre-wrap;
+        }
+
+        /* 提示词结构预览：把「将要发给模型的那几条消息」按顺序摊开。
+           每一条左边一个 role 徽章 + 名字 + 字数，下面跟一段可滚动的正文 */
+        .st-ai-pmsg {
+            border: 1px solid rgba(120, 150, 180, 0.3);
+            border-left: 3px solid #6f9ec7;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 6px 8px;
+            margin: 6px 0;
+        }
+        /* 第一段单独一个颜色 —— 它是这一轮新加的那一条，
+           用户一眼要看的就是「它确实在最前面」 */
+        .st-ai-pmsg.st-p-first {
+            border-left-color: #d08a2a;
+            background: rgba(255, 246, 228, 0.85);
+        }
+        .st-ai-pmsg.st-p-user { border-left-color: #4a9e6b; }
+        .st-ai-phead {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            color: #3d5a70;
+        }
+        .st-ai-prole {
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 0.66rem;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: #e8eef4;
+            border: 1px solid rgba(120, 150, 180, 0.35);
+            color: #2f4f6b;
+        }
+        .st-ai-pmsg.st-p-first > .st-ai-phead > .st-ai-prole {
+            background: #ffe9c2;
+            border-color: #d08a2a;
+            color: #7a4a05;
+        }
+        .st-ai-pname { font-weight: 600; }
+        .st-ai-plen { opacity: 0.62; }
+        .st-ai-pbody {
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 0.68rem;
+            line-height: 1.6;
+            color: #33475a;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 190px;
+            overflow: auto;
+            margin: 5px 0 0;
+            padding: 5px 7px;
+            background: rgba(240, 245, 250, 0.8);
+            border-radius: 4px;
+        }
+        .st-ai-pbody.st-empty { opacity: 0.5; font-style: italic; }
+        .st-ai-pnote {
+            font-size: 0.68rem;
+            line-height: 1.65;
+            color: #4a6579;
+            margin: 4px 0 2px;
+        }
+
+        /* 预览外壳。刻意比 .st-ai-box 轻 —— 它是嵌在面板里的，
+           再来一圈实线框就成俄罗斯套娃了 */
+        .st-ai-pv {
+            border: 1px dashed rgba(120, 150, 180, 0.6);
+            border-radius: 8px;
+            background: rgba(248, 252, 255, 0.75);
+            padding: 7px 10px;
+            margin: 8px 0 12px;
+        }
+        .st-ai-pv > summary {
+            cursor: pointer;
+            font-size: 0.78rem;
+            letter-spacing: 0.5px;
+            color: #1f4a66;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            flex-wrap: wrap;
+        }
+        .st-ai-pv > summary::-webkit-details-marker { display: none; }
+        .st-ai-pv > summary::before {
+            content: '▸';
+            font-size: 0.66rem;
+            opacity: 0.6;
+            transition: transform 0.15s ease;
+        }
+        .st-ai-pv[open] > summary::before { transform: rotate(90deg); }
+        .st-ai-pv-body { padding-top: 7px; }
+
+        body.retro-mode .st-ai-box {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-ai-pv {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-ai-pv > summary { color: #000000; }
+
+        body.retro-mode .st-ai-pmsg {
+            background: #ffffff;
+            border-color: #808080;
+            border-left-color: #000080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-ai-pmsg.st-p-first {
+            background: #ffffcc;
+            border-left-color: #808000;
+        }
+
+        body.retro-mode .st-ai-prole {
+            background: #c0c0c0;
+            border-color: #808080;
+            border-radius: 0;
+            color: #000000;
+        }
+
+        body.retro-mode .st-ai-pbody {
+            background: #ffffff;
+            border: 1px solid #808080;
+            border-radius: 0;
+            color: #000000;
+        }
+
+        body.retro-mode .st-ai-phead,
+        body.retro-mode .st-ai-pnote { color: #000000; }
+
+        body.retro-mode .st-ai-box > summary { color: #000000; }
+
+        body.retro-mode .st-ai-chip {
+            background: #c0c0c0;
+            border-color: #808080;
+            border-radius: 0;
+            color: #000000;
+        }
+
+        body.retro-mode .st-ai-chip.st-on {
+            background: #000080;
+            border-color: #000080;
+            color: #ffffff;
+        }
+
+        body.retro-mode .st-ai-card {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-ai-card-body,
+        body.retro-mode .st-ai-card-head { color: #000000; }
+
+        body.retro-mode .st-ai-card-body.st-yaml {
+            background: #ffffff;
+            border: 1px solid #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-ai-box.st-ai-inline { background: #ffffff; border-radius: 0; }
+
+        body.retro-mode .st-ai-refs {
+            background: #ffffff;
+            border: 1px solid #808080;
+            border-radius: 0;
+            color: #000000;
+        }
+

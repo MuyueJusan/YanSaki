@@ -1,0 +1,385 @@
+        /* 复古模式下徽标跟着时钟走（绿字黑底那套），别让它还是白色的 —— 白字压在
+           灰底卡片上会糊成一片。 */
+        body.retro-mode .clock-day-offset {
+            color: #00ff00;
+            text-shadow: 0 0 4px rgba(0, 255, 0, 0.6);
+            opacity: 1;
+        }
+
+        body.retro-mode .tz-cell {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: none;
+            font-weight: bold;
+        }
+
+        body.retro-mode .tz-toggle {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: none;
+            font-weight: bold;
+        }
+
+        body.retro-mode .clickable-title { color: #000; text-shadow: none; }
+        body.retro-mode .clickable-title:hover { background: #000080; color: #fff; }
+
+        body.retro-mode .cal-btn {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: none;
+            font-weight: bold;
+        }
+
+        body.retro-mode .weekday-tag { color: #000080; border-bottom: 2px solid #808080; }
+        body.retro-mode .day-cell { color: #000; border-radius: 0; }
+        body.retro-mode .day-cell.current-month:hover { background: #000080; color: #fff; }
+
+        body.retro-mode .day-cell.today {
+            background: #000080;
+            color: #ffff00;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .month-cell,
+        body.retro-mode .year-cell {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+
+        body.retro-mode .hug-button {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 2px 2px 0px #000000;
+            text-shadow: none;
+            font-weight: bold;
+            backdrop-filter: none;
+        }
+
+        body.retro-mode .game-card {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 3px 3px 0 #000;
+            padding-top: 30px;
+        }
+
+        body.retro-mode .game-card-header {
+            position: absolute;
+            top: 2px; left: 2px; right: 2px;
+            height: 22px;
+            background: linear-gradient(90deg, #000080, #1084d0);
+            color: #fff;
+            padding: 0 4px;
+            margin-bottom: 0;
+            border-bottom: none;
+        }
+
+        body.retro-mode .game-title { color: #fff; font-size: 0.8rem; }
+        body.retro-mode .nav-back-btn {
+            background: #c0c0c0;
+            border: 1px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            color: #000;
+            font-size: 0.7rem;
+            padding: 0 4px;
+        }
+
+        body.retro-mode .close-game-btn {
+            background: #c0c0c0;
+            border: 1px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            color: #000;
+            font-size: 10px;
+            line-height: 10px;
+            height: 14px; width: 14px;
+            padding: 0;
+        }
+
+        body.retro-mode .game-item-btn {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+
+        body.retro-mode .game-item-btn:hover {
+            background: #000080;
+            color: #fff;
+        }
+
+        body.retro-mode .game-item-btn:hover .game-item-title,
+        body.retro-mode .game-item-btn:hover .game-item-desc {
+            color: #fff;
+        }
+
+        body.retro-mode #catGameCanvas {
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+            background: #000;
+        }
+
+        body.retro-mode .touch-btn,
+        body.retro-mode .dpad-btn {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 2px 2px 0 #000;
+            color: #000;
+        }
+
+        body.retro-mode .touch-btn:active,
+        body.retro-mode .dpad-btn:active {
+            border-color: #808080 #ffffff #ffffff #808080;
+            box-shadow: none;
+            transform: translate(1px, 1px);
+        }
+
+        body.retro-mode .ai-title { color: #000; text-shadow: none; }
+        body.retro-mode .ai-field label { color: #000; }
+        body.retro-mode .ai-field input,
+        body.retro-mode .ai-field select,
+        body.retro-mode .ai-field textarea {
+            background: #fff;
+            color: #000;
+            border: 2px solid;
+            border-color: #808080 #fff #fff #808080;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-btn {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-btn.primary { background: #000080; color: #fff; }
+        body.retro-mode .ai-adv-toggle { color: #000; }
+        body.retro-mode .ai-settings-toggle {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+        body.retro-mode .ai-switch-track { background: #808080; }
+        body.retro-mode .ai-status { color: #000; text-shadow: none; }
+
+        body.retro-mode .ai-adv-divider { background: #808080; height: 2px; }
+        body.retro-mode .ai-adv-group-title { color: #000; }
+
+        body.retro-mode .ai-macro-preview {
+            background: #fff;
+            color: #000;
+            border: 2px solid;
+            border-color: #808080 #fff #fff #808080;
+            border-radius: 0;
+            text-shadow: none;
+        }
+
+        body.retro-mode .ai-macro-preview b { text-shadow: none; }
+        body.retro-mode .ai-macro-preview code,
+        body.retro-mode .ai-hint code { background: #d0d0d0; color: #000; }
+        body.retro-mode .ai-hint { color: #000; opacity: 1; }
+
+        body.retro-mode .ai-preset-chip {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: none;
+        }
+        body.retro-mode .ai-preset-chip:hover { background: #d4d0c8; box-shadow: none; }
+        body.retro-mode .ai-preset-chip.active {
+            background: #000080;
+            color: #fff;
+            font-weight: bold;
+            border-color: #808080 #ffffff #ffffff #808080;
+        }
+        body.retro-mode .ai-preset-desc { color: #000; opacity: 1; }
+
+        /* 酒馆模式 · 复古皮肤 */
+        body.retro-mode .ai-tv-card,
+        body.retro-mode .ai-tv-entry {
+            background: #d4d0c8;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+        body.retro-mode .ai-tv-tag {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+        body.retro-mode details.ai-tv-field { border-top: 1px solid #808080; }
+        body.retro-mode .ai-tv-legend { color: #000; opacity: 1; }
+        body.retro-mode .ai-tv-legend i { background: #008000; border-radius: 0; }
+        body.retro-mode .ai-tv-legend i.key { background: #000080; }
+        body.retro-mode .ai-tv-legend i.live { background: #a05000; }
+        body.retro-mode .ai-tv-entry .ai-tv-dot { border-radius: 0; background: #008000; }
+        body.retro-mode .ai-tv-entry .ai-tv-dot.key { background: #000080; }
+        body.retro-mode .ai-tv-entry .ai-tv-dot.live { background: #a05000; }
+        body.retro-mode .ai-tv-entry.live > summary { background: #ffffc0; }
+        body.retro-mode .ai-tv-act.on { color: #008000; }
+        body.retro-mode .ai-tv-global,
+        body.retro-mode .ai-tv-an,
+        body.retro-mode .ai-tv-persona,
+        body.retro-mode .ai-tv-preset,
+        body.retro-mode .ai-tv-facts span {
+            background: #ffffff;
+            color: #000;
+            border: 1px solid #808080;
+            border-radius: 0;
+        }
+        body.retro-mode .ai-tv-an-text,
+        body.retro-mode .ai-tv-slot .ai-tv-slot-content,
+        body.retro-mode .ai-tv-slot .ai-tv-slot-name {
+            background: #ffffff;
+            color: #000;
+            border: 1px solid #808080;
+            border-radius: 0;
+        }
+        body.retro-mode .ai-tv-slot {
+            background: #d4d0c8;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+        body.retro-mode .ai-tv-slot .ai-tv-pos {
+            background: #c0c0c0;
+            color: #000;
+            border-radius: 0;
+        }
+        body.retro-mode .ai-tv-slot .ai-tv-pos.marker { background: #b8d4ff; }
+        body.retro-mode .ai-tv-slot .ai-tv-pos.abs { background: #ffe0a0; }
+        body.retro-mode .ai-tv-slot .ai-tv-slot-move button {
+            background: #d4d0c8;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+        body.retro-mode .ai-tv-preset-note,
+        body.retro-mode .ai-tv-slot .ai-tv-slot-tip { color: #000; opacity: 1; }
+        body.retro-mode .ai-tv-declared { color: #000; opacity: 1; border-left-color: #a05000; }
+        body.retro-mode .ai-tv-content,
+        body.retro-mode .ai-tv-preview {
+            background: #ffffff;
+            color: #000;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+        }
+        body.retro-mode .ai-tv-grid select,
+        body.retro-mode .ai-tv-grid input[type="number"] {
+            background: #ffffff;
+            color: #000;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+        }
+        body.retro-mode .ai-tv-preview .p-sys,
+        body.retro-mode .ai-tv-preview .p-user,
+        body.retro-mode .ai-tv-preview .p-ai,
+        body.retro-mode .ai-tv-preview .p-wi { color: #000080; }
+        body.retro-mode .ai-tv-preview .p-an { color: #a05000; }
+        body.retro-mode .ai-tv-preview .p-main { color: #000080; font-weight: bold; }
+        body.retro-mode .ai-tv-preview .p-first { color: #808000; font-weight: bold; }
+        body.retro-mode .ai-tv-preview .p-char,
+        body.retro-mode .ai-tv-preview .p-example,
+        body.retro-mode .ai-tv-preview .p-chat,
+        body.retro-mode .ai-tv-preview .p-post { color: #000080; }
+        body.retro-mode .ai-tavern-status { color: #000; text-shadow: none; }
+        body.retro-mode .ai-tv-empty { color: #000; opacity: 1; }
+
+        body.retro-mode .ai-chat {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .ai-bubble.ai {
+            background: #fff;
+            color: #000;
+            border: 1px solid #808080;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-bubble.user {
+            background: #000080;
+            color: #fff;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-msg-btn {
+            border-radius: 0;
+            background: #c0c0c0;
+            color: #000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+        }
+
+        body.retro-mode .ai-msg-btn:hover { background: #000080; color: #fff; }
+
+        body.retro-mode .ai-bubble.failed {
+            background: #ffd8d8;
+            color: #800000;
+            border: 2px solid #800000;
+            border-radius: 0;
+        }
+
+        body.retro-mode .ai-input-row input {
+            background: #fff;
+            color: #000;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .ai-send-btn {
+            background: #000080;
+            color: #fff;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+
+        @media (max-width: 400px) {
+            body { padding-left: 0.5rem; padding-right: 0.5rem; }
+            .clock-container { padding: 0 0.5rem; }
+            .period-box { margin-right: 0.5rem; padding-right: 0.5rem; }
+        }
+
+        @media (max-width: 420px) {
+            .ai-macro-body .ai-row { flex-direction: column; }
+        }
+

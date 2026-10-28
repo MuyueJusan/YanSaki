@@ -402,6 +402,33 @@ for (const name of allNames) {
 }
 check('ESCAPE-GATE', bad);
 
+// ── 产物与源码同步（拆分之后才有的第 6 项）──────────────────────────
+// `saki.html` 现在是从 `src/` 拼出来的**产物**。于是多了一种以前不存在的假绿：
+//   改了 `src/` 忘了构建 → 套件全都对着**旧的** saki.html 跑 → 一路绿灯。
+// 这正是这个文件开头骂过的那件事（「过时的输入比没有检查更坏」），只是换了个方向。
+//
+// ⚠ 判据用的是 `build.js` 导出的 `assemble()` —— **不在这里再抄一份拼装逻辑**。
+//   抄一份就一定会分叉，分叉之后「构建出来的」和「检查认为该构建出来的」会各说各话。
+// ⚠ 没有 `src/` 的树（比如 apk 分支里 android/assets 那种只剩产物的场景）要放行，
+//   否则这道闸门会把「本来就没有源码」当成「源码不同步」。
+let syncBad = [];
+if (fs.existsSync('G:/saki/src/manifest.json')) {
+    try {
+        const { assemble } = require('G:/saki/build.js');
+        const built = assemble().buf;
+        const disk = fs.readFileSync(PAGE);
+        if (!disk.equals(built)) {
+            syncBad.push('· saki.html 跟 src/ 拼出来的不一样：磁盘 ' + disk.length +
+                ' B / 源码 ' + built.length + ' B —— 改完 src/ 记得 `node build.js`');
+        }
+    } catch (e) {
+        syncBad.push('· 拼装失败：' + e.message);
+    }
+} else {
+    console.log('（没有 src/manifest.json，跳过 BUILD-SYNC）');
+}
+check('BUILD-SYNC', syncBad);
+
 // ── 汇总 ───────────────────────────────────────────────────────
 const pass = results.filter(r => r.ok).length;
 const fail = results.length - pass;

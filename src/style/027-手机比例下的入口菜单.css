@@ -1,0 +1,127 @@
+        /* ==========================================================================
+           手机比例下的入口菜单
+             —— 窄屏 / 极扁窗口下，把「AI 对话」和「角色卡编写器」两张卡片收进左上角一个按钮里，
+                点开才展开。做法参照 `code_artifact.html` 那套「左上下拉 + 点空白收起」。
+             ⚠ 判据跟上面 AI 放大模式那条 @media 一样：窄屏 **或** 极扁窗口
+                （手机横屏时宽度会被误判成桌面）。⚠ 三处必须**逐字一致** —— 这条 @media、
+                JS 里的 `MOBILE_NAV_MQ`、以及 `smoke.js` 里那条断言。不一致时会出现
+                「按钮显示着、点了没反应」这种**只在某个宽度区间才复现**的鬼影。
+             ========================================================================== */
+        .mobile-nav { display: none; }
+
+        @media (max-width: 600px), (max-height: 480px) {
+            /* ⚠ `:not(.ai-maximized)` **不能省**：放大态就是靠给这张卡加 `.ai-maximized`
+               变成 `position: fixed; inset: 0` 的。直接写 `#ai-card { display: none }`
+               会把全屏一起压掉 —— 表现是「点进全屏什么都不出来」，而 class 照样加得上，
+               所以光看 class 完全看不出来（`smoke.js` 里专门有一条断言盯这个）。 */
+            #ai-card:not(.ai-maximized),
+            #st-card { display: none; }
+
+            .mobile-nav {
+                display: block;
+                position: fixed;
+                top: 0.6rem;
+                left: 0.6rem;
+                z-index: 850;   /* 低于 AI 放大遮罩 900 / Modal 1000 / 编写器浮层 1200 */
+            }
+        }
+
+        .mobile-nav-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            border: 1.5px solid rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.22);
+            backdrop-filter: blur(8px);
+            color: #fff;
+            font-family: inherit;
+            font-size: 1.05rem;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+            transition: background 0.3s ease;
+        }
+
+        .mobile-nav-btn:hover { background: rgba(255, 255, 255, 0.35); }
+
+        /* 面板用跟日历 / AI 卡**同一套**折叠动画（`grid-template-rows: 0fr → 1fr`）——
+           全站那几组折叠都是这个手感，别为这一个菜单另起一套 `max-height` */
+        .mobile-nav-panel {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .mobile-nav-inner {
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .mobile-nav.open .mobile-nav-panel { grid-template-rows: 1fr; }
+        .mobile-nav.open .mobile-nav-inner { opacity: 1; }
+
+        .mobile-nav-item {
+            margin-top: 6px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1.5px solid rgba(255, 255, 255, 0.45);
+            background: rgba(255, 255, 255, 0.22);
+            backdrop-filter: blur(8px);
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.86rem;
+            line-height: 1.2;
+            text-align: left;
+            white-space: nowrap;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+            transition: background 0.3s ease;
+        }
+
+        .mobile-nav-item:hover { background: rgba(255, 255, 255, 0.35); }
+
+        /* 「正在编哪张卡」—— 跟在「角色卡编写器」那一项下面，**在面板里面**。
+           跟主页那张编写器卡片上的「当前草稿」是**同一份数据**（`stEditor.card.name`），
+           由 `renderStCard()` → `stRenderNavName()` 写进来，别另找数据源。
+           ⚠ 2026-09-20 第二十二轮从「按钮旁边、常显」挪到这里的（用户要求）——
+             判据也跟着反过来：`smoke.js` 现在断言它**在面板里**、在编写器那一项**下面**、
+             而且**菜单收起后命中测试摸不到它**（裁切不影响 `getBoundingClientRect()`，
+             只量 rect 会假绿）。
+           ⚠ `:empty` 那条跟 `.st-head-sub` 是同一招：没有草稿时整块消失 ——
+             留个空壳的话它照样是个 flex 项，`margin-top` 会在菜单底部留一道空档。 */
+        .mobile-nav-name {
+            margin-top: 8px;
+            padding: 6px 10px 0;
+            /* ⚠ 刻意**不做成第三个按钮**：它只是「当前是谁」的读数，不是能点的东西。
+               第一版给深色底（`rgba(0,0,0,.18)`）⇒ 在这块浅色玻璃里成了唯一的暗块、
+               把视觉权重抢过去；第二版给浅色底 ⇒ 跟上面两个菜单项长得一模一样、
+               看着像第三个入口。最后用「一条分隔线 + 居中说明文字」—— 不带盒子，
+               形状上就跟按钮区分开了（复古模式下另有覆盖，那边反而是个凹陷的状态栏框）。 */
+            border-top: 1px solid rgba(255, 255, 255, 0.25);
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 0.74rem;
+            line-height: 1.2;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mobile-nav-name:empty { display: none; }
+
+        /* ⚠ `display: flex` 的 `<button>` 在 Chrome 里**不会**自己撑满容器（宽度按 fit-content
+           算），所以「AI 对话」和「角色卡编写器」两个菜单项的右边缘是**锯齿状**的 ——
+           看着像没做完。把盒子做成纵向 flex，靠默认的 `align-items: stretch`
+           把它们对齐到最宽的那一项；面板宽度本来就由最宽那项决定，所以不会反过来撑大自己。 */
+        .mobile-nav-box {
+            display: flex;
+            flex-direction: column;
+        }
+
