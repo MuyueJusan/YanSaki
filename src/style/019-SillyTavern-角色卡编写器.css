@@ -1,0 +1,466 @@
+        /* ==========================================================================
+           SillyTavern 角色卡编写器
+             · 页面上是一个普通折叠卡片，点标题 / ⛶ 全屏打开
+             · 全屏浮层里左侧是十五个选项卡，可以折叠成一条图标栏
+           ========================================================================== */
+        .st-container { overflow: visible; }
+
+        /* 卡片上那个展开键的箭头 —— **照日历 `.toggle-icon` / AI 卡 `.ai-toggle-icon` 抄**：
+           同一个 `▲`、同一套 `cubic-bezier(0.4, 0, 0.2, 1)`、同样转 180°、同样 0.35s。
+           ⚠ 这套规则曾经**整个漏掉**（箭头类名是 `.st-toggle-icon`，而 CSS 里一条都没有）。
+             漏掉之后的形状很阴：卡片复用了 `.ai-*` 那套折叠机制（容器 `ai-collapsed`
+             + `.ai-collapse-wrapper`），**折叠区自己动得好好的，只有箭头一动不动** ——
+             所以「内容收起来了没有」根本抓不到它，必须单独断言箭头。
+           ⚠ `display` / `transition` 在这里再写一遍**不是多余的**：`.toggle-icon` 那两条是通用
+             兜底，而这次的 bug 恰恰是「图标类自己没有规则」。自带一份，以后谁把 `toggle-icon`
+             从那个 span 上拿掉，也不会**静默**失效。
+           ⚠ 选择器点明 `.st-container`：只写 `.ai-collapsed .st-toggle-icon` 也能生效，
+             但那就依赖了**借来的类名**。 */
+        .st-toggle-icon {
+            display: inline-block;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .st-container.ai-collapsed .st-toggle-icon {
+            transform: rotate(-180deg);
+        }
+
+        .st-title-click { cursor: pointer; }
+
+        .st-title-click:hover { text-shadow: 0 0 10px rgba(255, 255, 255, 0.95); }
+
+        /* 标题栏下面那行「在编哪张卡」。折叠时内容区整块被收起，
+           所以它是唯一能一眼看出当前草稿的地方。
+           单独占一行而不是塞进标题栏：页面是 500px 窄栏，塞进标题栏
+           会把标题挤到换行（量过：标题 355px + 按钮 105px 已经快占满 460px） */
+        .st-head-sub {
+            margin-top: 6px;
+            font-size: 0.74rem;
+            opacity: 0.75;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .st-head-sub:empty { display: none; }
+
+        body.retro-mode .st-head-sub { opacity: 1; color: #000000; }
+
+        .st-card-hint { margin-top: 10px; }
+
+        .st-card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .st-btn { width: auto; padding: 8px 14px; }
+
+        .st-btn-ghost {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.35);
+        }
+
+        .st-sum {
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: #ffffff;
+            line-height: 1.7;
+            opacity: 0.95;
+        }
+
+        .st-sum b { color: #ffffff; }
+
+        .st-sum-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 6px;
+        }
+
+        .st-sum-tag {
+            font-size: 0.72rem;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        /* —— 全屏浮层 —— */
+        .st-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(8, 32, 48, 0.55);
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s ease;
+            padding: 0;
+        }
+
+        .st-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .st-shell {
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.96);
+            color: #1a2b3c;
+            text-shadow: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .st-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: linear-gradient(135deg, rgba(121, 210, 179, 0.9), rgba(121, 174, 210, 0.9));
+            color: #ffffff;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.25);
+            flex: 0 0 auto;
+            flex-wrap: wrap;
+        }
+
+        .st-topbar-title { font-size: 1rem; letter-spacing: 1px; }
+
+        .st-topbar-sub {
+            font-size: 0.76rem;
+            opacity: 0.95;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 40vw;
+        }
+
+        .st-topbar-actions {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .st-tbtn {
+            font-family: inherit;
+            font-size: 0.78rem;
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+            cursor: pointer;
+            text-shadow: none;
+            transition: background 0.18s ease;
+        }
+
+        .st-tbtn:hover { background: rgba(255, 255, 255, 0.45); }
+
+        /* 展开键上的箭头 —— **照日历那套**：同一个 `▲` 字形、同一套
+           `cubic-bezier(0.4, 0, 0.2, 1)`、同样转 180°。
+           ⚠ 状态挂在 `.st-shell`（按钮的**祖先**）上，不是挂在 `.st-tabs` 上：
+             展开键在顶栏，跟左侧栏是**堂兄弟**，rail 自己的 class 驱动不了它。
+           ⚠ 时长必须跟上面 `.st-tabs` 的 `flex-basis` 那条一致 —— 两边不同步
+             就是「箭头转完了栏还在动」。
+           ⚠ 原来这个按钮**没有子元素、也没有 transform 过渡**，折叠前后长得一模一样，
+             是个不反映状态的死按钮 —— 这就是要修的东西。 */
+        .st-tabs-ico {
+            display: inline-block;
+            margin-left: 5px;
+            font-size: 0.62rem;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .st-shell.st-tabs-collapsed .st-tabs-ico { transform: rotate(-180deg); }
+
+        .st-tbtn-close {
+            background: rgba(255, 255, 255, 0.85);
+            color: #1a2b3c;
+            font-weight: bold;
+            min-width: 34px;
+        }
+
+        .st-tbtn-close:hover { background: #ffffff; }
+
+        .st-body {
+            flex: 1 1 auto;
+            display: flex;
+            min-height: 0;
+        }
+
+        /* —— 左侧选项卡 —— */
+        .st-tabs {
+            flex: 0 0 168px;
+            width: 168px;
+            border-right: 1px solid rgba(120, 150, 180, 0.28);
+            background: rgba(233, 244, 248, 0.9);
+            padding: 8px 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            overflow-y: auto;
+            /* ⚠ 时长与缓动**必须跟顶栏那个展开键的箭头一致**（日历那边就是这么配的：
+               内容 0.35s cubic-bezier 与图标 0.35s cubic-bezier 同步）。
+               原来这里是 `0.22s ease`，箭头转完栏还在动 —— 那本身就是「动画不对」。 */
+            transition: flex-basis 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                        width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .st-tabs.st-tabs-collapsed {
+            flex-basis: 46px;
+            width: 46px;
+            padding: 8px 4px;
+        }
+
+        .st-tab {
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 9px;
+            border-radius: 9px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #29465b;
+            font-size: 0.8rem;
+            cursor: pointer;
+            text-align: left;
+            white-space: nowrap;
+            transition: background 0.16s ease;
+        }
+
+        .st-tab:hover { background: rgba(255, 255, 255, 0.75); }
+
+        .st-tab.active {
+            background: #ffffff;
+            border-color: rgba(121, 174, 210, 0.9);
+            box-shadow: 0 1px 5px rgba(60, 100, 140, 0.18);
+            font-weight: bold;
+        }
+
+        .st-tab-ico { font-size: 1rem; flex: 0 0 auto; }
+
+        .st-tabs.st-tabs-collapsed .st-tab {
+            justify-content: center;
+            padding: 9px 0;
+        }
+
+        .st-tabs.st-tabs-collapsed .st-tab-label { display: none; }
+
+        .st-tab-count {
+            margin-left: auto;
+            font-size: 0.68rem;
+            opacity: 0.7;
+        }
+
+        .st-tabs.st-tabs-collapsed .st-tab-count { display: none; }
+
+        /* —— 右侧内容 —— */
+        .st-main {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow-y: auto;
+            padding: 14px 16px 40px;
+        }
+
+        .st-pane-head { margin-bottom: 12px; }
+
+        .st-pane-title {
+            font-size: 1rem;
+            letter-spacing: 1px;
+            color: #14384f;
+        }
+
+        .st-pane-desc {
+            font-size: 0.76rem;
+            color: #4a6478;
+            line-height: 1.75;
+            margin-top: 4px;
+        }
+
+        .st-pane-desc code {
+            background: rgba(120, 160, 190, 0.18);
+            border-radius: 4px;
+            padding: 0 3px;
+        }
+
+        .st-sub {
+            font-size: 0.82rem;
+            color: #14384f;
+            letter-spacing: 1px;
+            margin: 16px 0 7px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(120, 150, 180, 0.3);
+        }
+
+        .st-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 10px;
+        }
+
+        .st-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .st-field.st-wide { grid-column: 1 / -1; }
+
+        .st-field > label {
+            font-size: 0.76rem;
+            color: #33546b;
+            letter-spacing: 1px;
+        }
+
+        .st-field > label .st-hint-inline {
+            font-size: 0.7rem;
+            opacity: 0.72;
+            letter-spacing: 0;
+        }
+
+        /* 控件下面的一行说明。MVU 检查器与状态栏检查器都用它 */
+        .st-hint {
+            font-size: 0.72rem;
+            line-height: 1.65;
+            color: #5b7488;
+            margin: 4px 0 8px;
+        }
+
+        .st-field .st-hint { margin: 2px 0 0; }
+
+        .st-field input,
+        .st-field select,
+        .st-field textarea,
+        .st-th-btn input[type="text"] {
+            font-family: inherit;
+            font-size: 0.82rem;
+            color: #1a2b3c;
+            background: #ffffff;
+            border: 1px solid rgba(120, 150, 180, 0.5);
+            border-radius: 8px;
+            padding: 7px 9px;
+            outline: none;
+            width: 100%;
+            user-select: text;
+            text-shadow: none;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .st-field input:focus,
+        .st-field select:focus,
+        .st-field textarea:focus,
+        .st-th-btn input[type="text"]:focus {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.18);
+        }
+
+        .st-field textarea {
+            resize: vertical;
+            min-height: 74px;
+            line-height: 1.7;
+        }
+
+        .st-field.st-tall textarea { min-height: 150px; }
+
+        .st-field input:disabled,
+        .st-field select:disabled {
+            opacity: 0.55;
+            background: rgba(120, 140, 170, 0.14);
+            cursor: not-allowed;
+        }
+
+        .st-check {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78rem;
+            color: #33546b;
+            cursor: pointer;
+            padding: 4px 0;
+        }
+
+        .st-check input { width: auto; }
+
+        .st-checks {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 14px;
+            margin-top: 2px;
+        }
+
+        /* —— 人设生成器「参考素材」的条目勾选列表 ——
+           卡内世界书可能有几十条，摊开会把「生成人设」按钮挤出屏幕 ⇒ 限高滚动。
+           ⚠ 复古皮肤下要另压一遍（白底方角），见 `body.retro-mode .st-lore-list` */
+        .st-lore-list {
+            max-height: 224px;
+            overflow-y: auto;
+            padding: 2px 10px;
+            border: 1px solid rgba(120, 150, 180, 0.45);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .st-lore-list .st-check { border-bottom: 1px dashed rgba(120, 150, 180, 0.28); }
+        .st-lore-list .st-check:last-child { border-bottom: 0; }
+
+        .st-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .st-mini {
+            font-family: inherit;
+            font-size: 0.74rem;
+            padding: 4px 9px;
+            border-radius: 7px;
+            border: 1px solid rgba(120, 150, 180, 0.55);
+            background: rgba(255, 255, 255, 0.9);
+            color: #29465b;
+            cursor: pointer;
+            text-shadow: none;
+        }
+
+        .st-mini:hover { background: #eaf4fb; }
+
+        .st-mini.st-danger { border-color: rgba(190, 90, 90, 0.6); color: #a33; }
+
+        .st-mini.st-danger:hover { background: #fdeaea; }
+
+        .st-mini:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .st-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        /* —— 人设生成器「模板」的折叠块（默认**收起**）——
+           机制跟日历 / AI 卡 / 移动端菜单**同一套**（`grid-template-rows: 0fr → 1fr`），
+           别为这一个另起 `max-height`。
+           ⚠ 跟 `.ai-settings-collapse` / `.ai-adv-panel` 那几处**方向相反**：
+             那几处是默认展开、加 class 才收起；这里是默认收起、加 `.st-fold-open` 才展开 ——
+             需求就是「默认折叠」，所以让**不带 class** 的那一态直接等于收起态。 */
+        .st-fold-body {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .st-fold.st-fold-open .st-fold-body { grid-template-rows: 1fr; }
+
+        .st-fold-inner { overflow: hidden; }
+

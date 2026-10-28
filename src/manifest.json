@@ -1,0 +1,641 @@
+{
+  "note": "src/ 的拼装顺序 = 这份数组的顺序。**顺序就是语义**：JS 顶层 const/let 不提升，而且文件末尾有一段立即执行的启动代码，重排会直接坏。",
+  "baseline": {
+    "bytes": 1745476,
+    "sha1": "1999e14ecceafade2202fcb29ac0dbc302d2ca79"
+  },
+  "modules": [
+    {
+      "file": "000-HTML-头-doctype-meta-字体.html",
+      "title": "HTML 头 · doctype / meta / 字体"
+    },
+    {
+      "file": "style/010-基础变量-像素字体-顶部控制栏-时钟-日历骨架.css",
+      "title": "基础变量 · 像素字体 · 顶部控制栏 · 时钟 / 日历骨架"
+    },
+    {
+      "file": "style/011-API-全局配置弹窗.css",
+      "title": "🔌 API 全局配置弹窗"
+    },
+    {
+      "file": "style/012-ai对话-的-配置来源-开关.css",
+      "title": "【ai对话】的「配置来源」开关"
+    },
+    {
+      "file": "style/013-AI-对话区域.css",
+      "title": "AI 对话区域"
+    },
+    {
+      "file": "style/014-SillyTavern-风格-user-宏设置.css",
+      "title": "SillyTavern 风格 {{user}} 宏设置"
+    },
+    {
+      "file": "style/015-系统提示词预设.css",
+      "title": "系统提示词预设"
+    },
+    {
+      "file": "style/016-酒馆模式-角色卡-世界书.css",
+      "title": "酒馆模式 · 角色卡 / 世界书"
+    },
+    {
+      "file": "style/017-消息行-气泡-+-旁边的操作按钮-重试.css",
+      "title": "消息行：气泡 + 旁边的操作按钮（重试）"
+    },
+    {
+      "file": "style/018-复古模式下徽标跟着时钟走-绿字黑底那套-别让它还是白色的-白字压在.css",
+      "title": "复古模式下徽标跟着时钟走（绿字黑底那套），别让它还是白色的 —— 白字压在"
+    },
+    {
+      "file": "style/019-SillyTavern-角色卡编写器.css",
+      "title": "SillyTavern 角色卡编写器"
+    },
+    {
+      "file": "style/020-折叠头-整行可点的按钮-箭头-+-原来的-.st-sub-标题-+-右侧一句.css",
+      "title": "折叠头 = 整行可点的按钮：箭头 + 原来的 `.st-sub` 标题 + 右侧一句提示。"
+    },
+    {
+      "file": "style/021-三栏-图层-画布-属性-窄屏会竖过来-见下面的-@media.css",
+      "title": "三栏：图层 / 画布 / 属性。窄屏会竖过来（见下面的 @media）"
+    },
+    {
+      "file": "style/022-输入框融进标签框里-没边框-没背景-光标就贴在最后一个标签后面.css",
+      "title": "输入框融进标签框里：没边框、没背景，光标就贴在最后一个标签后面。"
+    },
+    {
+      "file": "style/023-编写器里的-AI-助手.css",
+      "title": "编写器里的 AI 助手"
+    },
+    {
+      "file": "style/024-Code-Agent-页.css",
+      "title": "Code（Agent）页"
+    },
+    {
+      "file": "style/025-三种状态只靠颜色-+-图标区分-不换字号-换字号会让清单上下跳动.css",
+      "title": "三种状态只靠颜色 + 图标区分，不换字号 —— 换字号会让清单上下跳动"
+    },
+    {
+      "file": "style/026-AI-聊天窗口-放大-模式.css",
+      "title": "AI 聊天窗口「放大」模式"
+    },
+    {
+      "file": "style/027-手机比例下的入口菜单.css",
+      "title": "手机比例下的入口菜单"
+    },
+    {
+      "file": "style/028-复古模式-按钮-+-下拉菜单照-Win98-Win2000-的菜单来.css",
+      "title": "复古模式：按钮 + 下拉菜单照 Win98 / Win2000 的菜单来"
+    },
+    {
+      "file": "100-BODY-页面骨架与静态标记-含-script-开标签.html",
+      "title": "BODY · 页面骨架与静态标记（含 script 开标签）"
+    },
+    {
+      "file": "js/200-时钟-时区-日历-复古模式.js",
+      "title": "时钟 / 时区 / 日历 / 复古模式"
+    },
+    {
+      "file": "js/201-街机小游戏-框架-支持选择列表-&-游戏切换.js",
+      "title": "街机小游戏 框架 (支持选择列表 & 游戏切换)"
+    },
+    {
+      "file": "js/202-复古线框战机-整页游戏-用-iframe-装-挂载-卸载都要管.js",
+      "title": "复古线框战机（整页游戏）—— 用 iframe 装，挂载 / 卸载都要管"
+    },
+    {
+      "file": "js/203-游戏-1-Cat-Runner-横版奔跑.js",
+      "title": "游戏 1：Cat Runner (横版奔跑)"
+    },
+    {
+      "file": "js/204-游戏-2-Cat-Doodle-Jump-涂鸦跳跃.js",
+      "title": "游戏 2：Cat Doodle Jump (涂鸦跳跃)"
+    },
+    {
+      "file": "js/205-游戏-3-Cat-Parade-猫猫大游行-绝对方向控制-+-十字键.js",
+      "title": "游戏 3：Cat Parade (猫猫大游行 - 绝对方向控制 + 十字键)"
+    },
+    {
+      "file": "js/206-AI-对话区域.js",
+      "title": "AI 对话区域"
+    },
+    {
+      "file": "js/207-系统提示词预设.js",
+      "title": "系统提示词预设"
+    },
+    {
+      "file": "js/208-API-全局配置-apiGlobal.js",
+      "title": "API 全局配置（apiGlobal）"
+    },
+    {
+      "file": "js/209-迁移与载入.js",
+      "title": "—— 迁移与载入 ——"
+    },
+    {
+      "file": "js/210-SillyTavern-风格-user-宏.js",
+      "title": "SillyTavern 风格 {{user}} 宏"
+    },
+    {
+      "file": "js/211-系统提示词预设-面板与切换.js",
+      "title": "系统提示词预设 · 面板与切换"
+    },
+    {
+      "file": "js/212-第一段.js",
+      "title": "—— 「第一段」——"
+    },
+    {
+      "file": "js/213-酒馆模式-SillyTavern-角色卡-+-世界书.js",
+      "title": "酒馆模式（SillyTavern 角色卡 + 世界书）"
+    },
+    {
+      "file": "js/214-作者注释-Author-s-Note.js",
+      "title": "作者注释（Author's Note）"
+    },
+    {
+      "file": "js/215-提示词预设-对齐-SillyTavern-的-Chat-Completion.js",
+      "title": "提示词预设（对齐 SillyTavern 的 Chat Completion 预设）"
+    },
+    {
+      "file": "js/216-世界书-SillyTavern-的常量-照抄-名字保持一致好对照源码.js",
+      "title": "世界书：SillyTavern 的常量（照抄，名字保持一致好对照源码）"
+    },
+    {
+      "file": "js/217-粗略-token-估算.js",
+      "title": "粗略 token 估算"
+    },
+    {
+      "file": "js/218-世界书解析.js",
+      "title": "世界书解析"
+    },
+    {
+      "file": "js/219-PNG-角色卡-读-tEXt-iTXt-zTXt-数据块.js",
+      "title": "PNG 角色卡：读 tEXt / iTXt / zTXt 数据块"
+    },
+    {
+      "file": "js/220-角色卡编写器-数据模型.js",
+      "title": "角色卡编写器：数据模型"
+    },
+    {
+      "file": "js/221-酒馆助手-JS-Slash-Runner-脚本.js",
+      "title": "酒馆助手（JS-Slash-Runner）脚本"
+    },
+    {
+      "file": "js/222-MVU-Magical-Variable-Update.js",
+      "title": "MVU（Magical Variable Update）"
+    },
+    {
+      "file": "js/223-MVU-状态栏-外观数据模型.js",
+      "title": "MVU 状态栏 · 外观数据模型"
+    },
+    {
+      "file": "js/224-预制块.js",
+      "title": "预制块"
+    },
+    {
+      "file": "js/225-用户自己攒的预制块-localStorage.js",
+      "title": "—— 用户自己攒的预制块（localStorage）——"
+    },
+    {
+      "file": "js/226-AI-生成预制块.js",
+      "title": "AI 生成预制块"
+    },
+    {
+      "file": "js/227-MVU-状态栏-块模型-取值-class-保留.js",
+      "title": "MVU 状态栏 · 块模型 / 取值 / class 保留"
+    },
+    {
+      "file": "js/228-自由摆放-像素级偏移.js",
+      "title": "自由摆放（像素级偏移）"
+    },
+    {
+      "file": "js/229-显式尺寸.js",
+      "title": "显式尺寸"
+    },
+    {
+      "file": "js/230-反过来-把卡里那段-HTML-拆回块列表.js",
+      "title": "反过来：把卡里那段 HTML 拆回块列表"
+    },
+    {
+      "file": "js/231-保原样-把-原稿有-生成器不产出-的声明差出来.js",
+      "title": "保原样：把「原稿有、生成器不产出」的声明差出来"
+    },
+    {
+      "file": "js/232-外壳样式拆成两半-主题表达得了的-→-交给主题-表达不了的.js",
+      "title": "外壳样式拆成两半：主题表达得了的 → 交给主题；表达不了的"
+    },
+    {
+      "file": "js/233-检测-一次扫清-7-类组件在不在.js",
+      "title": "—— 检测：一次扫清 7 类组件在不在 ——"
+    },
+    {
+      "file": "js/234-生成①-脚本内容.js",
+      "title": "—— 生成①：脚本内容 ——"
+    },
+    {
+      "file": "js/235-生成②-initvar-YAML.js",
+      "title": "—— 生成②：initvar YAML ——"
+    },
+    {
+      "file": "js/236-生成③-变量更新规则-YAML-骨架.js",
+      "title": "—— 生成③：变量更新规则 YAML（骨架）——"
+    },
+    {
+      "file": "js/237-固定模板-照-MVU-Maker-的-shared-templates.ts.js",
+      "title": "—— 固定模板（照 MVU Maker 的 shared/templates.ts 抄）——"
+    },
+    {
+      "file": "js/238-正则五件套-用-String.raw-是因为正则里有-1-s.js",
+      "title": "—— 正则五件套。用 String.raw 是因为正则里有 \\1 \\/ \\s，"
+    },
+    {
+      "file": "js/239-同步-结构是唯一事实来源.js",
+      "title": "—— 同步：结构是唯一事实来源 ——"
+    },
+    {
+      "file": "js/240-反推-从卡里已有的-Zod-脚本解析回变量树.js",
+      "title": "—— 反推：从卡里已有的 Zod 脚本解析回变量树 ——"
+    },
+    {
+      "file": "js/241-一键添加-移除.js",
+      "title": "一键添加 / 移除"
+    },
+    {
+      "file": "js/242-草稿-→-ST-JSON.js",
+      "title": "草稿 → ST JSON"
+    },
+    {
+      "file": "js/243-ST-JSON-→-草稿.js",
+      "title": "ST JSON → 草稿"
+    },
+    {
+      "file": "js/244-角色卡编写器-PNG-写入.js",
+      "title": "角色卡编写器：PNG 写入"
+    },
+    {
+      "file": "js/245-世界书扫描.js",
+      "title": "世界书扫描"
+    },
+    {
+      "file": "js/246-作者注释-插入位置与深度.js",
+      "title": "作者注释 · 插入位置与深度"
+    },
+    {
+      "file": "js/247-用户人设描述-personaDescription.js",
+      "title": "用户人设描述（personaDescription）"
+    },
+    {
+      "file": "js/248-提示词预设-规范化-读写.js",
+      "title": "提示词预设：规范化 / 读写"
+    },
+    {
+      "file": "js/249-拼装提示词.js",
+      "title": "拼装提示词"
+    },
+    {
+      "file": "js/250-酒馆模式-UI.js",
+      "title": "酒馆模式 UI"
+    },
+    {
+      "file": "js/251-提示词预设面板.js",
+      "title": "提示词预设面板"
+    },
+    {
+      "file": "js/252-预设-切换-增删-排序.js",
+      "title": "—— 预设：切换 / 增删 / 排序 ——"
+    },
+    {
+      "file": "js/253-预设-导入.js",
+      "title": "—— 预设：导入 ——"
+    },
+    {
+      "file": "js/254-酒馆模式-导入-编辑.js",
+      "title": "酒馆模式：导入 / 编辑"
+    },
+    {
+      "file": "js/255-角色卡编写器-UI.js",
+      "title": "角色卡编写器：UI"
+    },
+    {
+      "file": "js/256-页面上的那张小卡片.js",
+      "title": "页面上的那张小卡片"
+    },
+    {
+      "file": "js/257-全屏浮层.js",
+      "title": "全屏浮层"
+    },
+    {
+      "file": "js/258-通用小控件.js",
+      "title": "通用小控件"
+    },
+    {
+      "file": "js/259-编写器-AI-助手.js",
+      "title": "编写器 · AI 助手"
+    },
+    {
+      "file": "js/260-第一段-与-提示词结构预览.js",
+      "title": "「第一段」与「提示词结构预览」"
+    },
+    {
+      "file": "js/261-提示词结构预览.js",
+      "title": "提示词结构预览"
+    },
+    {
+      "file": "js/262-消息整形.js",
+      "title": "—— 消息整形 ——"
+    },
+    {
+      "file": "js/263-Google-原生-gemini-协议.js",
+      "title": "Google 原生（gemini）协议"
+    },
+    {
+      "file": "js/264-Vertex-完整模式-Service-Account-⇒-access-t.js",
+      "title": "—— Vertex 完整模式：Service Account ⇒ access token ——"
+    },
+    {
+      "file": "js/265-面板的界面状态.js",
+      "title": "—— 面板的界面状态 ——"
+    },
+    {
+      "file": "js/266-小控件.js",
+      "title": "小控件"
+    },
+    {
+      "file": "js/267-世界书的注入顺序.js",
+      "title": "世界书的注入顺序"
+    },
+    {
+      "file": "js/268-扩写-拼提示词.js",
+      "title": "扩写：拼提示词"
+    },
+    {
+      "file": "js/269-开场白-拼提示词.js",
+      "title": "开场白：拼提示词"
+    },
+    {
+      "file": "js/270-生成结果预览.js",
+      "title": "生成结果预览"
+    },
+    {
+      "file": "js/271-AI-配置页.js",
+      "title": "AI 配置页"
+    },
+    {
+      "file": "js/272-世界书页-AI-扩写面板.js",
+      "title": "世界书页：AI 扩写面板"
+    },
+    {
+      "file": "js/273-开场白页-AI-生成面板.js",
+      "title": "开场白页：AI 生成面板"
+    },
+    {
+      "file": "js/274-动作.js",
+      "title": "动作"
+    },
+    {
+      "file": "js/275-单条改写-只动世界书里指定的那一条.js",
+      "title": "单条改写：只动世界书里指定的那一条"
+    },
+    {
+      "file": "js/276-Code-Agent-页.js",
+      "title": "Code（Agent）页"
+    },
+    {
+      "file": "js/277-工具型-skill-kind-tool.js",
+      "title": "—— 工具型 skill（kind:'tool'）——"
+    },
+    {
+      "file": "js/278-进度上报-host.progress.js",
+      "title": "—— 进度上报（host.progress）——"
+    },
+    {
+      "file": "js/279-skill-的落盘-IndexedDB-带-localStorage-降级.js",
+      "title": "skill 的落盘：IndexedDB，带 localStorage 降级"
+    },
+    {
+      "file": "js/280-工具表.js",
+      "title": "—— 工具表 ——"
+    },
+    {
+      "file": "js/281-内部统一消息格式.js",
+      "title": "—— 内部统一消息格式 ——"
+    },
+    {
+      "file": "js/282-工具执行.js",
+      "title": "—— 工具执行 ——"
+    },
+    {
+      "file": "js/283-遍历酒馆助手脚本-文件夹里的也算-带定位信息.js",
+      "title": "—— 遍历酒馆助手脚本（文件夹里的也算），带定位信息 ——"
+    },
+    {
+      "file": "js/284-Code-页-工具实现-读写-白名单.js",
+      "title": "Code 页 · 工具实现（读写 / 白名单）"
+    },
+    {
+      "file": "js/285-这次工具结果该给多少预算-抽成函数是为了只有一个判据.js",
+      "title": "这次工具结果该给多少预算。抽成函数是为了只有一个判据 ——"
+    },
+    {
+      "file": "js/286-Code-页-system-提示词-网络-停止.js",
+      "title": "Code 页 · system 提示词 / 网络 / 停止"
+    },
+    {
+      "file": "js/287-Agent-循环.js",
+      "title": "—— Agent 循环 ——"
+    },
+    {
+      "file": "js/288-网络-fetch_url-工具-+-从链接导入-共用.js",
+      "title": "—— 网络（fetch_url 工具 + 「从链接导入」共用）——"
+    },
+    {
+      "file": "js/289-skill-清单与触发器列举.js",
+      "title": "skill 清单与触发器列举"
+    },
+    {
+      "file": "js/290-工具型-skill-的沙盒.js",
+      "title": "工具型 skill 的沙盒"
+    },
+    {
+      "file": "js/291-拖拽导入.js",
+      "title": "—— 拖拽导入 ——"
+    },
+    {
+      "file": "js/292-从链接导入.js",
+      "title": "—— 从链接导入 ——"
+    },
+    {
+      "file": "js/293-会话.js",
+      "title": "—— 会话 ——"
+    },
+    {
+      "file": "js/294-面板渲染.js",
+      "title": "面板渲染"
+    },
+    {
+      "file": "js/295-任务清单-set_tasks-工具画的.js",
+      "title": "—— 任务清单（set_tasks 工具画的）——"
+    },
+    {
+      "file": "js/296-项目记忆.js",
+      "title": "—— 项目记忆 ——"
+    },
+    {
+      "file": "js/297-局部刷新.js",
+      "title": "—— 局部刷新 ——"
+    },
+    {
+      "file": "js/298-编写器-首页-home-选项卡.js",
+      "title": "编写器 · 首页（home）选项卡"
+    },
+    {
+      "file": "js/299-模块-①-头像-没头像就整块不渲染.js",
+      "title": "—— 模块 ①：头像。没头像就整块不渲染 ——"
+    },
+    {
+      "file": "js/300-模块-③-快捷动作-跟顶栏那几个按钮是同一批动作-只是收在一处.js",
+      "title": "—— 模块 ③：快捷动作。跟顶栏那几个按钮是同一批动作，只是收在一处 ——"
+    },
+    {
+      "file": "js/301-编写器-人设生成器.js",
+      "title": "编写器 · 人设生成器"
+    },
+    {
+      "file": "js/302-人设生成器-参考素材-世界书.js",
+      "title": "人设生成器 · 参考素材（世界书）"
+    },
+    {
+      "file": "js/303-人设生成器-写入-各选项卡.js",
+      "title": "人设生成器 · 写入 / 各选项卡"
+    },
+    {
+      "file": "js/304-世界书.js",
+      "title": "世界书"
+    },
+    {
+      "file": "js/305-开场白.js",
+      "title": "开场白"
+    },
+    {
+      "file": "js/306-正则.js",
+      "title": "正则"
+    },
+    {
+      "file": "js/307-酒馆助手脚本.js",
+      "title": "酒馆助手脚本"
+    },
+    {
+      "file": "js/308-MVU-变量框架.js",
+      "title": "MVU 变量框架"
+    },
+    {
+      "file": "js/309-MVU-状态栏-外观-编辑器.js",
+      "title": "MVU 状态栏（外观）编辑器"
+    },
+    {
+      "file": "js/310-块操作.js",
+      "title": "块操作"
+    },
+    {
+      "file": "js/311-主题-版式.js",
+      "title": "主题 / 版式"
+    },
+    {
+      "file": "js/312-接管-写回.js",
+      "title": "接管 / 写回"
+    },
+    {
+      "file": "js/313-画布.js",
+      "title": "画布"
+    },
+    {
+      "file": "js/314-自由摆放-指针拖动.js",
+      "title": "自由摆放：指针拖动"
+    },
+    {
+      "file": "js/315-调整大小-八向把手.js",
+      "title": "调整大小：八向把手"
+    },
+    {
+      "file": "js/316-自由摆放-键盘微调.js",
+      "title": "自由摆放：键盘微调"
+    },
+    {
+      "file": "js/317-真机预览.js",
+      "title": "真机预览"
+    },
+    {
+      "file": "js/318-拖放.js",
+      "title": "拖放"
+    },
+    {
+      "file": "js/319-状态栏编辑器-面板渲染.js",
+      "title": "状态栏编辑器 · 面板渲染"
+    },
+    {
+      "file": "js/320-状态栏编辑器-检查器-预览-清颜色.js",
+      "title": "状态栏编辑器 · 检查器 / 预览 / 清颜色"
+    },
+    {
+      "file": "js/321-导出.js",
+      "title": "导出"
+    },
+    {
+      "file": "js/322-路径读写.js",
+      "title": "路径读写"
+    },
+    {
+      "file": "js/323-关键词标签的手感-控件本体在-stTags-里.js",
+      "title": "关键词标签的手感（控件本体在 stTags() 里）"
+    },
+    {
+      "file": "js/324-结构操作-条目-开场白-正则.js",
+      "title": "结构操作：条目 / 开场白 / 正则"
+    },
+    {
+      "file": "js/325-世界书搜索与筛选.js",
+      "title": "世界书搜索与筛选"
+    },
+    {
+      "file": "js/326-世界书多选管理.js",
+      "title": "世界书多选管理"
+    },
+    {
+      "file": "js/327-结构操作-酒馆助手脚本.js",
+      "title": "结构操作：酒馆助手脚本"
+    },
+    {
+      "file": "js/328-新建-导入-载入当前卡.js",
+      "title": "新建 / 导入 / 载入当前卡"
+    },
+    {
+      "file": "js/329-头像.js",
+      "title": "头像"
+    },
+    {
+      "file": "js/330-导出-消息-文本-JSON-PNG.js",
+      "title": "导出 · 消息 / 文本 / JSON / PNG"
+    },
+    {
+      "file": "js/331-AI-聊天窗口放大.js",
+      "title": "AI 聊天窗口放大"
+    },
+    {
+      "file": "js/332-手机比例下的入口菜单.js",
+      "title": "手机比例下的入口菜单"
+    },
+    {
+      "file": "js/333-API-全局配置弹窗.js",
+      "title": "🔌 API 全局配置弹窗"
+    },
+    {
+      "file": "js/334-ai对话-的-配置来源-开关.js",
+      "title": "【ai对话】的「配置来源」开关"
+    },
+    {
+      "file": "js/335-内嵌小游戏-ST_SHOOTER_SRC-自动生成-别手改.js",
+      "title": "内嵌小游戏 ST_SHOOTER_SRC（自动生成 · 别手改）"
+    },
+    {
+      "file": "900-HTML-尾-script-闭标签-body-html.html",
+      "title": "HTML 尾 · script 闭标签 / body / html"
+    }
+  ]
+}

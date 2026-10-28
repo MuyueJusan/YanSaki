@@ -1,0 +1,113 @@
+        /* ===== SillyTavern 风格 {{user}} 宏设置 ===== */
+        .ai-adv-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.28);
+            margin: 2px 0;
+        }
+
+        .ai-adv-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ai-adv-group-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        .ai-switch-mini { gap: 0; }
+        .ai-switch-mini .ai-switch-track { width: 36px; height: 20px; border-radius: 10px; }
+        .ai-switch-mini .ai-switch-thumb { width: 16px; height: 16px; }
+        .ai-switch-mini input:checked + .ai-switch-track .ai-switch-thumb { transform: translateX(16px); }
+
+        .ai-macro-body {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 0.25s ease;
+        }
+
+        .ai-macro-body.ai-macro-off {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        /* 酒馆模式下「用户人设」只剩昵称可用，其余输入项锁住。
+           .ai-field input:disabled 只管得到 input，称呼方式那个 select
+           和标题栏的宏开关要单独兜一下。
+           再压一层内凹底色 —— 光靠 opacity 变化太小，一眼看不出「这几项点不动了」 */
+        .ai-macro-group select:disabled,
+        .ai-macro-group .ai-switch input:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .ai-macro-group .ai-field input:disabled,
+        .ai-macro-group .ai-field select:disabled {
+            background: rgba(120, 140, 170, 0.16);
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .ai-macro-locked-hint {
+            border-left: 3px solid rgba(140, 160, 200, 0.55);
+            padding-left: 8px;
+        }
+
+        /* 人设正文只读 —— 它的值来自「你的昵称」，这里只是让你看清会发什么 */
+        .ai-tv-persona-text[readonly] {
+            opacity: 0.8;
+            cursor: default;
+            resize: none;
+            background: rgba(255, 255, 255, 0.32);
+        }
+
+        /* 原系统提示词被关掉时（酒馆模式开着）整块降透明度 + 不可交互 */
+        .ai-prompt-body {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 0.25s ease;
+        }
+
+        .ai-prompt-body.ai-prompt-off {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .ai-macro-preview {
+            font-size: 0.78rem;
+            line-height: 1.6;
+            background: rgba(255, 255, 255, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 8px;
+            padding: 7px 10px;
+            word-break: break-word;
+        }
+
+        .ai-macro-preview b { text-shadow: 0 0 6px rgba(255, 255, 255, 0.7); }
+
+        .ai-macro-preview code,
+        .ai-hint code {
+            font-family: 'Fusion Pixel 12px Proportional JA', 'Share Tech Mono', monospace;
+            background: rgba(0, 0, 0, 0.18);
+            border-radius: 4px;
+            padding: 1px 4px;
+        }
+
+        .ai-hint {
+            font-size: 0.72rem;
+            line-height: 1.6;
+            opacity: 0.82;
+        }
+
+        .ai-btn-mini {
+            padding: 5px 9px;
+            font-size: 0.75rem;
+        }
+

@@ -1,0 +1,513 @@
+        /* ===== 【ai对话】的「配置来源」开关 ===== */
+        .ai-cfg-src {
+            display: flex;
+            gap: 6px;
+        }
+
+        .ai-src-btn {
+            flex: 1;
+            font-family: inherit;
+            font-size: 0.78rem;
+            color: #1a2b3c;
+            background: rgba(255, 255, 255, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.75);
+            border-radius: 8px;
+            padding: 7px 6px;
+            cursor: pointer;
+            text-shadow: none;
+            transition: all 0.2s ease;
+        }
+
+        .ai-src-btn:hover { background: rgba(255, 255, 255, 0.8); }
+
+        /* 选中的那一侧用实心蓝，跟 .ai-switch 的选中色一致 */
+        .ai-src-btn.ai-src-on {
+            background: #3a7bd5;
+            border-color: #3a7bd5;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .ai-cfg-src-hint {
+            font-size: 0.72rem;
+            line-height: 1.6;
+            color: #1a2b3c;
+            background: rgba(255, 255, 255, 0.42);
+            border-left: 3px solid #3a7bd5;
+            border-radius: 0 8px 8px 0;
+            padding: 7px 9px;
+        }
+
+        .ai-src-open {
+            font-family: inherit;
+            font-size: 0.72rem;
+            color: #fff;
+            background: #3a7bd5;
+            border: none;
+            border-radius: 6px;
+            padding: 3px 8px;
+            margin-left: 4px;
+            cursor: pointer;
+            text-shadow: none;
+        }
+
+        /* 折叠状态下也能看见当前来源 */
+        .ai-src-badge {
+            font-size: 0.68rem;
+            font-weight: normal;
+            opacity: 0.9;
+            letter-spacing: 0;
+        }
+
+        body.retro-mode .ai-src-btn {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            color: #000;
+        }
+
+        body.retro-mode .ai-src-btn.ai-src-on { background: #000080; color: #fff; }
+        body.retro-mode .ai-cfg-src-hint { background: #fff; color: #000; }
+        body.retro-mode .ai-src-open {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .switch-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #ff4d4d;
+            box-shadow: 0 0 5px #ff4d4d;
+        }
+
+        /* 顶部标题 */
+        .title {
+            margin-top: clamp(2.5rem, 6vh, 4.5rem); 
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            text-align: center;
+            letter-spacing: 2px;
+            width: 100%;
+        }
+
+        /* 毛玻璃卡片基类 */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            border-radius: 14px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            overflow: hidden;
+            width: 100%;
+            max-width: 500px;
+            transition: all 0.3s ease;
+        }
+
+        /* 时钟容器 */
+        .clock-container {
+            margin-top: clamp(1rem, 3vh, 2rem);
+            min-height: clamp(90px, 15vh, 135px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem;
+        }
+
+        .clock-display {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 时区切换开关（点击展开/折叠时区按钮网格） */
+        .tz-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            color: #fff;
+            padding: clamp(3px, 1vw, 5px) clamp(10px, 2vw, 14px);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: clamp(0.75rem, 2vw, 0.9rem);
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        .tz-toggle:hover {
+            background: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+        }
+
+        .tz-toggle-icon {
+            display: inline-block;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .clock-container.tz-collapsed .tz-toggle-icon {
+            transform: rotate(-90deg);
+        }
+
+        .tz-collapse-wrapper {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%;
+        }
+
+        .clock-container:not(.tz-collapsed) .tz-collapse-wrapper {
+            grid-template-rows: 1fr;
+        }
+
+        .tz-collapse-inner {
+            overflow: hidden;
+            width: 100%;
+        }
+
+        /* 时区切换按钮网格（样式与日历展开的月份/年份格子一致） */
+        .tz-grid {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: clamp(4px, 1.2vw, 8px);
+            padding: 0 0.2rem;
+        }
+
+        .tz-cell {
+            appearance: none;
+            -webkit-appearance: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 8px;
+            color: #fff;
+            font-size: clamp(0.72rem, 2vw, 0.9rem);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            height: clamp(30px, 5vh, 38px);
+            padding: 0 4px;
+            text-align: center;
+        }
+
+        .tz-cell:hover {
+            background: rgba(255, 255, 255, 0.35);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .tz-cell.selected {
+            background: rgba(255, 255, 255, 0.85);
+            color: #3a7bd5;
+            font-weight: bold;
+            text-shadow: none;
+        }
+
+        .period-box {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            font-size: clamp(0.9rem, 2.5vw, 1.25rem);
+            line-height: 1.4;
+            text-align: center;
+            border-right: 2px solid rgba(255, 255, 255, 0.4);
+            padding-right: clamp(0.6rem, 2vw, 1.2rem);
+            margin-right: clamp(0.6rem, 2vw, 1.2rem);
+            flex-shrink: 0;
+        }
+
+        .period-am, .period-pm {
+            transition: opacity 0.3s ease;
+        }
+        
+        .inactive { opacity: 0.3; }
+
+        .active {
+            opacity: 1;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+        }
+
+        /* 数字时钟 */
+        .digital-clock {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: clamp(2rem, 7vw, 3.6rem);
+            letter-spacing: clamp(1px, 0.8vw, 4px);
+            color: #ffffff;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+
+            display: inline-block;
+            text-align: center;
+            white-space: nowrap;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+
+        /* 世界时间的日期偏移徽标：所选时区的日期比**本地**日期晚 / 早一天时，
+           在时钟右边出现一个 `【D+1】` / `【D-1】` 小字标记。
+           ⚠ 它跟 `.period-box` 一样是 `.clock-display` 的 flex 子项，**居中**（继承 align-items），
+             不要写 `align-self: flex-start` —— 那会跟旁边居中的「午前/午後」对不齐，像没排好版。
+           ⚠⚠ **空文案时必须彻底不占位**，靠下面那条 `:empty`。只把 `textContent` 清空的话
+             元素本身还在，一个 `margin-left` 就会把时钟往左推 —— 而「本地时间」下它**永远**是空的，
+             也就是说是常态，不是边角情况。 */
+        .clock-day-offset {
+            font-size: clamp(0.6rem, 1.7vw, 0.8rem);
+            line-height: 1;
+            color: #ffffff;
+            opacity: 0.8;
+            margin-left: clamp(4px, 1.2vw, 10px);
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+            flex-shrink: 0;
+            text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+        }
+
+        .clock-day-offset:empty { display: none; }
+
+        /* 日历容器 */
+        .calendar-container {
+            margin-top: clamp(1rem, 2.5vh, 1.5rem);
+            padding: clamp(0.8rem, 2.5vw, 1.2rem);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .calendar-header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 0.2rem;
+        }
+
+        .header-title-box {
+            display: flex;
+            align-items: center;
+            gap: clamp(4px, 1.5vw, 8px);
+        }
+
+        .clickable-title {
+            font-size: clamp(1rem, 3vw, 1.3rem);
+            letter-spacing: 1px;
+            color: #ffffff;
+            text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: background 0.2s ease;
+        }
+
+        .clickable-title:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .cal-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            color: #fff;
+            padding: clamp(3px, 1vw, 5px) clamp(6px, 1.5vw, 10px);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: clamp(0.75rem, 2vw, 0.9rem);
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        .cal-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+        }
+
+        .cal-btn:active {
+            transform: scale(0.95);
+        }
+
+        .today-btn {
+            font-size: clamp(0.7rem, 1.8vw, 0.8rem);
+            padding: 3px 6px;
+        }
+
+        .toggle-btn {
+            font-size: clamp(0.8rem, 2vw, 1rem);
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            padding: 0;
+        }
+
+        .toggle-icon {
+            display: inline-block;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .calendar-container.collapsed .toggle-icon {
+            transform: rotate(-180deg);
+        }
+
+        .calendar-collapse-wrapper {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%;
+        }
+
+        .calendar-container:not(.collapsed) .calendar-collapse-wrapper {
+            grid-template-rows: 1fr;
+        }
+
+        .calendar-collapse-inner {
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .calendar-body {
+            width: 100%;
+            height: clamp(250px, 35vh, 300px);
+            margin-top: clamp(0.6rem, 2vh, 1rem);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .calendar-container.collapsed .calendar-body {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+
+        .calendar-body.fade-out {
+            opacity: 0;
+            transform: scale(0.96);
+        }
+
+        .days-grid {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: clamp(4px, 1.2vw, 8px);
+            text-align: center;
+        }
+
+        .weekday-tag {
+            font-size: clamp(0.75rem, 2vw, 0.95rem);
+            font-weight: bold;
+            opacity: 0.85;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .weekday-tag.sun { color: #ff9e9e; }
+        .weekday-tag.sat { color: #9ed2ff; }
+
+        .day-cell {
+            font-size: clamp(0.8rem, 2.2vw, 1rem);
+            height: clamp(28px, 4.5vh, 36px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .day-cell.current-month:hover {
+            background: rgba(255, 255, 255, 0.25);
+            cursor: default;
+        }
+
+        .day-cell.other-month {
+            opacity: 0.25;
+        }
+
+        .day-cell.today {
+            background: rgba(255, 255, 255, 0.9);
+            color: #3a7bd5;
+            font-weight: bold;
+            text-shadow: none;
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+        }
+
+        .months-grid {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: clamp(6px, 1.5vw, 12px);
+            align-content: center;
+        }
+
+        .month-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 8px;
+            font-size: clamp(0.85rem, 2.2vw, 1.1rem);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            height: clamp(40px, 7vh, 55px);
+        }
+
+        .month-cell:hover {
+            background: rgba(255, 255, 255, 0.35);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .month-cell.selected {
+            background: rgba(255, 255, 255, 0.85);
+            color: #3a7bd5;
+            font-weight: bold;
+            text-shadow: none;
+        }
+
+        .years-grid {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: clamp(8px, 1.8vw, 14px);
+            align-content: center;
+        }
+
+        .year-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 8px;
+            font-size: clamp(0.95rem, 2.5vw, 1.2rem);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            height: clamp(45px, 8vh, 60px);
+        }
+
+        .year-cell:hover {
+            background: rgba(255, 255, 255, 0.35);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .year-cell.selected {
+            background: rgba(255, 255, 255, 0.85);
+            color: #3a7bd5;
+            font-weight: bold;
+            text-shadow: none;
+        }
+

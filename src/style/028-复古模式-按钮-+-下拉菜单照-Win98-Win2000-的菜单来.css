@@ -1,0 +1,132 @@
+        /* ==========================================================================
+           复古模式：按钮 + 下拉菜单照 Win98 / Win2000 的菜单来
+             Win98 那套立体感全靠 `border-color` 的四个角，只有两种方向：
+               **凸起**（按钮 / 菜单框）= 上左亮 #fff + 下右暗 #808080
+               **凹陷**（只读的字段，状态栏那种）= 反过来
+             高亮一律是**海军蓝底 + 白字**（`#000080`），圆角全部归零 —— 那个年代没有圆角。
+           ⚠ 边框 / 底色**不能**挂到 `.mobile-nav-panel` / `.mobile-nav-inner` 上：
+             那两个是折叠动画的容器，收起来时高度是 0，而 border 与 padding **不进**那条
+             `grid-template-rows: 0fr` 的账 ⇒ 菜单关着也会在左上角留一道灰条。
+             所以另起 `.mobile-nav-box` 当画框（`smoke.js` 里有一条专门盯这个盒子）。
+           ========================================================================== */
+        body.retro-mode .mobile-nav-btn {
+            background: #c0c0c0;
+            color: #000000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 1px 1px 0 #000000;
+            backdrop-filter: none;
+        }
+
+        body.retro-mode .mobile-nav-btn:hover { background: #d4d0c8; }
+
+        /* 按下去要真的「陷进去」—— 把四个角的明暗对调就是 Win98 的按下手感 */
+        body.retro-mode .mobile-nav-btn:active {
+            border-color: #808080 #ffffff #ffffff #808080;
+            box-shadow: none;
+        }
+
+        body.retro-mode .mobile-nav-name {
+            /* 现在它住在 `.mobile-nav-box` 里（Win98 那个画框），间距跟着菜单项走紧一点。
+               ⚠ 这里要把上面的「分隔线」整个换成**凹陷的方框** —— 不是简单加个 border-top，
+                  得写成 `border: 2px solid` + 四角色，否则会剩一条 1px 的亮线挂在框外。 */
+            margin-top: 2px;
+            padding: 3px 8px;
+            background: #c0c0c0;
+            color: #000000;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+            box-shadow: none;
+            backdrop-filter: none;
+        }
+
+        body.retro-mode .mobile-nav-box {
+            margin-top: 6px;
+            padding: 3px;
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            box-shadow: 2px 2px 0 #000000;
+        }
+
+        /* Win98 的菜单项自己是平的，只有鼠标经过时才整条反色 */
+        body.retro-mode .mobile-nav-item {
+            margin-top: 0;
+            padding: 8px 12px;
+            background: transparent;
+            color: #000000;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            backdrop-filter: none;
+        }
+
+        body.retro-mode .mobile-nav-item:hover { background: #000080; color: #ffffff; }
+
+        /* —— 人设生成器「已经添加过了」的三选一弹窗 ——
+           ⚠ 为什么不用 `window.confirm`：它只有「确定 / 取消」两个出口，而这里要**三选一**
+             （取消 / 覆盖 / 追加为新条目），而且「取消」的语义是**什么都不做** ——
+             塞进 confirm 就只能靠「确定=覆盖、取消=追加」这种猜谜。
+           ⚠ 它是**从状态渲染**的（`stEditor.personaBookAsk`），不是凭空 `appendChild` ——
+             所以 `stRerender()` 重建面板时它不会掉、也不会出现两个。
+           ⚠ `position: fixed` 的包含块是 `#st-overlay`（它带 `backdrop-filter`），
+             而 `#st-overlay` 正好是 `inset: 0` ⇒ 这个弹窗仍然铺满视口。
+             （套件里有一条**命中测试**盯着这件事：屏幕正中必须点到弹窗本身，
+               量 rect 是量不出「被别的层盖住」的。）
+           ⚠⚠ 这段 CSS 放在样式块**末尾**，但**别以为它零位移** —— 往样式块里插东西，
+             块**之后**的锚点照样整体后移（第十六轮实测 **+65 行**，README §2 那 9 行全跟着挪）。
+             ⚠⚠ **这里绝不能出现结束标签的字面量**：HTML 的 raw-text 里它就是终止符，注释也挡不住。 */
+        .st-ask {
+            position: fixed;
+            inset: 0;
+            z-index: 40;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(8, 32, 48, 0.45);
+        }
+
+        .st-ask-box {
+            width: 100%;
+            max-width: 420px;
+            padding: 16px 18px 14px;
+            background: #ffffff;
+            color: #1a2b3c;
+            border: 1px solid rgba(121, 174, 210, 0.55);
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(8, 32, 48, 0.3);
+        }
+
+        .st-ask-title {
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        .st-ask-note {
+            margin-bottom: 4px;
+            font-size: 0.78rem;
+            line-height: 1.7;
+            color: #33546b;
+        }
+
+        /* 弹窗里的按钮排一行、右对齐 —— 跟面板里那些 `.st-actions` 区分开：
+           那一条是左对齐铺开，这一条是「确认类」动作，靠右更符合习惯 */
+        .st-ask-box .st-actions { justify-content: flex-end; margin-top: 12px; }
+
+        /* 复古皮肤下也保持能读：Win98 的对话框就是灰底 + 立体边框 */
+        body.retro-mode .st-ask-box {
+            background: #c0c0c0;
+            color: #000000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 2px 2px 0 #000000;
+        }
+
+        body.retro-mode .st-ask-note { color: #000000; opacity: 1; }
+    </style>
