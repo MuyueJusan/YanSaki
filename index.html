@@ -3116,6 +3116,21 @@
             margin-top: 2px;
         }
 
+        /* —— 人设生成器「参考素材」的条目勾选列表 ——
+           卡内世界书可能有几十条，摊开会把「生成人设」按钮挤出屏幕 ⇒ 限高滚动。
+           ⚠ 复古皮肤下要另压一遍（白底方角），见 `body.retro-mode .st-lore-list` */
+        .st-lore-list {
+            max-height: 224px;
+            overflow-y: auto;
+            padding: 2px 10px;
+            border: 1px solid rgba(120, 150, 180, 0.45);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .st-lore-list .st-check { border-bottom: 1px dashed rgba(120, 150, 180, 0.28); }
+        .st-lore-list .st-check:last-child { border-bottom: 0; }
+
         .st-row {
             display: flex;
             gap: 8px;
@@ -4283,6 +4298,18 @@
             background: #ffffff;
             border-color: #808080;
             border-radius: 0;
+        }
+
+        /* 人设生成器「参考素材」的勾选列表：跟 .st-entry 同一套 Win95 观感 */
+        body.retro-mode .st-lore-list {
+            background: #ffffff;
+            border-color: #808080;
+            border-radius: 0;
+        }
+
+        body.retro-mode .st-lore-list .st-check {
+            border-bottom-color: #808080;
+            color: #000000;
         }
 
         /* 预制块那两处也不吃 .st-field 那套，复古皮肤下要单独压一遍 */
@@ -16665,6 +16692,22 @@
             // ⚠ 跟 personaTplOpen 同一类：它是「这一次怎么生成」的面板参数，
             //   跟 personaReq / personaOut 一起当会话级状态，不落盘。
             personaNameUse: true,
+            // —— 人设生成器 · 参考素材（世界书）——
+            // 额外导入的那本世界书。**只喂这一次生成、绝不进卡** ——
+            // 「额外导入」的全部意义就是「手上有一份书，但不想把它塞进这张卡」。
+            // null = 没导入。形状 { name, entries }，entries 跟卡内条目**同构**
+            // （都是 parseWorldBook → normalizeLoreEntry 的产物），所以下面一套逻辑渲染两边。
+            personaLore: null,
+            // 勾中的条目，键是 'card:<id>' / 'imp:<id>'。
+            // ⚠ **必须带来源前缀**：卡内条目和导入条目的 id 各自独立生成
+            //   （导入的是 'e0' 'e1'…，卡内的也可能撞），裸 id 会把两边混成一条。
+            // ⚠ 存 id 不存下标 —— 下标会被世界书页的增删挪走（跟 personaBookRef 同一条理由）。
+            // ⚠ 会话级、不落盘。条目被删之后这里会指向不存在的东西，
+            //   所以「已选 N 条」里的 N 只数**能解析出来的**那些（见 stPersonaPickHint）。
+            personaPick: [],
+            // 「参考素材」那个折叠块展开没有。默认**收起** —— 卡内世界书几十条，
+            // 摊开会把「生成人设」按钮挤出屏幕。跟 personaTplOpen 同一类，不落盘
+            personaPickOpen: false,
             // 「追加到世界书」的记账：上一次那个动作写出的**条目 id**。
             // ⚠ 世界书条目里**没有任何字段**能标出「这条是人设生成器写的」——
             //   所以「已经添加过了」只能靠这里记着。存 id 不存下标：下标会被
@@ -24450,6 +24493,11 @@
         const ST_PERSONA_REQ_MAX = 2000;
         const ST_PERSONA_TPL_MAX = 8000;
         const ST_PERSONA_OUT_MAX = 20000;
+        // 「参考素材」（世界书条目）的总字符预算。跟上面三条不是一回事：
+        // 那三条限的是**用户自己敲的字**，这条限的是**从书里搬来的正文** ——
+        // 勾 30 条 2000 字的条目就是 6 万字，直接把这轮上下文吃光。
+        // 超了不报错，是**少喂几条并说出来**（见 stPersonaLoreResolve 的 truncated）
+        const ST_PERSONA_LORE_MAX = 12000;
 
         // 默认模板。**逐字照用户给的那一份**，半角 / 全角冒号混用是原文如此 ——
         // 别「顺手统一」成一种：它是给人看的填空稿，用户自己写的那份才是准的。
@@ -24613,6 +24661,194 @@
             ].join('\n');
         }
 
+        // ===== 人设生成器 · 参考素材（世界书） =====
+        //
+        // 两路来源，**同一套渲染 / 解析**：
+        //   · 'card' —— 本卡世界书 `card.bookEntries`
+        //   · 'imp'  —— 用户额外导入的那一本（`stEditor.personaLore`，**不进卡**）
+        //
+        // ⚠ 别把导入的书并进 `card.bookEntries`：那样「额外导入」就变成了「偷偷改卡」，
+        //   而用户点的是「导入来生成角色」，不是「把这本书加到卡里」。
+
+        function stPersonaPickKey(src, id) { return src + ':' + id; }
+
+        // 现在能选的全部来源。空书不出现在列表里（免得出现一个 0 条的标题）
+        function stPersonaLoreSources() {
+            const out = [];
+            const card = stEditor.card;
+            if (card && Array.isArray(card.bookEntries) && card.bookEntries.length) {
+                out.push({
+                    src: 'card',
+                    name: stStr(card.bookName) || '本卡世界书',
+                    entries: card.bookEntries
+                });
+            }
+            const imp = stEditor.personaLore;
+            if (imp && Array.isArray(imp.entries) && imp.entries.length) {
+                out.push({ src: 'imp', name: imp.name || '导入的世界书', entries: imp.entries });
+            }
+            return out;
+        }
+
+        function stPersonaPickHas(key) {
+            const a = Array.isArray(stEditor.personaPick) ? stEditor.personaPick : [];
+            return a.indexOf(key) >= 0;
+        }
+
+        // 解析勾选 → 真正要喂给 AI 的那几段。
+        // 返回的 missing / dropped / truncated 三个数**必须被说出来**：
+        //   missing   = 勾了但条目已经不在（世界书页删了 / 换了张卡）
+        //   dropped   = 条目在，但正文是空的（只有关键词或常驻标记）
+        //   truncated = 总字符超了预算，这一条没进去
+        // ⚠ 「静默少喂几条」是这个功能最容易出的坑：界面上勾着 5 条、模型只看到 3 条，
+        //   而生成结果看起来完全正常 —— 只能靠这里记账、再在提示里报出来。
+        function stPersonaLoreResolve() {
+            const picks = Array.isArray(stEditor.personaPick) ? stEditor.personaPick : [];
+            const byKey = {};
+            stPersonaLoreSources().forEach(s => {
+                s.entries.forEach(e => {
+                    if (e && e.id) byKey[stPersonaPickKey(s.src, e.id)] = { e: e, srcName: s.name };
+                });
+            });
+            const items = [];
+            let missing = 0, dropped = 0, truncated = 0, chars = 0;
+            picks.forEach(k => {
+                const hit = byKey[k];
+                if (!hit) { missing++; return; }
+                const body = String(hit.e.content == null ? '' : hit.e.content).trim();
+                if (!body) { dropped++; return; }
+                // 超预算就跳过这一条、继续看后面的（后面可能有短条目），跳过的照样计数
+                if (chars + body.length > ST_PERSONA_LORE_MAX) { truncated++; return; }
+                items.push({
+                    name: stStr(hit.e.comment) || '（没写备注）',
+                    srcName: hit.srcName,
+                    content: body
+                });
+                chars += body.length;
+            });
+            return { items, missing, dropped, truncated, chars };
+        }
+
+        // 折进提示词的那一段。没有可喂的条目时返回空串（调用方据此整段省掉）
+        function stPersonaLoreBlock() {
+            const r = stPersonaLoreResolve();
+            if (!r.items.length) return '';
+            const parts = [
+                '## 参考素材（世界书条目）',
+                '下面是用户从世界书里挑出来的设定。**当成这个世界的既有事实**，',
+                '人设要跟它一致；但不要把原文照抄进人设，也不要在人设里提「世界书」这三个字。'
+            ];
+            r.items.forEach(it => {
+                parts.push('');
+                parts.push('### ' + it.name + '（来自「' + it.srcName + '」）');
+                parts.push(it.content);
+            });
+            return parts.join('\n');
+        }
+
+        // 勾选框：**只改状态 + 只改计数，不重绘** ——
+        // 重绘会把 `.st-lore-list` 的滚动位置弹回顶部，勾第 12 条时特别难受。
+        // （跟 stSyncPersonaTplOpen「只改 class 不重绘」同一条理由）
+        function stPersonaPickToggle(box) {
+            const key = box ? box.getAttribute('data-key') : '';
+            if (!key) return;
+            const a = Array.isArray(stEditor.personaPick) ? stEditor.personaPick.slice() : [];
+            const at = a.indexOf(key);
+            if (box.checked) { if (at < 0) a.push(key); }
+            else if (at >= 0) { a.splice(at, 1); }
+            stEditor.personaPick = a;
+            stPersonaPickHintPaint();
+        }
+
+        // 折叠头右侧那行字。**数的是能解析出来的条数**，不是数组长度 ——
+        // 条目被删之后数组里还留着那个键，直接报长度会显示「已选 3 条」而实际喂 2 条
+        function stPersonaPickHintText() {
+            const r = stPersonaLoreResolve();
+            const n = r.items.length;
+            if (!n) return '未选';
+            const lost = r.missing + r.dropped + r.truncated;
+            return '已选 ' + n + ' 条 · 约 ' + r.chars + ' 字' +
+                (lost ? '（另有 ' + lost + ' 条没进去）' : '');
+        }
+
+        function stPersonaPickHintPaint() {
+            const el = document.getElementById('st-persona-pick-hint');
+            if (el) el.textContent = stPersonaPickHintText();
+        }
+
+        function stSyncPersonaPickOpen() {
+            const on = stEditor.personaPickOpen === true;
+            const box = document.getElementById('st-persona-pick-fold');
+            if (box) box.classList.toggle('st-fold-open', on);
+            const btn = document.getElementById('st-persona-pick-toggle');
+            if (btn) btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        }
+
+        function stPersonaPickFoldToggle() {
+            stEditor.personaPickOpen = !(stEditor.personaPickOpen === true);
+            stSyncPersonaPickOpen();
+        }
+
+        // 全选 / 清空。**重绘**（不是逐个写 .checked）—— 一次要动几十个勾选框，
+        // 逐个写反而更容易漏；代价只是列表滚回顶部，而这是用户主动点的批量动作
+        function stPersonaPickAll(on) {
+            const keys = [];
+            stPersonaLoreSources().forEach(s => s.entries.forEach(e => {
+                if (e && e.id) keys.push(stPersonaPickKey(s.src, e.id));
+            }));
+            stEditor.personaPick = on ? keys : [];
+            stRerender();
+        }
+
+        function stPersonaLorePick() {
+            const el = document.getElementById('st-persona-lore-file');
+            if (el) { try { el.click(); } catch (e) {} }
+        }
+
+        // 额外导入一本世界书。**只存进 stEditor.personaLore，一个字都不进卡**。
+        // ⚠ 跟 onLoreFilePicked（聊天区那本）是两回事：那个会写进 aiConfig.tavernLore
+        //   并进酒馆模式，这个只喂人设生成器。
+        async function stPersonaLoreFilePicked(ev) {
+            const file = ev.target.files && ev.target.files[0];
+            // ⚠ 先清空 value：不清的话**同一个文件选第二次不会再触发 change**
+            //   （浏览器认为值没变），症状是「导入过一次之后再导入就没反应」
+            ev.target.value = '';
+            if (!file) return;
+            try {
+                const text = new TextDecoder('utf-8').decode(new Uint8Array(await file.arrayBuffer()));
+                const book = parseWorldBook(JSON.parse(text), file.name.replace(/\.json$/i, ''));
+                if (!book.entries.length) {
+                    stExportMsg('⚠ 「' + book.name + '」里没有可用条目' +
+                        '（正文、关键词、常驻三者全空的会被丢掉）。', 'warn', 'persona');
+                    return;
+                }
+                stEditor.personaLore = { name: book.name, entries: book.entries };
+                // 导进来就展开：用户刚做完一个动作，得让他看见结果落在哪
+                stEditor.personaPickOpen = true;
+                stRerender();
+                stExportMsg('✅ 已载入「' + book.name + '」' + book.entries.length +
+                    ' 条 —— 它不会进卡，只喂这一次生成。勾上要用的条目再点生成。', 'ok', 'persona');
+            } catch (e) {
+                stExportMsg('❌ 世界书读取失败：' + (e && e.message ? e.message : e), 'bad', 'persona');
+            }
+        }
+
+        // 移除导入的那本书。**连带清掉只属于它的勾选** ——
+        // 不清的话折叠头会一直报「另有 N 条没进去」，而那 N 条已经无从勾掉
+        function stPersonaLoreDrop() {
+            stEditor.personaLore = null;
+            const a = Array.isArray(stEditor.personaPick) ? stEditor.personaPick : [];
+            stEditor.personaPick = a.filter(k => k.indexOf('imp:') !== 0);
+            stRerender();
+            stExportMsg('已移除导入的世界书（卡内世界书没动）。', '', 'persona');
+        }
+
+        // 换卡 / 新建卡时清掉：上一张卡勾中的条目 id 在新卡里一个都不存在
+        function stPersonaPickClear() {
+            stEditor.personaPick = [];
+            stEditor.personaLore = null;
+        }
+
         function stPersonaUserPrompt(req, tpl) {
             const c = stEditor.card || {};
             const ctx = [];
@@ -24627,6 +24863,10 @@
                 ctx.forEach(x => parts.push(x));
                 parts.push('');
             }
+            // 参考素材排在「要求」和「模板」之间：它跟要求一样是**输入**，
+            // 而模板是**输出的形状** —— 先给料，再给表格
+            const lore = stPersonaLoreBlock();
+            if (lore) { parts.push(lore); parts.push(''); }
             parts.push('## 模板（照它的结构逐项填）');
             parts.push(tpl);
             return parts.join('\n');
@@ -24709,6 +24949,9 @@
             }
             stEditor.personaBusy = true;
             stRerender();
+            // 参考素材在**发请求之前**解析一次：报告里说的必须是「这一轮实际发出去的那一份」，
+            // 而不是「发完之后状态里还剩什么」（生成过程中状态不会变，但把这个前提写死更省心）
+            const lore = stPersonaLoreResolve();
             stExportMsg('⏳ 正在让 AI 生成人设…', '', 'persona');
             let text = '';
             try {
@@ -24747,10 +24990,21 @@
             const labels = stPersonaLabels(tpl);
             const hit = labels.filter(k => out.indexOf(k) >= 0).length;
             const miss = labels.length - hit;
+            // 参考素材也报一句：喂了几条、几条没进去。
+            // ⚠ 「没进去」必须点名原因 —— 只说「有 2 条没进去」等于没说，
+            //   用户既不知道该去哪修，也分不清是自己勾错了还是程序吞了
+            const loreLost = lore.missing + lore.dropped + lore.truncated;
+            const loreWhy = [
+                lore.missing ? lore.missing + ' 条已不存在' : '',
+                lore.dropped ? lore.dropped + ' 条正文为空' : '',
+                lore.truncated ? lore.truncated + ' 条超出 ' + ST_PERSONA_LORE_MAX + ' 字预算' : ''
+            ].filter(Boolean).join(' / ');
             stExportMsg('✅ 生成了 ' + out.length + ' 字符' +
+                (lore.items.length ? '；参考素材 ' + lore.items.length + ' 条（' + lore.chars + ' 字）' : '') +
                 (labels.length ? '；模板 ' + labels.length + ' 项里对上了 ' + hit + ' 项' : '') +
                 (miss ? '（' + miss + ' 项没出现 —— 模型可能改写了标题，先看一眼再写入）' : '') +
-                '。', miss ? 'warn' : 'ok', 'persona');
+                (loreLost ? '（另有 ' + loreLost + ' 条参考素材没进去：' + loreWhy + '）' : '') +
+                '。', (miss || loreLost) ? 'warn' : 'ok', 'persona');
         }
 
         // mode：'replace' 写入角色描述 / 'append' 追加到角色描述 / 'book' 追加成一条世界书条目
@@ -24898,8 +25152,13 @@
             const hit = out ? labels.filter(k => out.indexOf(k) >= 0).length : 0;
             // 折叠态**从状态渲染**，不是只活在 DOM 上 —— 否则 stRerender 一重建就弹回展开
             const tplOpen = stEditor.personaTplOpen === true;
+            // 「参考素材」那一块的折叠态 / 标题提示 / 两个来源，同样全部从状态算
+            const pickOpen = stEditor.personaPickOpen === true;
+            const pickHint = stPersonaPickHintText();
+            const loreSources = stPersonaLoreSources();
             return stPaneHead('🎭 人设生成器',
                 '写一句设定或要求，AI 按下面这份<b>模板</b>逐项填好，生成一整份人设。' +
+                '还能从世界书里挑几条当<b>参考素材</b>（本卡的，或额外导入一本只喂生成、不进卡的）。' +
                 '模板可以换成你自己的（存在浏览器本地，<b>不写进卡</b>）；' +
                 '生成结果先给你过目、可以直接改，点<b>写入</b>才进角色描述（也可以存成世界书条目）。') +
                 '<div class="st-sub">你想要什么</div>' +
@@ -24925,6 +25184,80 @@
                             (nm ? '（' + escapeHtml(nm) + '）' : '（这张卡还没写名字）') +
                         '</span>' +
                     '</label>' +
+                '</div>' +
+                // —— 参考素材（世界书）——
+                // 折叠块，跟「模板」同一个 `.st-fold` 实现。**默认收起**：卡内世界书几十条，
+                // 摊开会把「生成人设」按钮挤出屏幕。
+                // ⚠ 两个来源共用一套渲染：`src` 只用来拼勾选键和标题，条目本身**同构**
+                //   （卡内的是 card.bookEntries，导入的是 parseWorldBook 的产物）。
+                // ⚠ 勾选框带 `data-key`（'card:<id>' / 'imp:<id>'），**不带下标** ——
+                //   下标会被世界书页的增删挪走。
+                '<div class="st-fold' + (pickOpen ? ' st-fold-open' : '') +
+                    '" id="st-persona-pick-fold">' +
+                    '<button class="st-fold-head" type="button" id="st-persona-pick-toggle"' +
+                        ' aria-expanded="' + (pickOpen ? 'true' : 'false') + '"' +
+                        ' aria-controls="st-persona-pick-body"' +
+                        ' onclick="stPersonaPickFoldToggle()">' +
+                        '<span class="st-fold-ico">▲</span>' +
+                        '<span class="st-sub">参考素材（世界书）</span>' +
+                        '<span class="st-fold-hint" id="st-persona-pick-hint">' +
+                            escapeHtml(pickHint) + '</span>' +
+                    '</button>' +
+                    '<div class="st-fold-body" id="st-persona-pick-body">' +
+                        '<div class="st-fold-inner">' +
+                            (loreSources.length
+                                ? loreSources.map(s =>
+                                    '<div class="st-sub">' + escapeHtml(s.name) +
+                                        ' · ' + s.entries.length + ' 条</div>' +
+                                    '<div class="st-lore-list">' +
+                                        s.entries.map(e => {
+                                            const key = stPersonaPickKey(s.src, e.id);
+                                            const ks = (e.keys || []).join('、');
+                                            const meta = [];
+                                            if (ks) meta.push(ks.slice(0, 28));
+                                            if (!e.enabled) meta.push('停用');
+                                            const label = stStr(e.comment) || '（没写备注）';
+                                            return '<label class="st-check" title="' +
+                                                    escapeHtml(label) + '">' +
+                                                '<input type="checkbox" data-key="' +
+                                                    escapeHtml(key) + '"' +
+                                                    (stPersonaPickHas(key) ? ' checked' : '') +
+                                                    ' onchange="stPersonaPickToggle(this)">' +
+                                                '<span>' + escapeHtml(label) +
+                                                    (meta.length
+                                                        ? '（' + escapeHtml(meta.join(' · ')) + '）'
+                                                        : '') +
+                                                '</span>' +
+                                            '</label>';
+                                        }).join('') +
+                                    '</div>').join('')
+                                : '<div class="st-empty">这张卡还没有世界书条目。' +
+                                    '可以先导入一本世界书（只喂生成，不会进卡）。</div>') +
+                            '<div class="st-actions">' +
+                                '<button class="st-mini" type="button" id="st-persona-lore-import"' +
+                                    ' onclick="stPersonaLorePick()">📖 导入世界书 JSON</button>' +
+                                '<input type="file" id="st-persona-lore-file" class="ai-hidden-file"' +
+                                    ' accept=".json,application/json"' +
+                                    ' onchange="stPersonaLoreFilePicked(event)">' +
+                                (loreSources.length
+                                    ? '<button class="st-mini st-plain" type="button"' +
+                                        ' onclick="stPersonaPickAll(true)">全选</button>' +
+                                      '<button class="st-mini st-plain" type="button"' +
+                                        ' onclick="stPersonaPickAll(false)">清空</button>'
+                                    : '') +
+                                (stEditor.personaLore
+                                    ? '<button class="st-mini st-danger" type="button"' +
+                                        ' onclick="stPersonaLoreDrop()">✕ 移除导入的书</button>'
+                                    : '') +
+                            '</div>' +
+                            '<div class="st-note">' +
+                                '勾中的条目会跟「要求」一起发给 AI，让它按这些设定写人设。<br>' +
+                                '⚠ <b>额外导入的世界书不会进卡</b> —— 它只喂这一次生成；' +
+                                '想让它进卡，去「世界书」页自己加。<br>' +
+                                '⚠ 停用的条目也能勾（「启用」管的是聊天时插不插，跟这里无关）。' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
                 '</div>' +
                 // 「模板」折叠块 —— **默认收起**，点标题展开。
                 // ⚠ 标题仍用 `.st-sub` 包着：它既是可见标签（默认 / 已自定义），
@@ -24992,7 +25325,8 @@
                         '<button class="st-big st-plain" type="button" id="st-persona-copy"' +
                             ' onclick="stPersonaCopy()">📋 复制</button>' +
                       '</div>'
-                    : '<div class="st-empty">还没有生成结果。写好要求，点上面的「✨ 生成人设」。</div>') +
+                    : '<div class="st-empty" id="st-persona-empty">还没有生成结果。' +
+                      '写好要求，点上面的「✨ 生成人设」。</div>') +
                 '<div class="st-note">' +
                     '模板里<b>每一行都以冒号结尾</b>，AI 会在冒号后面填内容 —— ' +
                     '所以你可以自由增删行、改字段名，它会跟着变。<br>' +
@@ -29199,6 +29533,9 @@
             stEditor.extractMsg = '';
             // 世界书的多选同理 —— 上一张卡勾中的那些条目 id 在新卡里一个都不存在
             stBookSelClear();
+            // 人设生成器的「参考素材」同理，而且连**导入的那本书**也一起丢掉：
+            // 它是「为这张卡准备的额外素材」，换卡之后跟新卡没关系
+            stPersonaPickClear();
             stMvuAfterLoad();     // 新卡没有 MVU / 状态栏，顺手把接管标记清干净
             stSaveDraft();
             if (stIsOpen()) renderStEditor();
