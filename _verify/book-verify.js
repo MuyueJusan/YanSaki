@@ -826,6 +826,264 @@ const W_D = '子规';
     await ev(`document.body.classList.remove('retro-mode')`);
     await sleep(160);
 
+    // ============ M. 世界书搜索与筛选 ============
+    section('M. 世界书搜索与筛选');
+
+    // 夹具：四条，**每个筛选维度都有能区分开的值** ——
+    //   0 雾港码头  启用 非常驻 keys[雾港]    pos=0(↑Char)
+    //   1 雾港的船  启用 **常驻** keys[夜航船] pos=0
+    //   2 蒸汽机    **停用** 非常驻 keys[蒸汽] pos=1(↓Char)
+    //   3 真名      启用 非常驻 **keys 为空** pos=1
+    const findFix = async () => {
+      await ev(`(function(){
+        const mk = (comment, keys, content, enabled, constant, pos) => {
+          const e = stBlankEntry();
+          e.comment = comment; e.keys = keys; e.content = content;
+          e.enabled = enabled; e.constant = constant; e.position = pos;
+          return e;
+        };
+        stEditor.card.bookEntries = [
+          mk('雾港码头', ['雾港'],   '码头上终年不散的雾气。', true,  false, 0),
+          mk('雾港的船', ['夜航船'], '船在雾里点灯。',         true,  true,  0),
+          mk('蒸汽机',   ['蒸汽'],   '嗡嗡响的锅炉。',         false, false, 1),
+          mk('真名',     [],         '不可言说的那个名字。Alpha 计划。', true,  false, 1)
+        ];
+        stEditor.bookSel = [];
+        stEditor.bookFind = { q: '', state: 'all', constant: 'all', pos: 'all', keys: 'all' };
+        stSwitchTab('book');
+        return true; })()`);
+      await sleep(300);
+    };
+
+    // 可见的条目下标。**从 DOM 的 class 推，不读内部状态** ——
+    // 读状态的话「状态算对了但没画出来」也会绿
+    const visIdx = () => ev(`[...document.querySelectorAll('#st-panes .st-entry')]
+        .filter(d => !d.classList.contains('st-entry-hide'))
+        .map(d => Number(d.id.replace('st-entry-', '')))`);
+    const allIdx = () => ev(`[...document.querySelectorAll('#st-panes .st-entry')]
+        .map(d => Number(d.id.replace('st-entry-', '')))`);
+    const checkedIdx = () => ev(`[...document.querySelectorAll('#st-panes .st-sel-box')]
+        .map((b, i) => b.checked ? i : -1).filter(i => i >= 0)`);
+    const findInfo = () => ev(`(function(){ const el = document.getElementById('st-find-info');
+        return el ? el.textContent : null; })()`);
+    const setQ = async (v) => { await ev(`(function(){
+        const q = document.getElementById('st-find-q');
+        q.value = ${JSON.stringify(v)};
+        q.dispatchEvent(new Event('input', { bubbles: true }));
+        return true; })()`); await sleep(150); };
+    const setSel = async (id, v) => { await ev(`(function(){
+        const el = document.getElementById('${id}');
+        el.value = ${JSON.stringify(v)};
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return true; })()`); await sleep(150); };
+    const resetFind = async () => {
+      await ev(`document.getElementById('st-find-reset').click()`); await sleep(180); };
+
+    // —— M1. 控件就位 ——
+    await findFix();
+    check('搜索框 / 四个下拉 / 重置 都在', await ev(`(function(){
+        return ['st-find-q','st-find-state','st-find-const','st-find-keys','st-find-pos','st-find-reset']
+          .every(id => !!document.getElementById(id)); })()`), true);
+    check('筛选栏排在批量栏**前面**，也在第一个条目前面', await ev(`(function(){
+        const f = document.getElementById('st-book-find');
+        const b = document.getElementById('st-book-batch');
+        const e0 = document.getElementById('st-entry-0');
+        if (!f || !b || !e0) return null;
+        const before = (a, z) => (a.compareDocumentPosition(z) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+        return before(f, b) && before(f, e0); })()`), true);
+    check('没筛的时候四条都看得见', await visIdx(), [0, 1, 2, 3]);
+    check('没筛的时候计数是「共 4 条」', await findInfo(), '共 4 条');
+    check('没筛的时候「重置」是禁用的',
+      await ev(`document.getElementById('st-find-reset').disabled`), true);
+
+    // —— M2. 搜索：命中备注 / 正文，且**不动 DOM 结构** ——
+    await setQ('雾港');
+    check('搜「雾港」⇒ 只剩 0 和 1', await visIdx(), [0, 1]);
+    check('搜的时候计数变成「命中 2 / 共 4 条」', await findInfo(), '命中 2 / 共 4 条');
+    check('搜的时候「重置」解禁',
+      await ev(`document.getElementById('st-find-reset').disabled`), false);
+    // ⚠⚠ 这一条是整节的命门：筛掉的卡片**必须还在 DOM 里**。
+    //    删节点的话 `st-entry-<i>` 就跟 bookEntries 的下标对不上，
+    //    「复制 / 上移 / 删除」会作用到**另一条**上，而且一点报错都没有
+    check('⚠ 被筛掉的卡片只是藏起来，四条都还在 DOM 里', await allIdx(), [0, 1, 2, 3]);
+    check('⚠ 条目数组一条没少', await ev(`stEditor.card.bookEntries.length`), 4);
+    check('⚠ 顺序也没变', await names(), ['雾港码头', '雾港的船', '蒸汽机', '真名']);
+    // ⚠ class 只是标记，真藏没藏起来要看 computed display ——
+    //   `.st-entry-hide` 那条 CSS 漏了的话上面几条照样全绿
+    check('被筛掉的卡片 computed display 真的是 none', await ev(`(function(){
+        const d = document.getElementById('st-entry-2');
+        return d ? getComputedStyle(d).display : null; })()`), 'none');
+    check('对照组：命中的卡片 computed display 不是 none', await ev(`(function(){
+        const d = document.getElementById('st-entry-0');
+        return d ? getComputedStyle(d).display : null; })()`),
+      v => !!v && v !== 'none', '不是 none');
+    // 正文也要搜：词只出现在 content 里
+    await setQ('不可言说');
+    check('搜索也扫正文（搜「不可言说」⇒ 只剩 3）', await visIdx(), [3]);
+    // 关键词也要搜：词只出现在 keys 里
+    await setQ('夜航船');
+    check('搜索也扫关键词（搜「夜航船」⇒ 只剩 1）', await visIdx(), [1]);
+    // 大小写不敏感：正文里写的是 `Alpha`，搜小写 / 全大写都要命中
+    await setQ('alpha');
+    check('大小写不敏感（正文写的是 Alpha，搜小写也命中）', await visIdx(), [3]);
+    await setQ('ALPHA');
+    check('对照组：搜全大写也命中', await visIdx(), [3]);
+
+    // —— M3. 四个下拉各自独立生效 ——
+    await findFix();
+    await setSel('st-find-state', 'off');
+    check('状态=停用 ⇒ 只剩 2', await visIdx(), [2]);
+    await setSel('st-find-state', 'on');
+    check('状态=启用 ⇒ 0 / 1 / 3', await visIdx(), [0, 1, 3]);
+    await setSel('st-find-state', 'all');
+    await setSel('st-find-const', 'yes');
+    check('常驻=只常驻 ⇒ 只剩 1', await visIdx(), [1]);
+    await setSel('st-find-const', 'no');
+    check('常驻=非常驻 ⇒ 0 / 2 / 3', await visIdx(), [0, 2, 3]);
+    await setSel('st-find-const', 'all');
+    await setSel('st-find-keys', 'none');
+    check('关键词=无 ⇒ 只剩 3', await visIdx(), [3]);
+    await setSel('st-find-keys', 'has');
+    check('关键词=有 ⇒ 0 / 1 / 2', await visIdx(), [0, 1, 2]);
+    await setSel('st-find-keys', 'all');
+    await setSel('st-find-pos', '1');
+    check('位置=↓Char ⇒ 2 / 3', await visIdx(), [2, 3]);
+    await setSel('st-find-pos', '0');
+    check('位置=↑Char ⇒ 0 / 1', await visIdx(), [0, 1]);
+    await setSel('st-find-pos', 'all');
+
+    // —— M4. 搜索 + 筛选是「且」 ——
+    await setQ('雾港');
+    await setSel('st-find-const', 'yes');
+    check('搜「雾港」且常驻 ⇒ 只剩 1', await visIdx(), [1]);
+    // ⚠ 对照组：去掉搜索，同一个筛选结果不变 ⇒ 证明上面那条不是
+    //   「搜索被忽略了、只靠筛选」也不是「筛选被忽略了、只靠搜索」
+    await setQ('');
+    check('对照组：只留「常驻」还是只剩 1', await visIdx(), [1]);
+    await setSel('st-find-const', 'all');
+    await setQ('雾港');
+    check('对照组：只留搜索是 0 / 1（两个条件确实都在起作用）', await visIdx(), [0, 1]);
+
+    // —— M5. 重置 ——
+    await setSel('st-find-state', 'on');
+    await resetFind();
+    check('点「重置」⇒ 四条全回来', await visIdx(), [0, 1, 2, 3]);
+    check('重置之后计数回到「共 4 条」', await findInfo(), '共 4 条');
+    // ⚠ 控件自己的值也要回去 —— 只改内部状态不重画的话，
+    //   输入框里还留着旧词，看起来像「点了没反应」
+    check('重置之后搜索框是空的',
+      await ev(`document.getElementById('st-find-q').value`), '');
+    check('重置之后四个下拉都回到 all', await ev(`[
+        document.getElementById('st-find-state').value,
+        document.getElementById('st-find-const').value,
+        document.getElementById('st-find-keys').value,
+        document.getElementById('st-find-pos').value]`), ['all', 'all', 'all', 'all']);
+    check('重置之后「重置」自己又变回禁用',
+      await ev(`document.getElementById('st-find-reset').disabled`), true);
+
+    // —— M6. 筛出来的空集 ——
+    await setQ('绝对不可能命中的词');
+    check('一条都没命中时计数是 0', await findInfo(), '命中 0 / 共 4 条');
+    check('一条都没命中时专门的空态出现、并说明筛掉了多少', await ev(`(function(){
+        const el = document.getElementById('st-book-find-empty');
+        return el ? { hidden: el.hidden, txt: el.textContent } : null; })()`),
+      v => !!v && v.hidden === false && v.txt.indexOf('4 条被筛掉') >= 0,
+      '显示且写明 4 条被筛掉');
+    // ⚠ 对照组：「还没有条目」那个空态**不该**跟着冒出来 —— 卡里明明有 4 条
+    check('对照组：「还没有条目」的空态没跟着冒出来',
+      await ev(`document.querySelector('#st-panes .st-empty') === null`), true);
+    // ⚠ 截图必须在**重置之前**拍 —— 拍完再重置的话，照片上是四条全回来的样子，
+    //   名字叫 empty 却看不出空态（第一次就写错了顺序）
+    await shot('book-find-empty.png');
+    await resetFind();
+    check('重置之后空态收起来',
+      await ev(`document.getElementById('st-book-find-empty').hidden`), true);
+
+    // —— M7. 筛选生效时「全选 / 反选」只动看得见的 ——
+    // ⚠⚠ 安全性核心：全选把看不见的也勾上的话，接下来一次「批量删除」
+    //    就会删掉用户根本没在屏幕上见过的条目，而确认框只报个数，救不回来
+    await findFix();
+    await setQ('雾港');
+    await ev(`document.getElementById('st-sel-all').click()`);
+    await sleep(180);
+    check('筛选下点「全选」⇒ 只勾上命中的 0 和 1', await checkedIdx(), [0, 1]);
+    check('对照组：被筛掉的 2 / 3 没被勾上',
+      await checkedIdx(), v => v.indexOf(2) < 0 && v.indexOf(3) < 0, '不含 2/3');
+    await ev(`[...document.querySelectorAll('#st-book-batch .st-mini')]
+        .find(b => b.textContent.indexOf('反选') >= 0).click()`);
+    await sleep(180);
+    check('筛选下点「反选」⇒ 看得见的那两条全翻掉，一条不剩', await checkedIdx(), []);
+
+    // —— M8. 已选里混着被筛掉的，计数必须说出来 ——
+    await findFix();
+    await setQ('雾港');                                  // 命中 0 / 1
+    await ev(`document.getElementById('st-sel-all').click()`);   // 选 0 / 1
+    await sleep(160);
+    await setSel('st-find-const', 'yes');                // 命中只剩 1
+    check('已选里有被筛掉的，计数要说明白', await selInfo(),
+      '已选 2 / 4 条（命中 1 条，另有 1 条已选被筛掉）');
+    // 「全选」的勾选态只描述屏幕上这一批 ⇒ 可见的那 1 条已经选了，所以是勾上的
+    check('筛选之后「全选」是勾上的（可见的 1 条全选了）', await allBox(),
+      v => !!v && v.checked === true && v.ind === false);
+    await resetFind();
+    // 筛回来之后 2 条已选 / 4 条可见 ⇒ 半选态
+    check('对照组：取消筛选后「全选」变回半选态', await allBox(),
+      v => !!v && v.checked === false && v.ind === true);
+    check('取消筛选后 2 / 3 还是没被勾上（筛选期间的勾选没有牵连它们）',
+      await checkedIdx(), [0, 1]);
+
+    // —— M9. 会话级：不落盘 ——
+    // ⚠ 草稿是**白名单**式的（只写 tab / card 那几个字段），所以这条防的是
+    //   「哪天有人把 bookFind 加进那个白名单」。bookSel 同理，一起盯着
+    await ev(`stSaveDraft()`);
+    check('草稿里既没有 bookFind 也没有 bookSel（都是会话级）', await ev(`(function(){
+        const raw = localStorage.getItem('stCardDraft') || '';
+        return { find: raw.indexOf('bookFind') < 0, sel: raw.indexOf('bookSel') < 0 }; })()`),
+      v => !!v && v.find && v.sel, '两个都没有');
+
+    // —— M10. 老草稿没有这个字段时不能炸 ——
+    check('bookFind 字段缺失时回落成全默认（老草稿不会炸）', await ev(`(function(){
+        const keep = stEditor.bookFind;
+        stEditor.bookFind = undefined;
+        const f = stBookFind();
+        const ok = f.q === '' && f.state === 'all' && f.constant === 'all' &&
+                   f.pos === 'all' && f.keys === 'all';
+        stEditor.bookFind = keep;
+        return ok; })()`), true);
+
+    // —— M11. 换卡要清掉筛选 ——
+    await setQ('雾港');
+    await ev(`stNewCard()`);
+    await sleep(320);
+    check('新建卡之后筛选被清掉（不会一打开就只剩几条）', await ev(`(function(){
+        const f = stBookFind();
+        return { q: f.q, act: stBookFindActive() }; })()`),
+      v => !!v && v.q === '' && v.act === false, 'q 空且不生效');
+    await ev(`stSwitchTab('book')`);
+    await sleep(260);
+
+    // —— M12. 复古皮肤 ——
+    await findFix();
+    await setQ('雾港');
+    await ev(`document.body.classList.add('retro-mode')`);
+    await sleep(220);
+    check('复古下筛选栏是方角、白底、黑字', await ev(`(function(){
+        const f = document.getElementById('st-book-find');
+        if (!f) return null;
+        const cs = getComputedStyle(f);
+        const q = getComputedStyle(document.getElementById('st-find-q'));
+        return { radius: cs.borderTopLeftRadius, bg: cs.backgroundColor,
+                 qRadius: q.borderTopLeftRadius, qBg: q.backgroundColor,
+                 info: getComputedStyle(document.getElementById('st-find-info')).color }; })()`),
+      v => !!v && v.radius === '0px' && v.qRadius === '0px' &&
+             v.qBg === 'rgb(255, 255, 255)' && v.info === 'rgb(0, 0, 0)',
+      '0px 方角 / 纯白底 / 黑字');
+    await shot('book-find-retro.png');
+    await ev(`document.body.classList.remove('retro-mode')`);
+    await sleep(180);
+    await shot('book-find.png');
+    await resetFind();
+
     // ============ K. 收尾 ============
     section('K. 收尾');
     check('世界书面板还在（没被标签控件带崩）',

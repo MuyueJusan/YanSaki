@@ -316,7 +316,13 @@ const ESCAPE_ALLOW = {
     //   · `entries.length` —— 数组长度，数字
     // 真正会进 DOM 的文字（条目 id 走 data 属性、按钮文案）要么是写死的，
     // 要么在 stEntryHtml 那边已经 escapeHtml 过（那个函数本来就在点名范围里）
-    stBookBatchBar:    ['dis', 'dis', 'dis', 'dis', 'dis', 'dis', 'entries.length', 'n']
+    stBookBatchBar:    ['dis', 'dis', 'dis', 'dis', 'dis', 'dis', 'entries.length', 'n'],
+    // 世界书的搜索筛选栏。唯一的裸值是 `entries.length`（数组长度，数字）。
+    // 其余全走 escapeHtml：搜索词 `f.q` 是**用户输入**（会回填进 value 属性，
+    // 不转义就能把 value 撑破、甚至注入属性），下拉选项文字里含 WI_POS_LABEL
+    // 那种表里的值，也一律转。
+    // ⚠ 点名加进来是故意的：哪天有人往这儿多拼一个裸变量，这道闸门立刻变红
+    stBookFindBar:     ['entries.length']
 };
 
 // 括号配平地抠出函数体（字符串 / 注释 / 模板串要跳过）
@@ -374,7 +380,7 @@ const found = {};
 //   只会得到一道「看着在守、其实没看过」的闸门。
 //   ⇒ 所以：**新加的构建函数一律点名加进来**（下面这个 stSbPrefabHtml 就是），
 //     老的等真去动它们的时候再逐条收。缺口在这儿写着，不藏。
-const RE_FN = /function (stCode[A-Za-z]*Html|stCodeHighlight|stSbPrefabHtml|stSbAiRowHtml|stTags|stTagHtml|stBookBatchBar)\s*\(/g;
+const RE_FN = /function (stCode[A-Za-z]*Html|stCodeHighlight|stSbPrefabHtml|stSbAiRowHtml|stTags|stTagHtml|stBookBatchBar|stBookFindBar)\s*\(/g;
 let fmm;
 while ((fmm = RE_FN.exec(codeNoBlob)) !== null) {
     const safe = blankSafe(bodyOf(codeNoBlob, fmm.index));
