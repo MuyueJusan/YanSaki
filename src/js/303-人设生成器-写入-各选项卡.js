@@ -93,6 +93,15 @@
             const cfg = stAiCfg();
             const ready = stAiReady(cfg);
             const custom = !stPersonaTplIsDefault();
+            // —— 模板库（第三十六轮）——
+            // ⚠ 这三样全部**从状态/存储算**，不从 DOM 读：`stRerender()` 会把整个 pane
+            //   重建，只活在 select / input 上的东西一切页就没了
+            const tplId = stPersonaTplId();
+            const tplIsBuiltin = stPersonaTplIsBuiltin();
+            // 内置模板被改过（自定义的「改过」没意义 —— 它本来就是用户的）
+            const tplDirty = tplIsBuiltin && custom;
+            const tplList = stPersonaTplList();
+            const tplName = stPersonaTplNameDraft();
             const labels = stPersonaLabels(tpl);
             const hit = out ? labels.filter(k => out.indexOf(k) >= 0).length : 0;
             // 折叠态**从状态渲染**，不是只活在 DOM 上 —— 否则 stRerender 一重建就弹回展开
@@ -104,7 +113,7 @@
             return stPaneHead('🎭 人设生成器',
                 '写一句设定或要求，AI 按下面这份<b>模板</b>逐项填好，生成一整份人设。' +
                 '还能从世界书里挑几条当<b>参考素材</b>（本卡的，或额外导入一本只喂生成、不进卡的）。' +
-                '模板可以换成你自己的（存在浏览器本地，<b>不写进卡</b>）；' +
+                '模板可以换成你自己的，还能存成好几份、每份起个名字（存在浏览器本地，<b>不写进卡</b>）；' +
                 '生成结果先给你过目、可以直接改，点<b>写入</b>才进角色描述（也可以存成世界书条目）。') +
                 '<div class="st-sub">你想要什么</div>' +
                 '<div class="st-field st-wide">' +
@@ -214,15 +223,60 @@
                         ' aria-controls="st-persona-tpl-body"' +
                         ' onclick="stPersonaTplToggle()">' +
                         '<span class="st-fold-ico">▲</span>' +
-                        '<span class="st-sub">模板' + (custom ? '（已自定义）' : '（默认）') + '</span>' +
+                        // ⚠ 第三十七轮起内置有四份，「（默认）」这种说法不够用了
+                        //   （四份里哪一份是「默认」？）—— 直接显示**名字**，
+                        //   内置那份被改过再加一个「· 已改」
+                        '<span class="st-sub">模板「' + escapeHtml(stPersonaTplName(tplId)) + '」' +
+                            (tplDirty ? ' · 已改' : '') + '</span>' +
                         '<span class="st-fold-hint">' + labels.length + ' 项 · 点这里展开改</span>' +
                     '</button>' +
                     '<div class="st-fold-body" id="st-persona-tpl-body">' +
                         '<div class="st-fold-inner">' +
+                            // —— 切换（第三十六轮）——
+                            // 内置一份 + 用户自己存的多份。`onchange` 立刻切、立刻落盘，
+                            // 不设「确定」按钮：下拉本身就是那个动作
+                            '<div class="st-field st-wide">' +
+                                '<label for="st-persona-tpl-pick">当前模板 ' +
+                                    '<span class="st-hint-inline">切过去，下面框里就是那一份</span></label>' +
+                                '<select id="st-persona-tpl-pick"' +
+                                    ' onchange="stPersonaTplPick(this.value)">' +
+                                    tplList.map(t =>
+                                        '<option value="' + escapeHtml(t.id) + '"' +
+                                            (t.id === tplId ? ' selected' : '') + '>' +
+                                            escapeHtml(t.name) + (t.builtin ? '（内置）' : '') +
+                                        '</option>').join('') +
+                                '</select>' +
+                            '</div>' +
+                            // 名字：既是「另存为」的新名字，也是「改名」的目标。
+                            // ⚠ 值**从状态算**（草稿空 ⇒ 当前模板的名字），否则重绘一次
+                            //   用户敲了一半的名字就没了
+                            '<div class="st-field st-wide">' +
+                                '<label for="st-persona-tpl-name">模板名字 ' +
+                                    '<span class="st-hint-inline">最多 ' + ST_PERSONA_TPL_NAME_MAX +
+                                    ' 字 · 「另存为新模板」用的就是它</span></label>' +
+                                '<input type="text" id="st-persona-tpl-name" maxlength="' +
+                                    ST_PERSONA_TPL_NAME_MAX + '" value="' + escapeHtml(tplName) + '"' +
+                                    ' oninput="stPersonaTplNameSet(this.value)">' +
+                            '</div>' +
+                            '<div class="st-actions">' +
+                                '<button class="st-mini" type="button" id="st-persona-tpl-save"' +
+                                    ' onclick="stPersonaTplSaveAs()">💾 另存为新模板</button>' +
+                                // 改名 / 删除只对**自定义**的显示：内置那份名字固定、删不掉，
+                                // 摆一个点了只会弹「不能这样」的按钮等于骗人
+                                (tplIsBuiltin
+                                    ? ''
+                                    : '<button class="st-mini st-plain" type="button"' +
+                                        ' id="st-persona-tpl-rename"' +
+                                        ' onclick="stPersonaTplRename()">✏ 改名</button>' +
+                                      '<button class="st-mini st-danger" type="button"' +
+                                        ' id="st-persona-tpl-drop"' +
+                                        ' onclick="stPersonaTplDrop()">🗑 删掉这份</button>') +
+                            '</div>' +
                             '<div class="st-field st-wide">' +
                                 '<label for="st-persona-tpl">模板内容 ' +
-                                    '<span class="st-hint-inline">' + labels.length +
-                                    ' 项 · 清空 = 回到默认模板</span></label>' +
+                                    '<span class="st-hint-inline">' + labels.length + ' 项' +
+                                    (tplIsBuiltin ? ' · 清空 = 恢复这份内置内容' : ' · 改动自动存进这份') +
+                                    '</span></label>' +
                                 '<textarea id="st-persona-tpl" rows="14"' +
                                     ' oninput="stPersonaTplSet(this.value)">' +
                                     escapeHtml(tpl) + '</textarea>' +
