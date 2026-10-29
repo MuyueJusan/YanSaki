@@ -3665,3 +3665,33 @@ HTML 那个解析器最阴 —— 它**不认识 JS 字符串**，只会一路�
 而覆盖式合并坏的是 **input** 那一半 ⇒ 拿故意改坏的副本一跑，D1 红、**D2 照样绿**。
 断言盯错了字段，等于永远为真（六之三十九）。改成「发送不是 0」之后两条都红。
 **「反向测试没红」有两种解读：产品没坏，或者断言写歪了 —— 先查后者。**
+
+### 六之九十五：**「先推再发」是语义，不是步骤** —— 写在文档里不管用，要让工具去问远端（第三十四轮）
+
+`android/tools/release.js` 建 release 时，`target_commitish` 取的是**远端 `apk` 分支尖端**。
+于是「先 `--go` 再 `git push`」的结果不是「顺序不太优雅」，而是：
+**tag 指向推之前那个提交**（那里 `versionName` 还是上一版）。包本身是对的，
+release 页面看着也正常，**没有任何一层会报** —— 只有事后
+`git show apk-v1.4:android/AndroidManifest.xml` 才看得出来。
+
+v1.4 就这么踩了：tag 落在 `863c476`（`versionName=1.3`），而包是 `1.4`。
+补救 = `PATCH /repos/{o}/{r}/git/refs/tags/<tag>` 带 `force:true` 把 tag 移过去。
+
+⚠⚠ **教训不是「下次记得先推」** —— 那句话早就写在 `android/README.md` 里了，
+照样踩。凡是「A 必须发生在 B 之前」的约束，**只要它只存在于文档里，就等于不存在**。
+⇒ 正确做法是把它变成**工具里的闸门**，而且判据要**问远端**：
+
+```js
+const target = (await api('/repos/'+REPO+'/git/ref/heads/'+BRANCH)).json.object.sha;
+const mf = await api('/repos/'+REPO+'/contents/android/AndroidManifest.xml?ref='+target);
+const remoteVer = /android:versionName="([^"]*)"/.exec(Buffer.from(mf.json.content,'base64').toString())[1];
+if (remoteVer !== localVer) die('先 git push origin apk 再发布');
+```
+
+⚠ 闸门要放在 **dry-run 也走的那条路上** —— dry-run 打印的 `target` 就是「真要发会指到哪」，
+它不检查的话，dry-run 全绿反而给了你一个错误的安心。
+⚠ 反向测：把 `target` 钉在旧 sha 上跑一次，必须**退出码 1** 并打出那句话。
+只测「正向能过」等于没测 —— 这条闸门存在的全部意义就是「不该过的时候拦住」。
+
+⚠ 同族：六之九十四（桩的高度）、六之四十六（`spawnSync` 一律 EBUSY）。
+共同的形状是**「一个必须成立的约束，没有任何一层在检查它」**。
