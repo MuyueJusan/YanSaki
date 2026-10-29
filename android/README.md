@@ -118,6 +118,15 @@ APK **不进仓库**（是生成物），挂在这个分支对应的 **Release**
 （`tools/apk_path.py`）。它们原来各自写死 `YanSakiShed-1.0.apk` ⇒ 一提版本
 四处一起过时，报「找不到 APK」/「前置不满足，中止」——**看着像构建没产出，其实只是那几行旧了**。
 ⚠ 从 `apk-v1.2` 起 **tag 与 `versionName` 对齐**（`apk-v1.2` ⇔ `1.2`）。
+
+⚠⚠ **发布前必须先把清单那条提交推上去** —— release 的 target 取的是**远端 `apk` 分支尖端**，
+不先推就会把 tag 指到**推之前**那个提交（那里 `versionName` 还是上一版）。
+v1.4 踩过：包是对的，但 `apk-v1.4` 指向了 `versionName=1.3` 的提交，
+**没有任何一层会报**，只有事后 `git show apk-v1.4:android/AndroidManifest.xml` 才看得出来
+（补救 = `PATCH /git/refs/tags/<tag>` 带 `force:true` 把 tag 移过去）。
+⇒ 现在 `release.js` 有一道**闸门**：把远端那个 sha 下的 `AndroidManifest.xml` 读回来，
+`versionName` 与本地不一致就**直接拒绝**（dry-run 也过这一关，因为它报的 target 就是要建 release 的地方）。
+反向测过：把 target 钉在 `863c476` 上跑，退出码 1 并打出「先 `git push origin apk` 再发布」。
 ⚠⚠ 但现行的 `apk-v1.0` 是 **2026-09-30「版本号回退到 1.0」** 的结果 ——
 `versionCode` 由 `2` 退回 `1`、`versionName` 由 `1.2` 退回 `1.0`，tag 与它对齐，
 **不是**同名的那个旧 `apk-v1.0` 的延续（见上面的同名 tag 对照）。

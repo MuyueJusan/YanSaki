@@ -161,6 +161,25 @@ function die(msg) { console.error('❌ ' + msg); process.exit(1); }
     const target = ref.json.object.sha;
     console.log('  远端 ' + BRANCH + ' = ' + target);
 
+    // ⚠⚠ 闸门：**远端那个提交里的 versionName 必须等于本地这一版**。
+    //   踩过（v1.4）：先 `release.js --go` 再 `git push`，于是 tag 指到**推之前**的
+    //   那个提交 —— 那里 versionName 还是 1.3。包本身是对的，但 tag 指错地方，
+    //   「这个 release 对应哪份源码」这件事就永久错了，而且**没有任何一层会报**。
+    //   ⇒ 判据只能问远端：把那个 sha 下的清单读回来比。
+    //   ⚠ 默认 dry-run 也要过这一关 —— 它报的 target 就是要建 release 的地方。
+    const mf = await api('/repos/' + REPO + '/contents/android/AndroidManifest.xml?ref=' + target);
+    if (mf.status !== 200) die('读远端 ' + target.slice(0, 7) + ' 的 AndroidManifest.xml 失败 HTTP ' + mf.status);
+    const remoteMf = Buffer.from(mf.json.content || '', 'base64').toString('utf8');
+    const mv = /android:versionName="([^"]*)"/.exec(remoteMf);
+    if (!mv) die('远端清单里读不出 versionName —— 拒绝在不知道 tag 会指到哪的情况下发布');
+    if (mv[1] !== ver) {
+        die('远端 ' + BRANCH + '（' + target.slice(0, 7) + '）里的 versionName 是 **' + mv[1] +
+            '**，而这一版是 **' + ver + '**。\n' +
+            '   ⇒ 说明清单那条提交**还没推上去**。先 `git push origin ' + BRANCH + '` 再发布，\n' +
+            '     否则 tag 会指到一个版本号还是旧的那个提交（v1.4 踩过这个坑）。');
+    }
+    console.log('  远端清单的 versionName = ' + mv[1] + '（与本地一致）');
+
     // ---- 3. tag 已存在就拒绝 ----
     const exists = await api('/repos/' + REPO + '/releases/tags/' + TAG);
     if (exists.status === 200) {
