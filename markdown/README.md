@@ -816,6 +816,10 @@ N="C:/Users/YanSaki/.workbuddy-ai/binaries/node/versions/22.22.2-3/node.exe"
 > ⚠ 这一轮整跑 8 m 18 s，比上一轮的 6 m 6 s 慢 —— **逐套数字跟上一轮对得上**
 > （除 `st-ai.js` +1），慢的是机器负载，不是产品。
 > ⚠⚠ **判据永远是这一条：假红必须靠「同一套单跑是绿的」证伪，别先怀疑产品。**
+> ✅ **已发布**：`node _verify/deploy-check.js --runs` 报线上 `index.html`
+> **1 801 573 字节 / sha1 `01a767a87475…`**，与本地产物**逐字节一致**；
+> `static.yml` 与 deployment 都是 `success`（判据按**内容**写，不按提交号 ——
+> 提交号会被下一次文档提交顶掉，字节不会）。
 > 上一轮（第二十九轮）就撞过两次：`sb-verify7.js` 报 4 条 `bodyW:0` 的负载红
 > （单跑 **102 passed / 0 failed**），`sb-verify3.js` 更是连汇总行都没打
 > （`💥 连不上 CDP`，**1.5 s** 就退，正常要 24~33 s）⇒ `run-all.js` 把它显示成 `—  [无]`。
