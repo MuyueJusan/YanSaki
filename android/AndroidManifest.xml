@@ -11,7 +11,7 @@
 
   ⚠ targetSdk 34：Play 商店的硬要求，且 34 会强制 `android:exported` 显式声明。
 
-  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.4` ⇔ versionName `1.4`。
+  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.5` ⇔ versionName `1.5`。
     versionCode 只要求**单调递增**，装新包时系统靠它判断是升级。
     ⚠ 2026-09-30「清空重来」：versionCode 由 2 退回 1、versionName 由 1.2 退回 1.0
       （用户指定「回归到 1.0」），并把旧的 v1.0 / v1.1 / v1.2 三个 release 与 tag 一并删除
@@ -29,6 +29,11 @@
       ⚠ 因此**不要**给 activity 加 `android:enableOnBackInvokedCallback="true"`：
       加了之后 Android 13+ 的返回手势会绕开 onBackPressed，禁用会**静默失效**。
 
+    ⚠ v1.5（2026-10-29）：**产品侧两轮改动打进来的第一版** —— 人设生成器的模板库
+      （切换 / 命名 / 另存 / 改名 / 删除）与内置模板扩成四份（默认 / 精简人设 /
+      fate人设 / 另一个模板，逐字照抄）。封装层（`android/`）**一行都没改**，
+      变的只有 `assets/index.html` 与内嵌页面的 sha1。
+
   ⚠⚠ **从这一版起改用真密钥签名**（`keystore/YanSaki-13.jks`，别名 `yansaki-13`，
     口令在同目录被 gitignore 的 `signing.env`）。
     签名身份 = App 的身份 ⇒ **证书 SHA-256 与历史上那些 debug 签名的包不同**
@@ -39,8 +44,8 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="top.yansaki.shed"
-    android:versionCode="3"
-    android:versionName="1.4">
+    android:versionCode="4"
+    android:versionName="1.5">
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
 
