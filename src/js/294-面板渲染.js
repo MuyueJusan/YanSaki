@@ -36,7 +36,11 @@
                     '<div class="st-code-body">' + body + '</div></div>';
             }
             if (role === 'assistant') {
-                let h = '<div class="st-code-msg st-a"><div class="st-code-role">🤖 Agent</div>';
+                let h = '<div class="st-code-msg st-a"><div class="st-code-role">🤖 Agent' +
+                    // 这一轮花了多少 —— 老会话里没有 usage 字段，那就什么也不显示
+                    ((m && m.usage) ? '<span class="st-code-usage">' +
+                        escapeHtml(stAiUsageText(m.usage, false)) + '</span>' : '') +
+                    '</div>';
                 if (body.trim()) h += '<div class="st-code-body">' + body + '</div>';
                 ((m && m.calls) || []).forEach(c => {
                     h += '<details class="st-code-tool"><summary>🔧 调用 <b>' + escapeHtml(String(c.name || '')) +

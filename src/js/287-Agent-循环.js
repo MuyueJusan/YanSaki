@@ -48,11 +48,14 @@
                     const plan = stCodeRequest(cfg, stCodeSysMsgs(s), {});
                     const data = await stCodeFetch(plan, cfg);
                     const rep = stCodeParseReply(plan.proto, data);
+                    // 这一轮的用量。**每轮各记一份**：Agent 一次任务可能发好几轮，
+                    // 只留最后一轮的话「这个任务花了多少」就永远看不出来
+                    const usg = stAiUsageSnapshot();
 
                     const calls = (rep.calls || []).filter(c => c && c.name);
                     if (!calls.length) {
                         if (rep.text.trim()) {
-                            s.msgs.push({ role: 'assistant', content: rep.text, ts: Date.now() });
+                            s.msgs.push({ role: 'assistant', content: rep.text, ts: Date.now(), usage: usg });
                         } else {
                             s.msgs.push({ role: 'note', content: '模型这一轮什么都没返回。', ts: Date.now() });
                         }
@@ -65,7 +68,7 @@
                     //   再把每条工具结果各记一条 tool —— 每个 tool_call_id 都得有对应的结果
                     // ⚠ Gemini 的原始 parts 要留着：`thoughtSignature` 必须原样回传
                     //   （Gemini 3 起对函数调用是强制的），重新拼一遍签名就丢了
-                    const am = { role: 'assistant', content: rep.text, calls: calls, ts: Date.now() };
+                    const am = { role: 'assistant', content: rep.text, calls: calls, ts: Date.now(), usage: usg };
                     if (plan.proto === 'gemini' && Array.isArray(rep.parts) && rep.parts.length) {
                         am.gemParts = rep.parts;
                     }

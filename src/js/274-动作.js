@@ -99,7 +99,7 @@
                     { role: 'user', content: 'ping' }
                 ], { cfg: cfg, stream: false, maxTokens: 32, temperature: 0, timeout: 30000 });
                 stAiSetStatus('✅ 连接成功（' + ((Date.now() - t0) / 1000).toFixed(1) + ' 秒）' +
-                    ' 模型回了：' + String(out || '').trim().slice(0, 60), 'st-ok');
+                    ' 模型回了：' + String(out || '').trim().slice(0, 60) + stAiUsageSuffix(), 'st-ok');
             } catch (e) {
                 stAiSetStatus('❌ 连接失败：' + stAiErrText(e), 'st-bad');
             } finally {
@@ -137,9 +137,10 @@
                 const list = arr.map(stAiEntryFromAi).filter(Boolean);
                 if (!list.length) throw new Error('解析出来的条目全是空的（没正文也没关键词）。');
                 stAiUi.exPreview = list;
-                if (list.length !== plan.count) {
-                    stAiUi.exMsg = '要了 ' + plan.count + ' 条，模型给了 ' + list.length + ' 条。';
-                }
+                // 用量挂在状态行上。条数对不上时跟那句话拼成一句，别两行
+                stAiUi.exMsg = stAiUsageWith(list.length !== plan.count
+                    ? '要了 ' + plan.count + ' 条，模型给了 ' + list.length + ' 条。'
+                    : '');
             } catch (e) {
                 stAiUi.exErr = stAiErrText(e);
             } finally {

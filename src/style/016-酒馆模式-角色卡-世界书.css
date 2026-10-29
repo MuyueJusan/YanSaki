@@ -536,6 +536,9 @@
 
         /* 聊天界面（浅蓝色背景 + 圆润气泡） */
         .ai-chat {
+            /* 历史会话面板拿它当 containing block（`inset: 0` 铺满聊天框）。
+               见 029 —— 挂在头部按钮上的浮层算不出视口坐标，窄屏必然出界 */
+            position: relative;
             display: flex;
             width: 100%;
             margin-top: clamp(0.6rem, 2vh, 1rem);

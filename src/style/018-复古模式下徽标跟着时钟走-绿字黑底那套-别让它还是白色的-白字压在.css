@@ -357,6 +357,13 @@
             border-radius: 0;
         }
 
+        /* 用量标签：95 那套的灰底上，浅蓝会糊成一片（六之八十五：
+           新增可见元素必须补 retro 覆盖，否则它在复古模式里靠运气） */
+        body.retro-mode .ai-usage {
+            color: #404040;
+            font-family: 'Courier New', monospace;
+        }
+
         body.retro-mode .ai-input-row input {
             background: #fff;
             color: #000;
