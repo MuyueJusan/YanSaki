@@ -59,6 +59,8 @@ APK **不进仓库**（是生成物），挂在这个分支对应的 **Release**
 
 | tag | commit | 附件 | 说明 |
 |---|---|---|---|
+| [`apk-v1.5`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.5) | `cd0e56a` | `YanSakiShed-1.5.apk` 2 586 679 字节<br />sha1 `02980fcbfa4a2251ad01d92ee66085df7dea481c` | **产品侧两轮改动打进来的第一版**：人设生成器的模板库（切换 / 命名 / 另存 / 改名 / 删除）+ 内置模板扩成四份（默认 / 精简人设 / fate人设 / 另一个模板，逐字照抄）。封装层 `android/` **一行未改**，变的只有内嵌页面（sha1 `7dddd8c9…`）。versionCode 3 → 4，签名身份不变 ⇒ 装过 1.3 / 1.4 的**可直接覆盖安装** |
+| [`apk-v1.4`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.4) | `e40fa35` | `YanSakiShed-1.4.apk`<br />sha1 见该 release | **禁用返回键**（从任何一页按返回都不再退出 App）。⚠ 发布时踩过「tag 指向了 versionName=1.3 的提交」，`release.js` 因此加了一道闸门 |
 | [`apk-v1.3`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.3) | `84a2ef2` | `YanSakiShed-1.3.apk` 2 549 815 字节<br />sha1 `97961d97c8614a55bb7d90a395fd754fffa987e7` | **换图标**（YanSaki 画的 chibi，整幅满幅）+ 字体内嵌 + 可直连 Vertex AI，**真密钥签名**（证书 SHA-256 `797f33fa…`）。装过 `apk-v1.0` 的**可直接覆盖安装** |
 | [`apk-v1.0`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.0) | `0582e8d` | `YanSakiShed-1.0.apk` 2 709 559 字节<br />sha1 `a868438f2265c5b27766918576296be9df325e6b` | ⚠ **已被 1.3 取代** —— 留着只为「谁下载过哪一份」有据可查。旧图标（GitHub 头像） |
 
