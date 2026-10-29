@@ -1,0 +1,219 @@
+        /* ==========================================================================
+           历史会话面板（【ai对话】头部那个 🕘）
+             ⚠ 不做「挂在按钮上的绝对定位浮层」—— CSS 算不出「按钮在视口里的 x」，
+               在会折行的容器里（窄屏 / 放大模式）必然出界，调 max-width 治不了。
+               这里把 containing block 换成 `.ai-chat`（`position: relative` 见 016），
+               面板 `inset: 0` 铺满聊天框：宽屏 / 窄屏 / 放大模式全都自动对，零坐标计算。
+             ⚠ 显隐用 class，不用 `hidden` 属性 —— 同权重的 `display: flex` 会把
+               `hidden` 完全盖掉（`el.hidden = true` 不报错、也没有任何效果）。
+           ========================================================================== */
+        .ai-hist-panel { display: none; }
+
+        .ai-hist-panel.ai-hist-on {
+            display: flex;
+            flex-direction: column;
+            position: absolute;
+            inset: 0;
+            z-index: 6;
+            padding: 10px;
+            gap: 8px;
+            background: #eaf4ff;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(20, 60, 120, 0.25);
+        }
+
+        .ai-hist-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #1a3a5c;
+            font-size: 0.9rem;
+            flex: 0 0 auto;
+        }
+
+        .ai-hist-title { font-weight: bold; }
+        .ai-hist-count { color: #5a7a9a; font-size: 0.75rem; }
+
+        .ai-hist-x {
+            margin-left: auto;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: #3a6a9a;
+            font-size: 0.95rem;
+            line-height: 1;
+            padding: 2px 6px;
+            border-radius: 6px;
+        }
+
+        .ai-hist-x:hover { background: rgba(58, 123, 213, 0.15); }
+
+        .ai-hist-list {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-right: 2px;
+        }
+
+        .ai-hist-empty { color: #5a7a9a; font-size: 0.8rem; padding: 12px 4px; }
+
+        .ai-hist-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: #ffffff;
+            border: 1px solid #cfe3f7;
+            border-radius: 10px;
+            cursor: pointer;
+            flex: 0 0 auto;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .ai-hist-row:hover { background: #f2f9ff; border-color: #9cc6ee; }
+
+        /* 当前这一段：描边加粗一圈，一眼看出「你在这里」 */
+        .ai-hist-row.ai-hist-cur {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 1px #3a7bd5 inset;
+        }
+
+        .ai-hist-main { flex: 1 1 auto; min-width: 0; }
+
+        .ai-hist-name {
+            color: #1a2b3c;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ai-hist-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: #5a7a9a;
+            font-size: 0.72rem;
+            margin-top: 2px;
+        }
+
+        .ai-hist-persona {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 60%;
+        }
+
+        .ai-hist-tools { display: flex; gap: 4px; flex: 0 0 auto; }
+
+        .ai-hist-btn {
+            background: rgba(58, 123, 213, 0.1);
+            border: 1px solid rgba(58, 123, 213, 0.3);
+            color: #2a5a8a;
+            width: 24px;
+            height: 24px;
+            line-height: 1;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ai-hist-btn:hover { background: #3a7bd5; color: #fff; border-color: #3a7bd5; }
+        .ai-hist-btn.ai-hist-del:hover { background: #d9534f; border-color: #d9534f; }
+
+        .ai-hist-foot {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            border-top: 1px solid #cfe3f7;
+            padding-top: 8px;
+            flex: 0 0 auto;
+        }
+
+        /* 面板是浅底的，.ai-btn 那套「白字压玻璃」在这儿看不清 —— 换成蓝字浅底 */
+        .ai-hist-foot .ai-btn {
+            flex: 1 1 auto;
+            background: rgba(58, 123, 213, 0.12);
+            border: 1px solid rgba(58, 123, 213, 0.3);
+            color: #2a5a8a;
+            padding: 6px 8px;
+            font-size: 0.78rem;
+            white-space: nowrap;
+        }
+
+        .ai-hist-foot .ai-btn:hover { background: #3a7bd5; color: #fff; }
+
+        /* 头部那个 🕘：打开时亮一下，跟放大键同一套反馈 */
+        #ai-hist-btn.active {
+            background: rgba(255, 255, 255, 0.55);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+        }
+
+        /* ===== 复古模式：Win98 那套「凸起 / 凹陷」方框 ===== */
+        body.retro-mode .ai-hist-panel.ai-hist-on {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+            box-shadow: 2px 2px 0 #000000;
+        }
+
+        body.retro-mode .ai-hist-head,
+        body.retro-mode .ai-hist-count,
+        body.retro-mode .ai-hist-name,
+        body.retro-mode .ai-hist-meta,
+        body.retro-mode .ai-hist-empty,
+        body.retro-mode .ai-hist-x { color: #000000; }
+
+        body.retro-mode .ai-hist-x:hover { background: #000080; color: #ffffff; }
+
+        body.retro-mode .ai-hist-row {
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #808080 #ffffff #ffffff #808080;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-hist-row:hover { background: #d4d0c8; }
+
+        body.retro-mode .ai-hist-row.ai-hist-cur {
+            background: #000080;
+            border-color: #808080 #ffffff #ffffff #808080;
+            box-shadow: none;
+        }
+
+        body.retro-mode .ai-hist-row.ai-hist-cur .ai-hist-name,
+        body.retro-mode .ai-hist-row.ai-hist-cur .ai-hist-meta { color: #ffffff; }
+
+        body.retro-mode .ai-hist-btn {
+            background: #c0c0c0;
+            color: #000000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+
+        body.retro-mode .ai-hist-btn:hover { background: #000080; color: #ffffff; }
+
+        body.retro-mode .ai-hist-foot { border-top: 2px solid #808080; }
+
+        body.retro-mode .ai-hist-foot .ai-btn {
+            background: #c0c0c0;
+            color: #000000;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            border-radius: 0;
+        }
+
+        body.retro-mode .ai-hist-foot .ai-btn:hover { background: #000080; color: #ffffff; }
+
+        body.retro-mode #ai-hist-btn.active { background: #000080; box-shadow: none; }
+

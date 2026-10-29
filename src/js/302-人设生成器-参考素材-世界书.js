@@ -308,10 +308,12 @@
                 return;
             }
             stEditor.personaBusy = false;
+            // 这一轮花了多少。空内容那条也算 —— 请求确实发出去了
+            const usageTip = stAiUsageSuffix();
             const out = stPersonaText(text).slice(0, ST_PERSONA_OUT_MAX);
             if (!out) {
                 stRerender();
-                stExportMsg('❌ 模型返回了空内容。换个说法再试一次。', 'bad', 'persona');
+                stExportMsg('❌ 模型返回了空内容。换个说法再试一次。' + usageTip, 'bad', 'persona');
                 return;
             }
             stEditor.personaOut = out;
@@ -341,7 +343,7 @@
                 (labels.length ? '；模板 ' + labels.length + ' 项里对上了 ' + hit + ' 项' : '') +
                 (miss ? '（' + miss + ' 项没出现 —— 模型可能改写了标题，先看一眼再写入）' : '') +
                 (loreLost ? '（另有 ' + loreLost + ' 条参考素材没进去：' + loreWhy + '）' : '') +
-                '。', (miss || loreLost) ? 'warn' : 'ok', 'persona');
+                usageTip + '。', (miss || loreLost) ? 'warn' : 'ok', 'persona');
         }
 
         // mode：'replace' 写入角色描述 / 'append' 追加到角色描述 / 'book' 追加成一条世界书条目

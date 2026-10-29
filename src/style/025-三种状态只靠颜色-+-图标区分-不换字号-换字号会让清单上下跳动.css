@@ -281,6 +281,13 @@
         body.retro-mode .st-code-tool > summary { background: #c0c0c0; color: #000000; }
         body.retro-mode .st-code-tool pre { background: #ffffff; color: #000000; }
 
+        /* token 用量：白底灰字，跟 95 那套的其余元素同一个口径（六之八十五） */
+        body.retro-mode .st-code-usage {
+            background: #c0c0c0;
+            color: #000000;
+            border-radius: 0;
+        }
+
         body.retro-mode .st-code-url input {
             background: #ffffff;
             color: #000000;

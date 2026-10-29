@@ -636,7 +636,12 @@ const MOCK_SRC = `
     await ev(`stAiExpandRun()`, true);
     check('扩写：没报错', await ev(`stAiUi.exErr`), '');
     check('扩写：解析出 3 条', await ev(`stAiUi.exPreview.length`), 3);
-    check('扩写：没触发「条数不符」提示', await ev(`stAiUi.exMsg`), '');
+    // ⚠ 判据只守「没出现『要了…条』那句」这件事，**不能写成 `=== ''`** ——
+    //   第三十四轮起状态行还要显示 token 用量，空串这个前提已经失效了。
+    //   写 `=== ''` 的结果是：产品对、套件红（六之四十八：过时断言是永真断言的镜像）
+    const exMsgText = await ev(`stAiUi.exMsg`);
+    check('扩写：没触发「条数不符」提示', exMsgText.indexOf('要了') < 0, true);
+    check('扩写：状态行带上了 token 用量', /发送 .*应答 .* tokens/.test(exMsgText), true);
     const prev = await ev(`stAiUi.exPreview`);
     check('扩写：常驻标记保留', prev[0].constant, true);
     check('扩写：位置保留', prev[1].position, 4);

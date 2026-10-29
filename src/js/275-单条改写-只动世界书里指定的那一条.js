@@ -297,6 +297,9 @@
                 const one = stAiEntryFromAi(obj);
                 if (!one) throw new Error('解析出来的条目是空的（没正文也没关键词）。');
                 stAiUi.enPreview = { id: id, entry: one };
+                // 这一条改写的用量，认领到这一条上（enMsgId 不对的话它会串到别的条目面板里）
+                stAiUi.enMsg = stAiUsageWith('');
+                stAiUi.enMsgId = id;
             } catch (err) {
                 stAiUi.enErr = stAiErrText(err);
                 stAiUi.enErrId = id;
@@ -399,9 +402,10 @@
                 }).map(s => s.trim()).filter(Boolean);
                 if (!list.length) throw new Error('解析出来的开场白都是空的。');
                 stAiUi.grPreview = list;
-                if (list.length !== plan.count) {
-                    stAiUi.grMsg = '要了 ' + plan.count + ' 段，模型给了 ' + list.length + ' 段。';
-                }
+                // 用量挂在状态行上（段数对不上时跟那句话拼成一句）
+                stAiUi.grMsg = stAiUsageWith(list.length !== plan.count
+                    ? '要了 ' + plan.count + ' 段，模型给了 ' + list.length + ' 段。'
+                    : '');
             } catch (e) {
                 stAiUi.grErr = stAiErrText(e);
             } finally {

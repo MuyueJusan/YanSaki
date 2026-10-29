@@ -243,6 +243,16 @@
             color: #29465b;
         }
 
+        /* 每轮 API 调用的 token 用量（发送 / 应答分开）。跟在 🤖 Agent 角色行后面 ——
+           它属于「这一轮」而不是「这一条消息」，所以不放到正文下面 */
+        .st-code-usage {
+            padding: 1px 6px;
+            border-radius: 6px;
+            background: rgba(120, 160, 190, 0.14);
+            color: #4a6a82;
+            font-variant-numeric: tabular-nums;
+        }
+
         .st-code-body { white-space: pre-wrap; word-break: break-word; }
 
         .st-code-body code {

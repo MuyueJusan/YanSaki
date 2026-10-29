@@ -1,3 +1,4 @@
+    </style>
 </head>
 <body>
 
@@ -87,6 +88,9 @@
         <div class="ai-header">
             <span class="ai-title">🤖 AI 对话</span>
             <div class="ai-header-actions">
+                <button class="cal-btn toggle-btn" id="ai-hist-btn" type="button" onclick="toggleAiHistory()" title="历史会话（切回去时人设也会一起切回来）">
+                    <span>🕘</span>
+                </button>
                 <button class="cal-btn toggle-btn" id="ai-new-btn" type="button" onclick="newAiConversation()" title="新对话">
                     <span>✚</span>
                 </button>
@@ -346,6 +350,21 @@
 
                 <!-- 聊天界面 -->
                 <div class="ai-chat" id="ai-chat">
+                    <!-- 历史会话面板：铺满整个聊天框（containing block = .ai-chat），
+                         不用挂在头部按钮上的浮层 —— 那种在窄屏 / 放大模式下必然出界 -->
+                    <div class="ai-hist-panel" id="ai-hist-panel">
+                        <div class="ai-hist-head">
+                            <span class="ai-hist-title">🕘 历史会话</span>
+                            <span class="ai-hist-count" id="ai-hist-count"></span>
+                            <button class="ai-hist-x" type="button" onclick="toggleAiHistory(false)" title="关闭">✕</button>
+                        </div>
+                        <div class="ai-hist-list" id="ai-hist-list"></div>
+                        <div class="ai-hist-foot">
+                            <button class="ai-btn" type="button" onclick="aiExportSession('', 'md')">⬇ 导出当前</button>
+                            <button class="ai-btn" type="button" onclick="aiExportSession('', 'json')">⬇ 导出 JSON</button>
+                            <button class="ai-btn" type="button" onclick="aiExportAll()">⬇ 导出全部</button>
+                        </div>
+                    </div>
                     <div class="ai-messages" id="ai-messages"></div>
                     <div class="ai-input-row">
                         <input id="ai-input" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter')sendAiMessage()">

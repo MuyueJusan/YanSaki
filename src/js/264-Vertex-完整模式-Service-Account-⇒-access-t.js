@@ -232,6 +232,11 @@
                 temperature: temperature
             };
             if (maxTokens > 0) body.max_tokens = maxTokens;
+            // ⚠ 流式时 OpenAI 系**默认不返回用量**，要显式点名才在最后一个 chunk 里带
+            //   `usage`。不加这一条，流式下永远只能给估算值。
+            //   ⚠ 但少数自建反代会因为「不认识这个字段」直接 400 —— 所以发送那一层
+            //   有一份「400 就退回不带它再试一次」的兜底（见 stAiPostChat）
+            if (stream) body.stream_options = { include_usage: true };
             return { proto: ep.proto, url: ep.url, headers: ep.headers, body: body };
         }
 
@@ -287,6 +292,154 @@
             if (!ch) return '';
             if (ch.message && typeof ch.message.content === 'string') return ch.message.content;
             return '';
+        }
+
+        // ===== 用量（tokens）=====
+        // 三种协议把「发了多少 / 回了多少」放在完全不同的地方，收在一处 ——
+        // 每个板块各取一份的话，加一种协议就要改 N 处（六之五十一）。
+        //
+        // ⚠ 为什么要有 stAiUsageMerge：**Anthropic 的流式把用量拆成两条事件** ——
+        //   `message_start` 只带 input_tokens，`message_delta` 只带 output_tokens。
+        //   让后一条**覆盖**前一条的话 input 就变成 0 了（看着像「什么都没发」）。
+        //   逐字段取 max 对三家都对：gemini / openai 每个 chunk 带的是**累计值**，
+        //   后面只会更大；anthropic 的两个字段各在各的事件里，另一个是 0。
+        let stAiUsageLast = null;
+
+        function stAiUsageOf(proto, data) {
+            if (!data || typeof data !== 'object') return null;
+            if (proto === 'gemini') {
+                const m = data.usageMetadata;
+                if (!m) return null;
+                const i = Number(m.promptTokenCount) || 0;
+                const o = Number(m.candidatesTokenCount) || 0;
+                if (!i && !o) return null;
+                return { in: i, out: o, total: Number(m.totalTokenCount) || (i + o) };
+            }
+            if (proto === 'anthropic') {
+                const u = data.usage || (data.message && data.message.usage) || null;
+                if (!u) return null;
+                const i = Number(u.input_tokens) || 0;
+                const o = Number(u.output_tokens) || 0;
+                if (!i && !o) return null;
+                return { in: i, out: o, total: i + o };
+            }
+            const u = data.usage;
+            if (!u) return null;
+            const i = Number(u.prompt_tokens) || 0;
+            const o = Number(u.completion_tokens) || 0;
+            if (!i && !o) return null;
+            return { in: i, out: o, total: Number(u.total_tokens) || (i + o) };
+        }
+
+        function stAiUsageMerge(a, b) {
+            if (!b) return a || null;
+            if (!a) return { in: b.in, out: b.out, total: b.total, estimated: !!b.estimated };
+            return {
+                in: Math.max(a.in, b.in),
+                out: Math.max(a.out, b.out),
+                total: Math.max(a.total, b.total),
+                estimated: !!(a.estimated || b.estimated)
+            };
+        }
+
+        function stAiUsageReset() { stAiUsageLast = null; }
+
+        function stAiUsageNote(proto, data) {
+            const u = stAiUsageOf(proto, data);
+            if (u) stAiUsageLast = stAiUsageMerge(stAiUsageLast, u);
+            return u;
+        }
+
+        function stAiUsage() { return stAiUsageLast; }
+
+        // 一份可以安全塞进会话 / 消息 / dataset 的副本。
+        // ⚠ 别把 stAiUsage() 的返回值直接存起来：它跟「当前这一轮」是同一个对象，
+        //   下一轮一合并，历史里那条的用量会跟着一起变（而且 JSON 里会带多余字段）
+        function stAiUsageSnapshot(u) {
+            const x = u || stAiUsageLast;
+            if (!x) return null;
+            return {
+                in: Number(x.in) || 0,
+                out: Number(x.out) || 0,
+                total: Number(x.total) || 0,
+                estimated: !!x.estimated
+            };
+        }
+
+        function stAiMsgsText(messages) {
+            return (Array.isArray(messages) ? messages : [])
+                .map(m => (m && typeof m.content === 'string') ? m.content : '')
+                .join('\n');
+        }
+
+        // 服务商没给用量时的兜底：按字数估。
+        // ⚠ **必须标出来是估算**（界面上加 `≈`）—— 不标的话「1 234」和「≈1 234」
+        //   长得一样，用户会把它当成账单（六之二十七：回落必须说出来）
+        function stAiUsageEstimate(promptText, replyText) {
+            const i = estimateTokens(promptText);
+            const o = estimateTokens(replyText);
+            return { in: i, out: o, total: i + o, estimated: true };
+        }
+
+        // 真的一家都没给用量时才兜底估算。三个调用方（stAiChat / streamChat /
+        // nonStreamChat）共用这一份 —— 各写一遍就会出现「有一处忘了标 estimated」
+        function stAiUsageEnsureEstimate(promptText, replyText) {
+            if (!stAiUsageLast) stAiUsageLast = stAiUsageEstimate(promptText, replyText);
+            return stAiUsageLast;
+        }
+
+        function stAiNumText(n) {
+            const v = Math.max(0, Math.round(Number(n) || 0));
+            return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        }
+
+        // 「发送 / 应答」分开写。**全站只有这一处决定长什么样** ——
+        // 各板块各写一份的话，早晚出现「这里写 tok、那里写 tokens」
+        function stAiUsageText(u, short) {
+            if (!u) return '';
+            const eq = u.estimated ? '≈' : '';
+            if (short) return '↑' + eq + stAiNumText(u.in) + ' · ↓' + eq + stAiNumText(u.out);
+            return '发送 ' + eq + stAiNumText(u.in) + ' / 应答 ' + eq + stAiNumText(u.out) + ' tokens';
+        }
+
+        // 拼在状态行后面用。没有用量就返回空串，调用方不用自己判
+        function stAiUsageSuffix(u) {
+            const t = stAiUsageText(u || stAiUsageLast, false);
+            return t ? (' · ' + t) : '';
+        }
+
+        // 「一句提示 + 用量」。msg 为空时不留开头那个分隔符 ——
+        // 不然状态行会变成「 · 发送 1 234 / 应答 567 tokens」（开头一个孤零零的点）
+        function stAiUsageWith(msg) {
+            const t = stAiUsageText(stAiUsageLast, false);
+            const m = String(msg == null ? '' : msg);
+            if (!m) return t;
+            return t ? (m + ' · ' + t) : m;
+        }
+
+        // 发一次对话请求。**只有这里发** ——
+        // ⚠ 原先 stAiChat 和【ai对话】的 streamChat 各写了一份 fetch，而
+        //   「400 就退回不带 stream_options」这个兜底只能加在一处，否则踩过的那条
+        //   修了、另一条没修（六之五十一：一份逻辑 N 份实现 ⇒ 逐份点名）。
+        async function stAiPostChat(plan, opts) {
+            const o = opts || {};
+            const send = p => fetch(p.url, {
+                method: 'POST',
+                headers: p.headers,
+                body: JSON.stringify(p.body),
+                ...(o.signal ? { signal: o.signal } : {})
+            });
+            let resp = await send(plan);
+            if (resp.status === 400 && plan.body && plan.body.stream_options) {
+                // 这个服务商不认识 stream_options ⇒ 丢掉它重发一次。
+                // 代价是一次多余的往返，换来的是「不为了要一个用量把聊天搞挂」
+                try { await resp.text(); } catch (e) {}
+                const body2 = Object.assign({}, plan.body);
+                delete body2.stream_options;
+                plan.usageDropped = true;
+                resp = await send(Object.assign({}, plan, { body: body2 }));
+            }
+            return resp;
         }
 
         // 模型列表的形状：OpenAI 系给 {data:[{id}]}，Anthropic 给 {data:[{id,display_name}]}，
@@ -394,6 +547,8 @@
                 temperature: o.temperature,
                 maxTokens: o.maxTokens
             });
+            // 每次调用从零开始记 —— 不重置的话「这一轮没拿到用量」会显示成上一轮的数字
+            stAiUsageReset();
             // ⚠ 换 token 要在**起计时器之前**：完整模式第一次要签 JWT + 一次网络往返，
             //   算进请求超时里会让「慢」看起来像「服务商不响应」
             try {
@@ -409,12 +564,7 @@
 
             let resp;
             try {
-                resp = await fetch(plan.url, {
-                    method: 'POST',
-                    headers: plan.headers,
-                    body: JSON.stringify(plan.body),
-                    ...(ctl ? { signal: ctl.signal } : {})
-                });
+                resp = await stAiPostChat(plan, { signal: ctl ? ctl.signal : null });
             } catch (e) {
                 if (timer) clearTimeout(timer);
                 throw new Error(stAiErrText(e));
@@ -427,18 +577,24 @@
             }
 
             try {
+                let full;
                 if (plan.body.stream && resp.body && typeof resp.body.getReader === 'function') {
-                    return await stAiStream(resp, plan.proto, o.onDelta);
+                    // 用量由 stAiStream 在每个 chunk 上累进来
+                    full = await stAiStream(resp, plan.proto, o.onDelta);
+                } else {
+                    const data = await resp.json();
+                    stAiUsageNote(plan.proto, data);
+                    full = stAiFullText(plan.proto, data);
+                    // ⚠ 正文为空时**追问原因**再返回 —— 空串是合法返回值，所以「被拦了」
+                    //   和「真的空回复」在调用方看来一模一样（见 stAiWhyEmpty）
+                    if (!full) {
+                        const why = stAiWhyEmpty(plan.proto, data);
+                        if (why) throw new Error(why);
+                    }
+                    if (o.onDelta) o.onDelta(full);
                 }
-                const data = await resp.json();
-                const full = stAiFullText(plan.proto, data);
-                // ⚠ 正文为空时**追问原因**再返回 —— 空串是合法返回值，所以「被拦了」
-                //   和「真的空回复」在调用方看来一模一样（见 stAiWhyEmpty）
-                if (!full) {
-                    const why = stAiWhyEmpty(plan.proto, data);
-                    if (why) throw new Error(why);
-                }
-                if (o.onDelta) o.onDelta(full);
+                // 一家都没给 ⇒ 按字数估，打上 estimated 标记（界面上会显示 `≈`）
+                stAiUsageEnsureEstimate(stAiMsgsText(messages), full);
                 return full;
             } finally {
                 if (timer) clearTimeout(timer);
@@ -466,6 +622,10 @@
                     let json = null;
                     try { json = JSON.parse(payload); } catch (e) { continue; }
                     last = json;
+                    // 用量跟着每个 chunk 累。gemini / openai 带的是**累计值**，
+                    // anthropic 拆成 message_start / message_delta 两条 ⇒ 逐字段取 max
+                    // （见 stAiUsageMerge，别改成「后一条覆盖前一条」）
+                    stAiUsageNote(proto, json);
                     const d = stAiSseText(proto, json);
                     if (d) { full += d; if (onDelta) onDelta(full); }
                 }

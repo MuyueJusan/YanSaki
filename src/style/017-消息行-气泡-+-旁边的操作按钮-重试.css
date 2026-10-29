@@ -4,6 +4,10 @@
             align-items: flex-end;
             gap: 6px;
             width: 100%;
+            /* ⚠ 必须允许折行：用量标签靠 flex-basis:100% 独占第二行。
+               没有 wrap 的话它会被挤成气泡右边的**第三列**（而且气泡
+               max-width 78% + 按钮 24px 本来放得下，看起来像「没生效」）*/
+            flex-wrap: wrap;
         }
 
         .ai-msg.from-user { flex-direction: row-reverse; }
@@ -54,6 +58,24 @@
             color: #a3242b;
             border: 1px solid #f0b6ba;
         }
+
+        /* 每次调用的 token 用量（发送 / 应答分开）。挂在气泡**下面**单独一行 ——
+           flex-basis:100% + .ai-msg 的 flex-wrap 一起把它顶到第二行。
+           ⚠ 不写在气泡里面：气泡的内容是 textContent 整体替换的（流式每帧都在换），
+             往里塞子节点会被下一帧抹掉 */
+        .ai-msg > .ai-usage {
+            flex-basis: 100%;
+            order: 9;
+            padding: 0 6px 2px;
+            font-size: 0.68rem;
+            line-height: 1.3;
+            color: #5a7a9a;
+            letter-spacing: 0.02em;
+            font-variant-numeric: tabular-nums;
+            user-select: none;
+        }
+
+        .ai-msg.from-user > .ai-usage { text-align: right; }
 
         .ai-input-row {
             display: flex;

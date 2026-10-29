@@ -431,11 +431,10 @@
                     stream: false, maxTokens: 64, temperature: 0
                 });
                 await stAiPlanAuth(plan, cfg);
-                const resp = await fetch(plan.url, {
-                    method: 'POST',
-                    headers: plan.headers,
-                    body: JSON.stringify(plan.body)
-                });
+                // ⚠ 走 stAiPostChat（不是直接 fetch）—— 264 里写着「只有这里发」，
+                //   这里再写一份的话，以后加协议 / 加兜底就会漏掉这一条
+                stAiUsageReset();
+                const resp = await stAiPostChat(plan);
                 if (!resp.ok) {
                     let t = '';
                     try { t = (await resp.text()).slice(0, 200); } catch (e) {}
@@ -444,9 +443,11 @@
                     return;
                 }
                 const data = await resp.json();
+                stAiUsageNote(plan.proto, data);
                 const text = stAiFullText(plan.proto, data);
+                // 按钮上写着「会消耗几个 token」，那就把到底几个说清楚
                 apigStatus('✅ 通了（' + plan.proto + '）。模型回了 ' + text.length +
-                    ' 个字符：' + JSON.stringify(text.slice(0, 40)), 'ok');
+                    ' 个字符：' + JSON.stringify(text.slice(0, 40)) + stAiUsageSuffix(), 'ok');
             } catch (e) {
                 // 发不出去最常见的三个原因，和编写器那边共用同一段文案
                 apigStatus('❌ ' + stAiErrText(e), 'warn');

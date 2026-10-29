@@ -219,10 +219,14 @@
                 return;
             }
             stEditor.sbPfAiBusy = false;
+            // 这一轮花了多少。**下面几条分支都要带上** —— 存满 / 太大这两条
+            // 也是「请求已经发出去、钱已经花了」，只挂在成功那条上的话
+            // 用户看到的是「白花了但没数字」
+            const usageTip = stAiUsageSuffix();
             const list = stSbUserPrefabs();
             if (list.length >= ST_SB_PF_MAX) {
                 stRerender();
-                stExportMsg('⚠ 预制块已经存满 ' + ST_SB_PF_MAX + ' 个，先删掉几个再生成。', 'warn');
+                stExportMsg('⚠ 预制块已经存满 ' + ST_SB_PF_MAX + ' 个，先删掉几个再生成。' + usageTip, 'warn');
                 return;
             }
             let bytes = 0;
@@ -230,7 +234,7 @@
             if (bytes > ST_SB_PF_ITEM_BYTES) {
                 stRerender();
                 stExportMsg('⚠ 生成的东西太大了（' + Math.round(bytes / 1024) + ' KB），' +
-                    '超过单个预制块的上限。换个说法再试一次。', 'warn');
+                    '超过单个预制块的上限。换个说法再试一次。' + usageTip, 'warn');
                 return;
             }
             const name = stSbAiUniqueName(list, got.name);
@@ -265,7 +269,7 @@
                 : '';
             stExportMsg('✅ AI 生成了预制块「' + name + '」（' + total + ' 块' + bind + '）。' +
                 '点左边那一条就能加进画布。' +
-                (name !== got.name ? '名字跟已有的重了，加了编号。' : ''), 'ok');
+                (name !== got.name ? '名字跟已有的重了，加了编号。' : '') + usageTip, 'ok');
         }
 
         // 状态栏页里那一行：描述 + 生成按钮。

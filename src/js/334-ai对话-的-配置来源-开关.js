@@ -94,9 +94,11 @@
             // 折叠模型设置（保留在对话上方作为子展开），聊天保持展开
             document.getElementById('ai-card').classList.add('ai-settings-collapsed');
             updateAiStatus('');
-            if (!chatHistory.length) {
-                appendAiGreeting();
-            }
+            // ⚠⚠ 这里**不能**写「chatHistory 空就补一句开场白」。
+            //   会话恢复之后 chatHistory 是空的、但开场白气泡**已经在屏幕上**了，
+            //   那样判会再补一条 —— 用户点一次「应用」就看到两句开场白（第三十三轮踩过）。
+            //   判据收归 refreshGreetingIfFresh()：它还会看有没有用户气泡 / 失败气泡
+            refreshGreetingIfFresh();
         }
 
         async function fetchModels() {
@@ -150,6 +152,29 @@
             if (!wrap || !wrap.classList.contains('ai-msg')) return;
             wrap.dataset.historyRole = role;
             wrap.dataset.historyContent = content;
+        }
+
+        // 在气泡**下面**挂一行 token 用量。格式由 stAiUsageText 统一决定 ——
+        // 这里只负责「放哪儿」，不负责「长什么样」
+        function setBubbleUsage(bubbleEl, u) {
+            const wrap = bubbleEl && bubbleEl.parentElement;
+            if (!wrap || !wrap.classList.contains('ai-msg')) return;
+            // 一个数字都没有就不显示 —— 空标签比没有标签更让人困惑
+            if (!u || (!u.in && !u.out)) return;
+            let el = wrap.querySelector('.ai-usage');
+            if (!el) {
+                el = document.createElement('div');
+                el.className = 'ai-usage';
+                wrap.appendChild(el);
+            }
+            el.textContent = stAiUsageText(u, false);
+            // 估算值必须能解释清楚，不然那个 ≈ 就是个谜（六之二十七）
+            el.title = u.estimated
+                ? '服务商这次没返回用量，数字是按字数估算的（前面的 ≈ 就是这个意思）'
+                : '这次请求的 token 用量：发送（提示词）/ 应答（回复）';
+            // ⚠ 存结构化的一份，切会话时靠它还原。
+            //   只存 textContent 的话，以后改了格式，旧会话里显示的还是旧格式
+            wrap.dataset.usage = JSON.stringify(stAiUsageSnapshot(u));
         }
 
         function appendAiBubble(role, text, opts) {
@@ -227,21 +252,31 @@
 
         function newAiConversation() {
             if (aiBusy) return;
-            const container = document.getElementById('ai-messages');
-            const hasAny = !!container.querySelector('.ai-msg');
-            if (hasAny && !window.confirm('开始新对话？当前聊天记录会被清空。')) return;
             // 卡片折叠着的时候点「新对话」，清空是看不见的 —— 先展开再清
             const card = document.getElementById('ai-card');
-            if (card.classList.contains('ai-collapsed')) {
+            if (card && card.classList.contains('ai-collapsed')) {
                 card.classList.remove('ai-collapsed');
                 card.classList.remove('ai-settings-collapsed');
                 expandAiAdvanced();
             }
+            // ⚠ 原来这里要 confirm「当前聊天记录会被清空」。现在不会丢了 ——
+            //   上一段连人设一起留在历史会话里（见 333b），所以不再拦
+            aiSessSaveCurrent();
+            // 当前这段本来就是空的（只有开场白）⇒ 复用，不新建。
+            // 否则连点几下「新对话」会攒出一串一模一样的空会话
+            let s = aiSessCurrent();
+            if (!s || aiSessHasHistory(s)) {
+                s = aiSessCreate();
+                aiSessStore.active = s.id;
+            }
             chatHistory = [];
             wiResetTimed();      // 新对话 = 新的聊天上下文，黏性 / 冷却从零开始
-            container.innerHTML = '';
+            const container = document.getElementById('ai-messages');
+            if (container) container.innerHTML = '';
             appendAiGreeting();
-            updateAiStatus('');
+            aiSessSaveCurrent(); // 把开场白也记进去，不然切回来是一段空白
+            aiSessRenderList();
+            updateAiStatus('🆕 已开始新对话（上一段留在历史会话里）');
             const input = document.getElementById('ai-input');
             if (input) input.focus();
             scrollAiMessagesToBottom();
@@ -261,7 +296,7 @@
             chatHistory = keep
                 .filter(n => n.dataset.historyRole)
                 .map(n => ({ role: n.dataset.historyRole, content: n.dataset.historyContent || '' }));
-            if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
+            if (chatHistory.length > AI_CHAT_HIST_MAX) chatHistory = chatHistory.slice(-AI_CHAT_HIST_MAX);
 
             drop.forEach(n => n.remove());
             requestAssistantReply();
@@ -304,14 +339,15 @@
         async function nonStreamChat(messages) {
             const cfg = aiEffectiveCfg();
             const plan = stAiRequest(cfg, messages, { stream: false, maxTokens: cfg.maxTokens });
+            // 每轮从零记用量 —— 不重置的话「这轮没拿到」会显示成上一轮的数字
+            stAiUsageReset();
             await stAiPlanAuth(plan, cfg);
-            const resp = await fetch(plan.url, {
-                method: 'POST',
-                headers: plan.headers,
-                body: JSON.stringify(plan.body)
-            });
+            // ⚠ 走共用的 stAiPostChat（不是直接 fetch）：它带着
+            //   「400 就退回不带 stream_options 再试一次」的兜底
+            const resp = await stAiPostChat(plan);
             if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (await safeErrorText(resp)));
             const data = await resp.json();
+            stAiUsageNote(plan.proto, data);
             const full = stAiFullText(plan.proto, data);
             // ⚠ 空正文要问原因（同 stAiChat）—— 本页以前是**静默返回空串**，
             //   用户看到「AI 没说话」，而真实原因多半是被安全策略拦了
@@ -319,32 +355,34 @@
                 const why = stAiWhyEmpty(plan.proto, data);
                 if (why) throw new Error(why);
             }
+            stAiUsageEnsureEstimate(stAiMsgsText(messages), full);
             return full;
         }
 
         async function streamChat(messages, onDelta) {
             const cfg = aiEffectiveCfg();
             const plan = stAiRequest(cfg, messages, { stream: true, maxTokens: cfg.maxTokens });
+            stAiUsageReset();
             await stAiPlanAuth(plan, cfg);
-            const resp = await fetch(plan.url, {
-                method: 'POST',
-                headers: plan.headers,
-                body: JSON.stringify(plan.body)
-            });
+            const resp = await stAiPostChat(plan);
             if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (await safeErrorText(resp)));
             // 服务端可能不理会 stream（返一整段 JSON）。那时没有 body 流可读，
             // 退回按非流式解析，别在这里抛「Cannot read property getReader」
             if (!resp.body || typeof resp.body.getReader !== 'function') {
                 const data = await resp.json();
+                stAiUsageNote(plan.proto, data);
                 const full = stAiFullText(plan.proto, data);
                 if (!full) {
                     const why = stAiWhyEmpty(plan.proto, data);
                     if (why) throw new Error(why);
                 }
                 if (onDelta) onDelta(full);
+                stAiUsageEnsureEstimate(stAiMsgsText(messages), full);
                 return full;
             }
-            return await stAiStream(resp, plan.proto, onDelta);
+            const full = await stAiStream(resp, plan.proto, onDelta);
+            stAiUsageEnsureEstimate(stAiMsgsText(messages), full);
+            return full;
         }
 
         async function sendAiMessage() {
@@ -359,7 +397,7 @@
             setBubbleHistory(userBubble, 'user', historyText);
             chatHistory.push({ role: 'user', content: historyText });
             wiBumpClock();       // 世界书定时效果的「消息时钟」跟着往前走
-            if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
+            if (chatHistory.length > AI_CHAT_HIST_MAX) chatHistory = chatHistory.slice(-AI_CHAT_HIST_MAX);
 
             await requestAssistantReply();
         }
@@ -389,6 +427,8 @@
                 aiBubble.classList.remove('failed');
                 aiBubble.textContent = full || '(空回复)';
                 setBubbleHistory(aiBubble, 'assistant', full);
+                // 用量在 streamChat / nonStreamChat 返回时就已落到 stAiUsageLast
+                setBubbleUsage(aiBubble, stAiUsage());
                 chatHistory.push({ role: 'assistant', content: full });
                 wiBumpClock();
             } catch (e) {
@@ -399,6 +439,8 @@
             } finally {
                 setAiBusy(false);
                 scrollAiBottom();
+                // 每轮说完存一次 —— 刷新之后还能接上（失败那条不进 msgs，见 aiSessCollectBubbles）
+                aiSessSaveCurrent();
             }
         }
 
@@ -408,6 +450,9 @@
         updateClock();
         renderCalendar();
         initAiArea();
+        // ⚠ 必须排在 initAiArea() 之后：会话恢复要拿「已经回填好的」控件，
+        //   而且它自己会再跑一遍 render* 收口（见 333b 的 aiSessApplyPersona）
+        aiSessionInit();
         stInit();
         setInterval(updateClock, 1000);
 

@@ -176,6 +176,8 @@
             // ⚠ Vertex 完整模式要**现换 access token**，这个补头必须走和 AI 助手同一条
             //   （stAiPlanAuth）—— 漏掉它只会拿到 401，看着像 Key 写错了
             if (plan && plan.needsToken) await stAiPlanAuth(plan, cfg || stAiCfg());
+            // Agent 一轮一次请求 ⇒ 每轮从零记。不重置的话「这一轮没拿到」会显示上一轮的数字
+            stAiUsageReset();
             const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
             if (ctl) stCode.abort = ctl;
             let resp;
@@ -196,7 +198,10 @@
                 try { t = (await resp.text()).slice(0, 300); } catch (e) {}
                 throw new Error('HTTP ' + resp.status + (t ? ' ' + t : ''));
             }
-            return await resp.json();
+            const data = await resp.json();
+            // Agent 循环不用流式（要 tool_calls 的完整 JSON），所以用量一定在顶层
+            stAiUsageNote(plan.proto, data);
+            return data;
         }
 
         function stCodeStop() {
