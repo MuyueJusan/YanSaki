@@ -275,7 +275,8 @@
             }
             const tpl = String(stPersonaTpl() || '').trim();
             if (!tpl) {
-                stExportMsg('⚠ 模板是空的 —— 点「恢复默认模板」，或者自己写一份（每行以冒号结尾）。', 'warn', 'persona');
+                stExportMsg('⚠ 模板「' + stPersonaTplName() + '」是空的 —— 写点内容' +
+                    '（每行以冒号结尾），或者切回一份内置模板。', 'warn', 'persona');
                 return;
             }
             const cfg = stAiCfg();

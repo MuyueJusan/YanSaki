@@ -79,9 +79,20 @@
             personaReq: '',      // 用户写的设定 / 要求
             personaOut: '',      // 生成结果（可编辑，要用户点「写入」才进卡）
             personaBusy: false,
-            // 自定义模板。**null = 还没从 localStorage 读过**（懒加载，见 stPersonaTpl()）——
-            // 初始化成 '' 的话那个「读过没有」的判断就永远成立，自定义模板永远读不出来
+            // 模板正文的工作副本。**null = 还没从存储读过**（懒加载，见 stPersonaTpl()）——
+            // 初始化成 '' 的话那个「读过没有」的判断就永远成立，模板永远读不出来。
+            // ⚠ 第三十六轮起它只是**当前选中那份**的副本：模板本体在 stPersonaTpls /
+            //   stPersonaTplDefault 里（见 301）
             personaTpl: null,
+            // 自定义模板库。**null = 还没从存储读过**，形状 `[{id,name,body}]`。
+            // 内置那份**不在这里** —— 它是常量 + 一个「改过的」覆盖键（stPersonaTplDefOv）
+            personaTpls: null,
+            // 内置模板的**改动** `{ id: body }`。**null = 还没从存储读过**（懒加载，见
+            // stPersonaTplOv()）。⚠ 第三十七轮起内置有四份，所以是一张表而不是一个值
+            personaTplOv: null,
+            // 「模板名字」输入框的草稿。**会话级、不落盘** —— 只在「另存为 / 改名」
+            // 那一刻被读；空着 = 跟着当前模板的名字走
+            personaTplName: '',
             // 「模板」那个折叠块展开没有。**默认收起**，而且**故意不落盘** ——
             // 落盘的话「默认折叠」只在第一次成立：用户展开过一次之后，以后每次打开编辑器
             // 都是摊开的，面板又变回原来那个长条。跟 personaReq / personaOut 一样，

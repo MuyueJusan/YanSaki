@@ -3,7 +3,7 @@
 > **自动生成，别手改。** 每次 `node build.js` 都会重写这一份。
 > 想改标题 → 改 `src/manifest.json` 里对应那条的 `title`；想加模块 → 在 manifest 里按顺序插一条。
 
-共 **160** 个模块 / **34585** 行，拼成 `saki.html`（1759.3 KB）。
+共 **161** 个模块 / **35275** 行，拼成 `saki.html`（1794.5 KB）。
 
 ## 怎么改
 
@@ -95,7 +95,7 @@
 | 75 | `js/252-预设-切换-增删-排序.js` | 137 | —— 预设：切换 / 增删 / 排序 —— | `onPresetSelect` `onPresetNameInput` `presetSaveCopy` `presetDelete` `presetAddSlot` `onPresetSlotToggle` `onPresetSlotMove` …+2 |
 | 76 | `js/253-预设-导入.js` | 96 | —— 预设：导入 —— | `onPresetFilePicked` `renderTavernPreview` |
 | 77 | `js/254-酒馆模式-导入-编辑.js` | 231 | 酒馆模式：导入 / 编辑 | `onCardFilePicked` `onLoreFilePicked` `enterTavernMode` `onTavernToggle` `refreshGreetingIfFresh` `onTavernGreetingChange` `TAVERN_BOOL_KEYS` …+9 |
-| 78 | `js/255-角色卡编写器-UI.js` | 261 | 角色卡编写器：UI | `ST_TABS` `stEditor` `stInit` `stLoadDraft` `stSaveDraft` `stSaveDraftInner` `toggleStArea` |
+| 78 | `js/255-角色卡编写器-UI.js` | 272 | 角色卡编写器：UI | `ST_TABS` `stEditor` `stInit` `stLoadDraft` `stSaveDraft` `stSaveDraftInner` `toggleStArea` |
 | 79 | `js/256-页面上的那张小卡片.js` | 58 | 页面上的那张小卡片 | `stRenderNavName` `renderStCard` |
 | 80 | `js/257-全屏浮层.js` | 156 | 全屏浮层 | `stIsOpen` `openStEditor` `closeStEditor` `stSyncTabsCollapsed` `stToggleTabs` `stSwitchTab` `stTabBadge` …+3 |
 | 81 | `js/258-通用小控件.js` | 137 | 通用小控件 | `stInput` `stTags` `stArea` `stSelect` `stNum` `stCheck` `stCheckIn` …+2 |
@@ -141,40 +141,41 @@
 | 121 | `js/298-编写器-首页-home-选项卡.js` | 80 | 编写器 · 首页（home）选项卡 | `stHomeTime` `ST_HOME_BODY_FIELDS` `ST_HOME_MODULES` `stHomeModule` `stHomeFold` `stPaneHome` |
 | 122 | `js/299-模块-①-头像-没头像就整块不渲染.js` | 39 | —— 模块 ①：头像。没头像就整块不渲染 —— | `stHomeBodyAvatar` `stHomeBodyOverview` |
 | 123 | `js/300-模块-③-快捷动作-跟顶栏那几个按钮是同一批动作-只是收在一处.js` | 292 | —— 模块 ③：快捷动作。跟顶栏那几个按钮是同一批动作，只是收在一处 —— | `stHomeBodyActions` `stHomeBodyExtract` `stExtractAccept` `stExtractToggle` `stExtractSetAll` `stExtractImport` `stExtractClear` …+4 |
-| 124 | `js/301-编写器-人设生成器.js` | 186 | 编写器 · 人设生成器 | `ST_PERSONA_TPL_KEY` `ST_PERSONA_REQ_MAX` `ST_PERSONA_TPL_MAX` `ST_PERSONA_OUT_MAX` `ST_PERSONA_LORE_MAX` `ST_PERSONA_TPL_DEFAULT` `stPersonaTpl` …+11 |
-| 125 | `js/302-人设生成器-参考素材-世界书.js` | 394 | 人设生成器 · 参考素材（世界书） | `stPersonaPickKey` `stPersonaLoreSources` `stPersonaPickHas` `stPersonaLoreResolve` `stPersonaLoreBlock` `stPersonaPickToggle` `stPersonaPickHintText` …+16 |
-| 126 | `js/303-人设生成器-写入-各选项卡.js` | 393 | 人设生成器 · 写入 / 各选项卡 | `stPersonaBookWrite` `stPersonaBookAnswer` `stPersonaCopy` `stPanePersona` `stPaneSys` `stPaneMeta` |
-| 127 | `js/304-世界书.js` | 182 | 世界书 | `stPaneBook` `stEntryHtml` `entriesLen` `stCollapseEntries` |
-| 128 | `js/305-开场白.js` | 59 | 开场白 | `stPaneGreet` |
-| 129 | `js/306-正则.js` | 86 | 正则 | `stPaneRegex` `stRegexHtml` |
-| 130 | `js/307-酒馆助手脚本.js` | 225 | 酒馆助手脚本 | `stThCountScripts` `stThDomId` `stThContainer` `stThOwnerPath` `stPaneTh` `stThNodeHtml` `stThScriptHtml` …+3 |
-| 131 | `js/308-MVU-变量框架.js` | 402 | MVU 变量框架 | `ST_MVU_PRESETS` `stMvuPresetNode` `stMvuDomId` `stMvuAddNode` `stMvuQuickAdd` `stMvuSelect` `stMvuToggleOpen` …+11 |
-| 132 | `js/309-MVU-状态栏-外观-编辑器.js` | 86 | MVU 状态栏（外观）编辑器 | `stSbDragId` `stSbDropAt` `stSbParseBackup` `stSbBlockById` `stSbDomId` `stSbIsBox` `stSbHasBlock` …+3 |
-| 133 | `js/310-块操作.js` | 191 | 块操作 | `stSbAddBlock` `stSbSelect` `stSbStageFocus` `stSbDblClick` `stSbToggleOpen` `stSbDelBlock` `stSbMoveBlock` …+5 |
-| 134 | `js/311-主题-版式.js` | 26 | 主题 / 版式 | `stSbSetTheme` `stSbApplyTemplate` |
-| 135 | `js/312-接管-写回.js` | 221 | 接管 / 写回 | `stSbTakeOver` `stSbOverwrite` `stSbParseFromCard` `stSbRestoreParsed` `stSbWriteBack` |
-| 136 | `js/313-画布.js` | 133 | 画布 | `stSbFreeOn` `stSbFreeSet` `stSbCanvasBlockHtml` `stSbCanvasEl` `stSbCanvasHtml` `stSbPaintCanvas` |
-| 137 | `js/314-自由摆放-指针拖动.js` | 140 | 自由摆放：指针拖动 | `stSbPtr` `stSbSnapTo` `stSbMeasureEl` `stSbCanvasHitOf` `stSbPtrDown` `stSbPtrMove` `stSbPtrPaint` …+4 |
-| 138 | `js/315-调整大小-八向把手.js` | 154 | 调整大小：八向把手 | `stSbRsz` `stSbResizeDown` `stSbResizeMove` `stSbResizePaint` `stSbResizeUp` `stSbResizeCommit` `stSbSizeReset` …+1 |
-| 139 | `js/316-自由摆放-键盘微调.js` | 89 | 自由摆放：键盘微调 | `ST_SB_NUDGE` `stSbNudgeKey` `stSbSizeStep` `stSbNudge` `stSbOffReset` `stSbOffResetAll` |
-| 140 | `js/317-真机预览.js` | 94 | 真机预览 | `stSbFrameHtml` `stSbPreviewTimer` `stSbSchedulePreview` `stSbPaintPreview` `stSbRuntimeCache` `stSbPaintRuntimeNote` `stSbRuntimeReportHtml` …+1 |
-| 141 | `js/318-拖放.js` | 138 | 拖放 | `stSbClearDropHints` `stSbDragStart` `stSbDragEnd` `stSbDragOver` `stSbDragLeave` `stSbDragOverEnd` `stSbDrop` …+3 |
-| 142 | `js/319-状态栏编辑器-面板渲染.js` | 377 | 状态栏编辑器 · 面板渲染 | `stPaneSb` `stSbShellExtraField` `stSbShellOff` `stSbShellField` `stSbShellToggle` `stSbClearShellExtra` `stSbStatusHtml` …+7 |
-| 143 | `js/320-状态栏编辑器-检查器-预览-清颜色.js` | 351 | 状态栏编辑器 · 检查器 / 预览 / 清颜色 | `stSbClearColor` `stSbDropExtra` `stSbChildRows` `stSbInspectorHtml` `stSbPreviewHtml` |
-| 144 | `js/321-导出.js` | 72 | 导出 | `stPaneExport` |
-| 145 | `js/322-路径读写.js` | 75 | 路径读写 | `stResolve` `ST_TEXT_LIST` `ST_TEXT_LIST_JOIN` `stSplitList` `stListText` `stSetListText` |
-| 146 | `js/323-关键词标签的手感-控件本体在-stTags-里.js` | 455 | 关键词标签的手感（控件本体在 stTags() 里） | `stTagHtml` `stTagsPaint` `stTagsFocus` `stTagsCommit` `stTagsPaste` `stTagsDel` `stTagsKey` …+18 |
-| 147 | `js/324-结构操作-条目-开场白-正则.js` | 47 | 结构操作：条目 / 开场白 / 正则 | `stAddEntry` `stDelEntry` `stMoveEntry` `stDupEntry` |
-| 148 | `js/325-世界书搜索与筛选.js` | 126 | 世界书搜索与筛选 | `ST_BOOK_FIND_DEF` `stBookFind` `stBookFindActive` `stBookFindMatch` `stBookFindIdx` `stBookFindSet` `stBookFindReset` …+2 |
-| 149 | `js/326-世界书多选管理.js` | 387 | 世界书多选管理 | `stBookSelIds` `stBookSelIdx` `stBookSelPut` `stBookSelClear` `stBookSelToggle` `stBookSelAll` `stBookSelInvert` …+17 |
-| 150 | `js/327-结构操作-酒馆助手脚本.js` | 152 | 结构操作：酒馆助手脚本 | `stThRevealNode` `stThAddScript` `stThAddFolder` `stThDelNode` `stThMoveNode` `stThDupNode` `stThAddButton` …+6 |
-| 151 | `js/328-新建-导入-载入当前卡.js` | 171 | 新建 / 导入 / 载入当前卡 | `stNewCard` `stImportPick` `stExtractPick` `stOnImportPicked` `stLoadFromTavern` |
-| 152 | `js/329-头像.js` | 45 | 头像 | `stReadDataUrl` `stPickAvatar` `stOnAvatarPicked` `stClearAvatar` |
-| 153 | `js/330-导出-消息-文本-JSON-PNG.js` | 95 | 导出 · 消息 / 文本 / JSON / PNG | `stExportMsg` `stPaintMsg` `stExportNote` `stExportJson` `stExportPng` |
-| 154 | `js/331-AI-聊天窗口放大.js` | 59 | AI 聊天窗口放大 | `aiMaxPrevState` `scrollAiMessagesToBottom` `toggleAiMaximize` `isAiMaximized` |
-| 155 | `js/332-手机比例下的入口菜单.js` | 59 | 手机比例下的入口菜单 | `MOBILE_NAV_MQ` `mobileNavIsPhone` `setMobileNav` `toggleMobileNav` `closeMobileNav` `mobileOpenAi` `mobileOpenSt` |
-| 156 | `js/333-API-全局配置弹窗.js` | 458 | 🔌 API 全局配置弹窗 | `apigBaseDraft` `apigProjectDraft` `apigLocationDraft` `apigSaDraft` `openApiGlobalModal` `closeApiGlobalModal` `apigLoadToUI` …+13 |
-| 157 | `js/333b-ai-聊天-历史会话-导出与切换.js` | 593 | 【ai对话】历史会话：保存 / 切换 / 导出（333b = 插在 333 与 334 之间） | `AI_SESS_KEY` `AI_SESS_MAX` `AI_SESS_MAX_MSGS` `AI_SESS_UNTITLED` `AI_CHAT_HIST_MAX` `AI_PERSONA_FIELDS` `aiSessStore` …+31 |
-| 158 | `js/334-ai对话-的-配置来源-开关.js` | 458 | 【ai对话】的「配置来源」开关 | `setAiCfgSource` `syncAiCfgSourceUI` `refreshStAiCfgViews` `saveAiSettings` `applyAiSettings` `fetchModels` `setBubbleHistory` …+13 |
-| 159 | `js/335-内嵌小游戏-ST_SHOOTER_SRC-自动生成-别手改.js` | 2361 | 内嵌小游戏 ST_SHOOTER_SRC（自动生成 · 别手改） | `ST_SHOOTER_SRC` `canvas` `ctx` `container` `SHIP_PRESETS` `selectedShipIdx` `gameState` …+63 |
-| 160 | `900-HTML-尾-script-闭标签-body-html.html` | 3 | HTML 尾 · script 闭标签 / body / html |  |
+| 124 | `js/300b-编写器-人设生成器-内置模板.js` | 298 | 编写器 · 人设生成器的内置模板（四份，逐字） | `ST_PERSONA_TPL_DEFAULT` `ST_PERSONA_TPL_SLIM` `ST_PERSONA_TPL_FATE` `ST_PERSONA_TPL_MD` `ST_PERSONA_TPL_BUILTIN` `ST_PERSONA_TPL_BUILTIN_NAME` `ST_PERSONA_TPLS_BUILTIN` |
+| 125 | `js/301-编写器-人设生成器.js` | 512 | 编写器 · 人设生成器 | `ST_PERSONA_TPL_KEY` `ST_PERSONA_TPL_DEF_KEY` `ST_PERSONA_TPL_DEF_OV_KEY` `ST_PERSONA_TPLS_KEY` `ST_PERSONA_TPL_ID_KEY` `ST_PERSONA_TPL_NAME_MAX` `ST_PERSONA_TPL_LIB_MAX` …+40 |
+| 126 | `js/302-人设生成器-参考素材-世界书.js` | 395 | 人设生成器 · 参考素材（世界书） | `stPersonaPickKey` `stPersonaLoreSources` `stPersonaPickHas` `stPersonaLoreResolve` `stPersonaLoreBlock` `stPersonaPickToggle` `stPersonaPickHintText` …+16 |
+| 127 | `js/303-人设生成器-写入-各选项卡.js` | 447 | 人设生成器 · 写入 / 各选项卡 | `stPersonaBookWrite` `stPersonaBookAnswer` `stPersonaCopy` `stPanePersona` `stPaneSys` `stPaneMeta` |
+| 128 | `js/304-世界书.js` | 182 | 世界书 | `stPaneBook` `stEntryHtml` `entriesLen` `stCollapseEntries` |
+| 129 | `js/305-开场白.js` | 59 | 开场白 | `stPaneGreet` |
+| 130 | `js/306-正则.js` | 86 | 正则 | `stPaneRegex` `stRegexHtml` |
+| 131 | `js/307-酒馆助手脚本.js` | 225 | 酒馆助手脚本 | `stThCountScripts` `stThDomId` `stThContainer` `stThOwnerPath` `stPaneTh` `stThNodeHtml` `stThScriptHtml` …+3 |
+| 132 | `js/308-MVU-变量框架.js` | 402 | MVU 变量框架 | `ST_MVU_PRESETS` `stMvuPresetNode` `stMvuDomId` `stMvuAddNode` `stMvuQuickAdd` `stMvuSelect` `stMvuToggleOpen` …+11 |
+| 133 | `js/309-MVU-状态栏-外观-编辑器.js` | 86 | MVU 状态栏（外观）编辑器 | `stSbDragId` `stSbDropAt` `stSbParseBackup` `stSbBlockById` `stSbDomId` `stSbIsBox` `stSbHasBlock` …+3 |
+| 134 | `js/310-块操作.js` | 191 | 块操作 | `stSbAddBlock` `stSbSelect` `stSbStageFocus` `stSbDblClick` `stSbToggleOpen` `stSbDelBlock` `stSbMoveBlock` …+5 |
+| 135 | `js/311-主题-版式.js` | 26 | 主题 / 版式 | `stSbSetTheme` `stSbApplyTemplate` |
+| 136 | `js/312-接管-写回.js` | 221 | 接管 / 写回 | `stSbTakeOver` `stSbOverwrite` `stSbParseFromCard` `stSbRestoreParsed` `stSbWriteBack` |
+| 137 | `js/313-画布.js` | 133 | 画布 | `stSbFreeOn` `stSbFreeSet` `stSbCanvasBlockHtml` `stSbCanvasEl` `stSbCanvasHtml` `stSbPaintCanvas` |
+| 138 | `js/314-自由摆放-指针拖动.js` | 140 | 自由摆放：指针拖动 | `stSbPtr` `stSbSnapTo` `stSbMeasureEl` `stSbCanvasHitOf` `stSbPtrDown` `stSbPtrMove` `stSbPtrPaint` …+4 |
+| 139 | `js/315-调整大小-八向把手.js` | 154 | 调整大小：八向把手 | `stSbRsz` `stSbResizeDown` `stSbResizeMove` `stSbResizePaint` `stSbResizeUp` `stSbResizeCommit` `stSbSizeReset` …+1 |
+| 140 | `js/316-自由摆放-键盘微调.js` | 89 | 自由摆放：键盘微调 | `ST_SB_NUDGE` `stSbNudgeKey` `stSbSizeStep` `stSbNudge` `stSbOffReset` `stSbOffResetAll` |
+| 141 | `js/317-真机预览.js` | 94 | 真机预览 | `stSbFrameHtml` `stSbPreviewTimer` `stSbSchedulePreview` `stSbPaintPreview` `stSbRuntimeCache` `stSbPaintRuntimeNote` `stSbRuntimeReportHtml` …+1 |
+| 142 | `js/318-拖放.js` | 138 | 拖放 | `stSbClearDropHints` `stSbDragStart` `stSbDragEnd` `stSbDragOver` `stSbDragLeave` `stSbDragOverEnd` `stSbDrop` …+3 |
+| 143 | `js/319-状态栏编辑器-面板渲染.js` | 377 | 状态栏编辑器 · 面板渲染 | `stPaneSb` `stSbShellExtraField` `stSbShellOff` `stSbShellField` `stSbShellToggle` `stSbClearShellExtra` `stSbStatusHtml` …+7 |
+| 144 | `js/320-状态栏编辑器-检查器-预览-清颜色.js` | 351 | 状态栏编辑器 · 检查器 / 预览 / 清颜色 | `stSbClearColor` `stSbDropExtra` `stSbChildRows` `stSbInspectorHtml` `stSbPreviewHtml` |
+| 145 | `js/321-导出.js` | 72 | 导出 | `stPaneExport` |
+| 146 | `js/322-路径读写.js` | 75 | 路径读写 | `stResolve` `ST_TEXT_LIST` `ST_TEXT_LIST_JOIN` `stSplitList` `stListText` `stSetListText` |
+| 147 | `js/323-关键词标签的手感-控件本体在-stTags-里.js` | 455 | 关键词标签的手感（控件本体在 stTags() 里） | `stTagHtml` `stTagsPaint` `stTagsFocus` `stTagsCommit` `stTagsPaste` `stTagsDel` `stTagsKey` …+18 |
+| 148 | `js/324-结构操作-条目-开场白-正则.js` | 47 | 结构操作：条目 / 开场白 / 正则 | `stAddEntry` `stDelEntry` `stMoveEntry` `stDupEntry` |
+| 149 | `js/325-世界书搜索与筛选.js` | 126 | 世界书搜索与筛选 | `ST_BOOK_FIND_DEF` `stBookFind` `stBookFindActive` `stBookFindMatch` `stBookFindIdx` `stBookFindSet` `stBookFindReset` …+2 |
+| 150 | `js/326-世界书多选管理.js` | 387 | 世界书多选管理 | `stBookSelIds` `stBookSelIdx` `stBookSelPut` `stBookSelClear` `stBookSelToggle` `stBookSelAll` `stBookSelInvert` …+17 |
+| 151 | `js/327-结构操作-酒馆助手脚本.js` | 152 | 结构操作：酒馆助手脚本 | `stThRevealNode` `stThAddScript` `stThAddFolder` `stThDelNode` `stThMoveNode` `stThDupNode` `stThAddButton` …+6 |
+| 152 | `js/328-新建-导入-载入当前卡.js` | 171 | 新建 / 导入 / 载入当前卡 | `stNewCard` `stImportPick` `stExtractPick` `stOnImportPicked` `stLoadFromTavern` |
+| 153 | `js/329-头像.js` | 45 | 头像 | `stReadDataUrl` `stPickAvatar` `stOnAvatarPicked` `stClearAvatar` |
+| 154 | `js/330-导出-消息-文本-JSON-PNG.js` | 95 | 导出 · 消息 / 文本 / JSON / PNG | `stExportMsg` `stPaintMsg` `stExportNote` `stExportJson` `stExportPng` |
+| 155 | `js/331-AI-聊天窗口放大.js` | 59 | AI 聊天窗口放大 | `aiMaxPrevState` `scrollAiMessagesToBottom` `toggleAiMaximize` `isAiMaximized` |
+| 156 | `js/332-手机比例下的入口菜单.js` | 59 | 手机比例下的入口菜单 | `MOBILE_NAV_MQ` `mobileNavIsPhone` `setMobileNav` `toggleMobileNav` `closeMobileNav` `mobileOpenAi` `mobileOpenSt` |
+| 157 | `js/333-API-全局配置弹窗.js` | 458 | 🔌 API 全局配置弹窗 | `apigBaseDraft` `apigProjectDraft` `apigLocationDraft` `apigSaDraft` `openApiGlobalModal` `closeApiGlobalModal` `apigLoadToUI` …+13 |
+| 158 | `js/333b-ai-聊天-历史会话-导出与切换.js` | 593 | 【ai对话】历史会话：保存 / 切换 / 导出（333b = 插在 333 与 334 之间） | `AI_SESS_KEY` `AI_SESS_MAX` `AI_SESS_MAX_MSGS` `AI_SESS_UNTITLED` `AI_CHAT_HIST_MAX` `AI_PERSONA_FIELDS` `aiSessStore` …+31 |
+| 159 | `js/334-ai对话-的-配置来源-开关.js` | 458 | 【ai对话】的「配置来源」开关 | `setAiCfgSource` `syncAiCfgSourceUI` `refreshStAiCfgViews` `saveAiSettings` `applyAiSettings` `fetchModels` `setBubbleHistory` …+13 |
+| 160 | `js/335-内嵌小游戏-ST_SHOOTER_SRC-自动生成-别手改.js` | 2361 | 内嵌小游戏 ST_SHOOTER_SRC（自动生成 · 别手改） | `ST_SHOOTER_SRC` `canvas` `ctx` `container` `SHIP_PRESETS` `selectedShipIdx` `gameState` …+63 |
+| 161 | `900-HTML-尾-script-闭标签-body-html.html` | 3 | HTML 尾 · script 闭标签 / body / html |  |

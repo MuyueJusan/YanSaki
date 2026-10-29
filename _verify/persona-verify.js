@@ -13,12 +13,15 @@
 //   ⑦ 生成结果能**追加成一条世界书条目**（追加 ≠ 覆盖：原有条目必须一点没动），
 //      而且「要不要拿卡名当人物姓名」是个**看得见、扛得住重绘**的勾选框
 //
-// 十二 段：
+// 十四 段：
 //   A. 装载与零报错
 //   B. 选项卡：在不在、位置对不对、**真按钮**能不能切过去
 //   C. 面板元素齐全（含反向对照：还没生成时结果框 / 三个按钮**不该在**）
 //   D. 模板逻辑：默认逐字 / 懒加载 / 自定义落盘 / 刷新还在 / 清空回默认 / 恢复默认按钮
 //      / 项数统计（含去重）/ 「是不是默认」跟存储一致 / 超长截断
+//   D2. 模板库（第三十六轮）：切换 / 命名 / 另存 / 改名 / 删除 / 重名 / 老版本迁移
+//   D3. 四份内置模板（第三十七轮）：四份逐字（字符数 / 行数 / 行尾空格 / 首行）、
+//      切换、改一份只脏那一份、「恢复默认」只清当前那份、内置名字不许被占用
 //   E. 状态而不是 DOM：走**真实输入路径**（oninput）+ 重绘之后还在
 //   F. 提示词：系统提示词 + 用户提示词（要求原文 / 模板全文 / 卡的名字）
 //   G. 未配 AI：不发请求、只给提示、忙态归位（配好之后作对照）
@@ -237,7 +240,35 @@ window.fetch = async function (url, init) {
   const dlg = () => ev(`window.__dlg || []`);
   const dlgClear = () => ev(`(window.__dlg = [], true)`);
   const confirmYes = (v) => ev(`(window.__confirmYes = ${v ? 'true' : 'false'}, true)`);
-  const tplStored = () => ev(`(function(){ try { return localStorage.getItem('stPersonaTpl'); } catch (e) { return 'ERR'; } })()`);
+  // 「当前选中那份模板**落盘**的内容」—— 按存储布局独立再算一遍，不调产品函数。
+  // ⚠ 第三十六轮起不再是单个键；第三十七轮起内置有**四份**，改动存在一张表里
+  //   （`stPersonaTplDefOv` = `{ id: body }`），所以这里也不能只读一个键。
+  //   产品把键名换了而这里没跟着换，这组断言会**整片假红**，所以键名在这里独立写一遍
+  const tplStored = () => ev(`(function(){ try {
+    const id = localStorage.getItem('stPersonaTplId') || 'builtin';
+    if (id.indexOf('builtin') === 0) {
+      const m = JSON.parse(localStorage.getItem('stPersonaTplDefOv') || '{}');
+      return (typeof m[id] === 'string') ? m[id] : null;
+    }
+    const lib = JSON.parse(localStorage.getItem('stPersonaTpls') || '[]');
+    const t = lib.filter(x => x.id === id)[0];
+    return t ? t.body : null;
+  } catch (e) { return 'ERR'; } })()`);
+  // 内置改动的整张表（跟「当前选中哪份」无关）
+  const ovRaw = () => ev(`(function(){ try {
+    return JSON.parse(localStorage.getItem('stPersonaTplDefOv') || '{}');
+  } catch (e) { return 'ERR'; } })()`);
+  // 直接读库（跟「当前选中哪份」无关）—— 删 / 改名 / 重名那几条要靠它
+  const libRaw = () => ev(`(function(){ try {
+    return JSON.parse(localStorage.getItem('stPersonaTpls') || '[]');
+  } catch (e) { return 'ERR'; } })()`);
+  // 走**真下拉**：改 select 的 value 再派发 change，证明 onchange 真接上了
+  const pickDom = (id) => ev(`(function(){
+    const el = document.getElementById('st-persona-tpl-pick');
+    if (!el) return false;
+    el.value = ${JSON.stringify(id)};
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true; })()`);
   const busy = () => ev(`stEditor.personaBusy === true`);
   const out = () => ev(`String(stEditor.personaOut || '')`);
   const tab = () => ev(`stEditor.tab`);
@@ -570,10 +601,12 @@ window.fetch = async function (url, init) {
     check('默认模板**逐字**等于用户给的那份', await ev(`stPersonaTpl()`), TPL_EXPECT);
     check('模板框里显示的就是它',
       await ev(`document.getElementById('st-persona-tpl').value`), TPL_EXPECT);
-    check('标签写着「（默认）」',
+    // ⚠ 第三十七轮起内置有四份，「（默认）」这种说法不够用了（四份里哪一份是默认？），
+    //   标题改成直接显示**名字**
+    check('标签写着模板名字「默认模板」',
       await ev(`(function(){ const s = [...document.querySelectorAll('#st-panes .st-sub')];
         const h = s.filter(x => /^模板/.test(x.textContent))[0];
-        return h ? h.textContent : ''; })()`), v => /（默认）/.test(v), '含「（默认）」');
+        return h ? h.textContent : ''; })()`), v => /模板「默认模板」/.test(v), '含「模板「默认模板」」');
 
     // 项数：独立算一遍，再跟产品给的对
     const exp = expectLabels(TPL_EXPECT);
@@ -605,10 +638,10 @@ window.fetch = async function (url, init) {
     await sleep(150);
     check('重绘之后模板框里还是它（对照组：证明上一条不是白写的）',
       await ev(`document.getElementById('st-persona-tpl').value`), MY_TPL);
-    check('标签改成了「（已自定义）」',
+    check('标签改成了「· 已改」',
       await ev(`(function(){ const s = [...document.querySelectorAll('#st-panes .st-sub')];
         const h = s.filter(x => /^模板/.test(x.textContent))[0];
-        return h ? h.textContent : ''; })()`), v => /已自定义/.test(v), '含「已自定义」');
+        return h ? h.textContent : ''; })()`), v => /· 已改/.test(v), '含「· 已改」');
 
     // 刷新还在 —— 懒加载那条路（内存里是 null，只能从 localStorage 读）
     await reload();
@@ -629,7 +662,10 @@ window.fetch = async function (url, init) {
     await typeIn('st-persona-tpl', HUGE);
     check('超长模板被截到上限', await ev(`stEditor.personaTpl.length`), 8000);
     check('截断之后存进去的也是截过的',
-      await ev(`localStorage.getItem('stPersonaTpl').length`), 8000);
+      await ev(`(function(){ try {
+        const m = JSON.parse(localStorage.getItem('stPersonaTplDefOv') || '{}');
+        return (m['builtin'] || '').length;
+      } catch (e) { return -1; } })()`), 8000);
 
     // 清空 = 回到默认（而且**删键**，不是存空串）
     await typeIn('st-persona-tpl', '');
@@ -653,6 +689,313 @@ window.fetch = async function (url, init) {
       await ev(`document.getElementById('st-persona-tpl').value`), TPL_EXPECT);
     check('当面说了恢复了多少项', await msgText(), v => /恢复默认/.test(v), '含「恢复默认」');
     check('提示是 ok 不是 warn', await msgKind(), '');
+
+    // ============ D2. 模板库：切换 / 命名 / 另存 / 改名 / 删除（第三十六轮）============
+    // 这一段盯的是「从一份模板变成一套模板」那件事。要证的四件事：
+    //   ① 切换真的换了内容（拿**两份内容不同**的模板对照，否则切没切看不出来）
+    //   ② 存的模板**落盘**，刷新还在
+    //   ③ 重名不会造出两份同名的
+    //   ④ 内置那份删不掉 / 改不了名
+    // 另外单独证一次**老版本迁移**：只有一个 stPersonaTpl 字符串的用户，内容不能丢。
+    section('D2. 模板库（切换 / 命名 / 另存 / 改名 / 删除 / 迁移）');
+    const tplHead = () => ev(`(function(){ const s = [...document.querySelectorAll('#st-panes .st-sub')];
+      const h = s.filter(x => /^模板/.test(x.textContent))[0];
+      return h ? h.textContent : ''; })()`);
+
+    // ⚠ 第三十七轮起内置是**四份**（默认 / 精简人设 / fate人设 / 另一个模板），
+    //   顺序 = `300b` 里那个数组的顺序 = 用户给文件的顺序
+    const TPL_OPTS4 = ['默认模板（内置）', '精简人设（内置）', 'fate人设（内置）', '另一个模板（内置）'];
+    check('一开始库里就是四份内置', await ev(`stPersonaTplList().length`), 4);
+    // ⚠ 数组判据一律「先 stringify 再比」—— `check` 的非函数分支是 `actual === pred`，
+    //   两份内容一样的数组永远不等（六之五十九那条坑的兄弟）
+    const arrIs = (want) => v => JSON.stringify(v) === JSON.stringify(want);
+    check('下拉里四个选项，顺序就是内置清单的顺序',
+      await ev(`[...document.querySelectorAll('#st-persona-tpl-pick option')].map(o => o.textContent)`),
+      arrIs(TPL_OPTS4), TPL_OPTS4);
+    check('名字框里预填的是当前模板的名字',
+      await ev(`document.getElementById('st-persona-tpl-name').value`), '默认模板');
+
+    // —— 另存为一份新的 ——
+    const TPL_A = '姓名:\n年龄:';
+    const TPL_B = '姓名:\n年龄:\n职业:\n口头禅:';
+    await typeIn('st-persona-tpl', TPL_A);
+    await typeIn('st-persona-tpl-name', '简洁版');
+    check('（前置）名字草稿进了状态', await ev(`stEditor.personaTplName`), '简洁版');
+    await ev(`document.getElementById('st-persona-tpl-save').click()`);
+    await sleep(200);
+    check('另存为之后库里多了一份（四份内置 + 这一份 = 5）',
+      await ev(`stPersonaTplList().length`), 5);
+    check('当前选中的就是新存的那份', await ev(`stPersonaTplName()`), '简洁版');
+    check('新模板的正文 = 存之前框里的内容', await ev(`stPersonaTpl()`), TPL_A);
+    check('新模板真的落盘了', await tplStored(), TPL_A);
+    check('落盘的那条 id 跟当前选中的 id 是同一个',
+      await ev(`(function(){ const l = JSON.parse(localStorage.getItem('stPersonaTpls') || '[]');
+        return l.length === 1 && l[0].id === localStorage.getItem('stPersonaTplId'); })()`), true);
+    check('折叠块标题换成了模板名字',
+      await tplHead(), v => /简洁版/.test(v), '含「简洁版」');
+    check('当面说了存成了什么', await msgText(), v => /已存成新模板/.test(v), '含「已存成新模板」');
+    check('下拉里现在是五个选项（四份内置 + 自定义那份排在最后）',
+      await ev(`[...document.querySelectorAll('#st-persona-tpl-pick option')].map(o => o.textContent)`),
+      arrIs(TPL_OPTS4.concat(['简洁版'])), TPL_OPTS4.concat(['简洁版']));
+    check('下拉选中的就是这一份',
+      await ev(`document.getElementById('st-persona-tpl-pick').value`),
+      await ev(`stPersonaTplId()`));
+    check('「改名」「删掉这份」按钮出来了（内置那份没有）',
+      await ev(`[!!document.getElementById('st-persona-tpl-rename'),
+        !!document.getElementById('st-persona-tpl-drop')]`), arrIs([true, true]), [true, true]);
+
+    // 给自定义那份换个内容 —— 这样「切回内置」才**看得出区别**
+    await typeIn('st-persona-tpl', TPL_B);
+    check('自定义模板改动是**边改边存**（不用点保存）', await tplStored(), TPL_B);
+
+    // —— 切换：真下拉 ——
+    await pickDom('builtin');
+    await sleep(200);
+    check('切回内置：名字是「默认模板」', await ev(`stPersonaTplName()`), '默认模板');
+    // ⚠ 这里期望的是 TPL_A 而**不是** TPL_EXPECT：刚才另存为之前往内置那份里敲过
+    //   TPL_A（它可改、改动落盘），所以「内置那份现在的内容」就是 TPL_A。
+    //   拿 TPL_EXPECT 当期望会让这条**红得莫名其妙** —— 它量的是「内置有没有被改过」，
+    //   而不是「切换有没有生效」
+    check('切回内置：正文跟着换成内置那份的（不是刚才那份自定义的）',
+      await ev(`stPersonaTpl()`), TPL_A);
+    check('（对照）两份内容确实不同 —— 否则上一条证明不了切换',
+      TPL_A === TPL_B, false);
+    await pickDom(await ev(`(function(){ const l = JSON.parse(localStorage.getItem('stPersonaTpls') || '[]');
+      return l[0].id; })()`));
+    await sleep(200);
+    check('再切回自定义：名字是「简洁版」', await ev(`stPersonaTplName()`), '简洁版');
+    check('再切回自定义：正文是 TPL_B', await ev(`stPersonaTpl()`), TPL_B);
+    check('切换之后折叠块标题也跟着变', await tplHead(), v => /简洁版/.test(v), '含「简洁版」');
+
+    // —— 刷新之后选中的还是这份 ——
+    await reload();
+    await openPersona();
+    await configAi();
+    check('刷新之后选中的还是「简洁版」', await ev(`stPersonaTplName()`), '简洁版');
+    check('刷新之后正文还是 TPL_B', await ev(`stPersonaTpl()`), TPL_B);
+    check('刷新之后库还是五份', await ev(`stPersonaTplList().length`), 5);
+
+    // —— 改名 ——
+    await typeIn('st-persona-tpl-name', '极简版');
+    await ev(`document.getElementById('st-persona-tpl-rename').click()`);
+    await sleep(200);
+    check('改名生效', await ev(`stPersonaTplName()`), '极简版');
+    check('改名落了盘', await libRaw(), v => v.length === 1 && v[0].name === '极简版', '一条，name=极简版');
+    check('（对照）改名没动正文', await ev(`stPersonaTpl()`), TPL_B);
+    check('当面说了改成了什么', await msgText(), v => /改名为/.test(v), '含「改名为」');
+
+    // —— 重名不许造出第二份 ——
+    await typeIn('st-persona-tpl-name', '极简版');
+    await ev(`document.getElementById('st-persona-tpl-save').click()`);
+    await sleep(200);
+    check('重名 ⇒ 说了「已经有一份叫…」', await msgText(), v => /已经有一份叫/.test(v), '含「已经有一份叫」');
+    check('重名 ⇒ 是 warn 不是 ok', await msgKind(), 'warn');
+    check('重名 ⇒ 库里还是五份（没造出同名的那份）', await ev(`stPersonaTplList().length`), 5);
+    check('重名 ⇒ 当前选中的没变', await ev(`stPersonaTplName()`), '极简版');
+    // 空名字也不许存
+    await typeIn('st-persona-tpl-name', '');
+    await ev(`document.getElementById('st-persona-tpl-save').click()`);
+    await sleep(200);
+    check('名字空着 ⇒ 库里还是五份', await ev(`stPersonaTplList().length`), 5);
+    // ⚠ 空草稿会**回落到当前模板的名字**（那是预填逻辑），所以这里命中的是「重名」
+    //   那条提示而不是「先起个名字」—— 判据只守「没造出新的」，别守具体哪句文案
+    check('名字空着 ⇒ 没造出新的（数目不变）', await ev(`stPersonaTplList().length`), 5);
+
+    // —— 内置那份：删不掉、改不了名 ——
+    await pickDom('builtin');
+    await sleep(200);
+    check('内置那份没有「删掉这份」按钮',
+      await ev(`!!document.getElementById('st-persona-tpl-drop')`), false);
+    check('内置那份没有「改名」按钮',
+      await ev(`!!document.getElementById('st-persona-tpl-rename')`), false);
+    await ev(`stPersonaTplDrop()`);
+    await sleep(120);
+    check('直接调删除函数：说了删不掉', await msgText(), v => /删不掉/.test(v), '含「删不掉」');
+    check('直接调删除函数：库里还是五份', await ev(`stPersonaTplList().length`), 5);
+    await ev(`stPersonaTplNameSet('想改个名')`);
+    await ev(`stPersonaTplRename()`);
+    await sleep(120);
+    check('直接调改名函数：说了名字固定', await msgText(), v => /名字固定/.test(v), '含「名字固定」');
+    check('直接调改名函数：名字没变', await ev(`stPersonaTplName()`), '默认模板');
+
+    // —— 删除：先答「不要」再答「要」（反向对照）——
+    await pickDom(await ev(`(function(){ const l = JSON.parse(localStorage.getItem('stPersonaTpls') || '[]');
+      return l[0].id; })()`));
+    await sleep(200);
+    await dlgClear();
+    await confirmYes(false);
+    await ev(`stPersonaTplDrop()`);
+    await sleep(120);
+    check('删除要问一句', (await dlg()).length, 1);
+    check('confirm 的话里点了名字', (await dlg())[0], v => /极简版/.test(v), '含「极简版」');
+    check('答「不要」⇒ 库里还是五份', await ev(`stPersonaTplList().length`), 5);
+    check('答「不要」⇒ 选中的还是它', await ev(`stPersonaTplName()`), '极简版');
+    await confirmYes(true);
+    await ev(`stPersonaTplDrop()`);
+    await sleep(200);
+    check('答「要」⇒ 库里只剩四份内置', await ev(`stPersonaTplList().length`), 4);
+    check('答「要」⇒ 回到内置', await ev(`stPersonaTplName()`), '默认模板');
+    check('答「要」⇒ 正文换回内置那份', await ev(`stPersonaTpl()`), TPL_A);
+    check('当面说了删掉了哪份', await msgText(), v => /已删掉模板/.test(v), '含「已删掉模板」');
+    check('（收尾）库里的 JSON 现在是空数组（没有残留条目）',
+      await libRaw(), v => Array.isArray(v) && v.length === 0, []);
+
+    // —— 恢复默认：内置那份被改过之后能清回去 ——
+    await ev(`document.getElementById('st-persona-tpl-reset').click()`);
+    await sleep(200);
+    check('「恢复默认模板」把内置那份清回常量', await ev(`stPersonaTpl()`), TPL_EXPECT);
+    check('「恢复默认模板」把覆盖键也删了', await tplStored(), null);
+    check('「恢复默认模板」之后「是不是默认」为 true', await ev(`stPersonaTplIsDefault()`), true);
+
+    // —— 老版本迁移：只有一个 stPersonaTpl 字符串的用户 ——
+    // ⚠ 这一段会**把存储改成旧版本的形状**，所以放在 D2 最后，跑完再收拾干净
+    const OLD = '老模板:\n第二项:';
+    await ev(`(function(){
+      localStorage.removeItem('stPersonaTpls');
+      localStorage.removeItem('stPersonaTplId');
+      localStorage.removeItem('stPersonaTplDefault');
+      localStorage.setItem('stPersonaTpl', ${JSON.stringify(OLD)});
+      stEditor.personaTpls = null;
+      stEditor.personaTpl = null;
+      stEditor.personaTplName = '';
+      return true; })()`);
+    await reload();
+    await openPersona();
+    await configAi();
+    check('老版本那一份被迁移成了自定义模板（内容一字不差）', await ev(`stPersonaTpl()`), OLD);
+    check('迁移出来的那份叫「我的模板」', await ev(`stPersonaTplName()`), '我的模板');
+    check('迁移之后库里有它（四份内置 + 这一份 = 5）', await ev(`stPersonaTplList().length`), 5);
+    check('迁移之后**选中的是它**（不然用户得自己去下拉里找）',
+      await ev(`stPersonaTplId() !== 'builtin'`), true);
+    check('老键留着没删（回退旧版本时内容还在）',
+      await ev(`localStorage.getItem('stPersonaTpl')`), OLD);
+    // ⚠ 「只迁移一次」要**把内存清空再读**才证得了：不清的话读的是同一个数组引用，
+    //   删掉迁移逻辑照样绿（六之二十六：对照组必须真的走另一条路）
+    await ev(`(stEditor.personaTpls = null, true)`);
+    check('迁移只发生一次：内存清空后重读也不会多出一份',
+      await ev(`stPersonaTplList().length`), 5);
+
+    // —— 收拾干净：回到「四份内置 + 都没改过」，后面几段都指望这个前提 ——
+    // ⚠ 第三十七轮起还要清 `stPersonaTplDefOv` 与**内存里那张覆盖表** ——
+    //   只删库键的话，D3 / E 段跑在「内置被改过」的状态上，正文断言会全错
+    await ev(`(function(){
+      localStorage.removeItem('stPersonaTpls');
+      localStorage.removeItem('stPersonaTplId');
+      localStorage.removeItem('stPersonaTplDefault');
+      localStorage.removeItem('stPersonaTplDefOv');
+      localStorage.removeItem('stPersonaTpl');
+      stEditor.personaTpls = null;
+      stEditor.personaTplOv = null;
+      stEditor.personaTpl = null;
+      stEditor.personaTplName = '';
+      stRerender();
+      return true; })()`);
+    await sleep(150);
+    check('（收尾）清完之后回到内置的默认模板', await ev(`stPersonaTpl()`), TPL_EXPECT);
+    check('（收尾）库里只剩四份内置', await ev(`stPersonaTplList().length`), 4);
+
+    // ============ D3. 四份内置模板（第三十七轮）============
+    // 用户给了三份 .txt 要当内置模板。这一段只盯**这一轮才有**的四件事：
+    //   ① 四份都在、顺序 = 清单顺序，第一份 id 还是裸 `'builtin'`（老用户的选点不能失效）
+    //   ② 正文**逐字** —— 手抄一定吃行尾空格，而吃掉之后「看着一样」
+    //   ③ 改一份只脏那一份（覆盖表写错成「整表替换」时，别份的内容会被静默顶掉）
+    //   ④ 「恢复默认」只清当前那份（不然改过 A 再点 B 的恢复，A 的改动一起没了）
+    // ⚠ 完整字节比对在 `_tpl-roundtrip.js`（直接对 .txt 文件）；这里是它的**常驻哨兵**：
+    //   字符数 / 行数 / 行尾空格行数 / 首行，四样一起看。少了行尾空格那一样，
+    //   「手抄漏了空格」这种事在其余三样上**完全看不出来**。
+    section('D3. 四份内置模板（逐字 / 切换 / 改动互不污染）');
+    const BUILTIN_SPEC = [
+      { id: 'builtin', name: '默认模板', chars: 229, lines: 42, trail: 0, first: '基本信息:' },
+      { id: 'builtin:1', name: '精简人设', chars: 112, lines: 25, trail: 0, first: '基本信息:' },
+      { id: 'builtin:2', name: 'fate人设', chars: 940, lines: 94, trail: 66, first: '面板基本信息:' },
+      { id: 'builtin:3', name: '另一个模板', chars: 587, lines: 80, trail: 22, first: '# [(角色名)]' }
+    ];
+    const fp = (id) => ev(`(function(){
+      const b = stPersonaTplBody(${JSON.stringify(id)});
+      const ls = b.split('\\n');
+      return { chars: b.length, lines: ls.length,
+               trail: ls.filter(l => /[ \\t]$/.test(l)).length,
+               first: ls[0], cr: b.indexOf('\\r') >= 0 };
+    })()`);
+
+    check('四份内置的 id / 名字 / 顺序（第一份 id 还是裸 builtin）',
+      await ev(`stPersonaTplList().map(t => t.id + '|' + t.name)`),
+      arrIs(BUILTIN_SPEC.map(b => b.id + '|' + b.name)),
+      BUILTIN_SPEC.map(b => b.id + '|' + b.name));
+    for (const b of BUILTIN_SPEC) {
+      const got = await fp(b.id);
+      check('「' + b.name + '」正文逐字：字符数', got.chars, b.chars);
+      check('「' + b.name + '」正文逐字：行数', got.lines, b.lines);
+      check('「' + b.name + '」正文逐字：行尾空格行数（手抄最常吃掉的就是它）', got.trail, b.trail);
+      check('「' + b.name + '」正文逐字：首行', got.first, b.first);
+      check('「' + b.name + '」正文里没有混进 \\r（模板是纯 LF）', got.cr, false);
+    }
+    check('四份正文两两不同（抄成同一份的话这里会红）',
+      await ev(`(function(){ const b = ${JSON.stringify(BUILTIN_SPEC.map(b => b.id))}.map(stPersonaTplBody);
+        return new Set(b).size; })()`), 4);
+
+    // —— 切换：真下拉 ——
+    await pickDom('builtin:2');
+    await sleep(200);
+    check('切到「fate人设」：名字对', await ev(`stPersonaTplName()`), 'fate人设');
+    check('切到「fate人设」：正文跟着换', await ev(`stPersonaTpl()`),
+      await ev(`stPersonaTplBody('builtin:2')`));
+    check('（对照）切过去之后正文确实不是默认那份',
+      await ev(`stPersonaTpl() === stPersonaTplBody('builtin')`), false);
+    check('切过去之后折叠块标题写着它的名字', await tplHead(), v => /fate人设/.test(v), '含「fate人设」');
+
+    // —— 改一份只脏那一份 ——
+    const FATE_SNIP = '面板基本信息:\n姓名:';
+    await typeIn('st-persona-tpl', FATE_SNIP);
+    check('改「fate人设」⇒ 覆盖表里只有它一个键',
+      await ev(`Object.keys(stPersonaTplOv())`), arrIs(['builtin:2']), ['builtin:2']);
+    check('改「fate人设」⇒ 它自己真的变了', await ev(`stPersonaTplBody('builtin:2')`), FATE_SNIP);
+    check('改「fate人设」⇒「精简人设」没被连坐（还是 112 字符）',
+      await ev(`stPersonaTplBody('builtin:1').length`), 112);
+    check('改「fate人设」⇒ 默认那份也没被连坐',
+      await ev(`stPersonaTplBody('builtin') === stPersonaTplBuiltinBody('builtin')`), true);
+
+    // —— 「恢复默认」只清当前那份 ——
+    await pickDom('builtin:1');
+    await sleep(200);
+    await typeIn('st-persona-tpl', '只有一项:');
+    check('（前置）现在两份都有改动', await ev(`Object.keys(stPersonaTplOv()).length`), 2);
+    await ev(`document.getElementById('st-persona-tpl-reset').click()`);
+    await sleep(200);
+    check('「恢复默认模板」只清当前这份（精简人设回到 112 字符）',
+      await ev(`stPersonaTplBody('builtin:1').length`), 112);
+    check('「恢复默认模板」没把「fate人设」的改动一起清掉（对照）',
+      await ev(`stPersonaTplBody('builtin:2')`), FATE_SNIP);
+    check('「恢复默认模板」之后覆盖表里只剩 fate人设',
+      await ev(`Object.keys(stPersonaTplOv())`), arrIs(['builtin:2']), ['builtin:2']);
+    check('「恢复默认模板」的提示点了模板名字',
+      await msgText(), v => /模板「精简人设」/.test(v), '含「模板「精简人设」」');
+
+    // —— 内置的名字不许被自定义模板占用 ——
+    await pickDom('builtin:3');
+    await sleep(200);
+    await typeIn('st-persona-tpl-name', '精简人设');
+    await ev(`document.getElementById('st-persona-tpl-save').click()`);
+    await sleep(200);
+    check('用内置的名字另存 ⇒ 被拒，而且说明白了为什么',
+      await msgText(), v => /别用内置模板的名字/.test(v), '含「别用内置模板的名字」');
+    check('用内置的名字另存 ⇒ 是 warn 不是 ok', await msgKind(), 'warn');
+    check('用内置的名字另存 ⇒ 库里还是四份', await ev(`stPersonaTplList().length`), 4);
+    check('切到不存在的 id ⇒ 回落第一份内置', await ev(`stPersonaTplIdSet('builtin:9')`), 'builtin');
+
+    // —— 收拾干净：回到「默认模板 + 没改动」，E/F 段都指望这个前提 ——
+    await ev(`(function(){
+      localStorage.removeItem('stPersonaTplDefOv');
+      localStorage.setItem('stPersonaTplId', 'builtin');
+      stEditor.personaTplOv = null;
+      stEditor.personaTpl = null;
+      stEditor.personaTplName = '';
+      stRerender();
+      return true; })()`);
+    await sleep(150);
+    check('（D3 收尾）回到默认模板、正文是出厂那份', await ev(`stPersonaTpl()`), TPL_EXPECT);
+    check('（D3 收尾）覆盖表空了', await ev(`Object.keys(stPersonaTplOv()).length`), 0);
+    check('（D3 收尾）库里还是四份（没多造出东西）', await ev(`stPersonaTplList().length`), 4);
 
     // ============ E. 状态而不是 DOM ============
     section('E. 面板参数活在状态里（重绘之后还在）');

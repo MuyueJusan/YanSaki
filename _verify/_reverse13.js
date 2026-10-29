@@ -42,6 +42,13 @@
 //      三个各打一针（R12 / R13 / R14）。⚠ 弹窗那三个按钮**不是一直都在**，
 //      所以套件里点它们一律走空安全版本 —— 不然注入之后 `.click()` 会抛
 //      `TypeError`，套件当场炸掉、连汇总行都没有，那一针就白跑了。
+//   ⑩ 「模板库：切换 / 命名 / 另存 / 改名 / 删除 / 迁移」（第三十六轮加）——
+//      这一轮把「一份模板」变成「一套模板」，三种坏法**全都不出声**：
+//      老用户那一份没被迁移（界面上什么都不报，用户只发现「变回默认了」）、
+//      切换时不重置工作副本（名字变了、框里还是上一份）、改动没写回库（刷新就回退）。
+//      R15 / R16 / R17 各打一针。R18 打重名：不拦会造出两份同名的，
+//      而「名字没变」这类断言**读不出区别**，只有数条数才抓得到 ——
+//      所以那一条被特意放进对照组，用它绿着来说明「这条守不住重名」。
 //
 // ⚠ 注入点在**产品**（`saki.html`），不在套件。每个探针都是**一处**最小改动，
 //   跑完立刻还原，收尾核 sha1 —— 不核的话「注入过的产品」会被当成基线。
@@ -68,12 +75,19 @@
 //   探针 R12：`stPersonaBookStart` 不查「已经添加过」 → 三选一弹窗**永远不出现**（第十六轮）
 //   探针 R13：`stPersonaBookWrite` 忽略 `prev`        → 「覆盖」退化成「追加」（第十六轮）
 //   探针 R14：`stPersonaRun` 不重置记账               → 新结果第一次点就弹窗（第十六轮）
+//   探针 R15：模板库不迁移老版本那一份                → 老用户改过的模板**变回默认**（第三十六轮）
+//   探针 R16：`stPersonaTplPick` 不重置工作副本       → 名字换了、框里还是上一份的内容（第三十六轮）
+//   探针 R17：自定义模板改动不写回库                  → 一刷新就回退（第三十六轮）
+//   探针 R18：`stPersonaTplSaveAs` 不拦重名           → 造出两份同名的模板（第三十六轮）
+//   探针 R19：「恢复默认」清整张覆盖表                → 改过的别份模板一起被抹掉（第三十七轮）
+//   探针 R20：内置模板的名字没被占住                  → 下拉里两个「精简人设」（第三十七轮）
 //
-// 跑法：node _reverse13.js   （基线 + 14 个探针 = 15 次整跑）
+// 跑法：node _reverse13.js   （基线 + 20 个探针 = 21 次整跑，≈ 21 分钟 @ 每套 ≈ 60 s）
+//       ONLY=R17 node _reverse13.js   （只跑一条；改完名单重验用，≈ 2 分钟）
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 
 const DIR = __dirname;
 const PAGE = path.join(DIR, '..', 'saki.html');
@@ -99,11 +113,24 @@ const expect = (name, cond, extra) => {
 };
 const nm = s => String(s).trim();
 
+// ⚠⚠ 驱动必须是**异步**的：本环境 `spawnSync` / `execFileSync` / `execSync`
+//   一律抛 `EBUSY`（六之四十六）。同步版写法的症状极其阴险 —— `status` 是 null、
+//   `stdout` 是 undefined，`summaryOf()` 抽不到汇总行，于是**基线那几条先红**，
+//   而「预期该红的都红了」因为匹配不到任何名字反而**打 ✅**。整份跑完看着像
+//   「产品有问题」，其实是驱动根本没启动过子进程。
 function runSuite() {
-    const r = spawnSync(process.execPath, [SUITE], {
-        cwd: DIR, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 300000
+    return new Promise(res => {
+        const cp = spawn(process.execPath, [SUITE], { cwd: DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '';
+        cp.stdout.on('data', d => { out += d; });
+        cp.stderr.on('data', d => { out += d; });
+        // 超时兜底：卡死时也要**有结果**（不然下面的 finally 永远等不到）
+        const tm = setTimeout(() => { try { cp.kill(); } catch (e) {} }, 300000);
+        // ⚠ 用 `close` 不用 `exit`：`exit` 可能早于 stdout 刷完，
+        //   那样汇总行会被**截掉半截**，症状是「套件跑完了但没有汇总行」
+        cp.on('close', code => { clearTimeout(tm); res({ code: code, out: out }); });
+        cp.on('error', e => { clearTimeout(tm); res({ code: null, out: out + String(e) }); });
     });
-    return { code: r.status, out: String(r.stdout || '') + String(r.stderr || '') };
 }
 // 汇总行用来确认「确实跑完了」—— 提前退出的话它会缺
 function summaryOf(out) {
@@ -136,8 +163,13 @@ const PROBES = [
         // 修之前：`stPersonaTplSet('')` 把内存设成空串、键删掉，
         // 而 `stPersonaTpl()` 因为 `typeof === 'string'` 就直接返回那个空串 ——
         // 于是标签（问 localStorage）说「（默认）」、框里是空的、点生成报「模板是空的」。
-        from: "            return stEditor.personaTpl.trim() ? stEditor.personaTpl : ST_PERSONA_TPL_DEFAULT;",
-        to:   "            return stEditor.personaTpl;   // 注入：空串不再回落默认",
+        // 第三十六轮起这一行挪进了 `if (id === ST_PERSONA_TPL_BUILTIN) { … }`，
+        // 缩进跟着从 12 变成 16 —— 注入目标变了就**必须跟着改**，否则这一针
+        // 根本打不进去（`from` 找不到 ⇒ 报「注入点不存在」，不是「产品没问题」）。
+        // 第三十七轮又改了一次：回落目标从常量 `ST_PERSONA_TPL_DEFAULT` 换成
+        // `stPersonaTplBody(id)`（内置有四份，得回落**这一份**的出厂正文）
+        from: "                return stEditor.personaTpl.trim() ? stEditor.personaTpl : stPersonaTplBody(id);",
+        to:   "                return stEditor.personaTpl;   // 注入：空串不再回落",
         red: [
             '清空之后 stPersonaTpl() 回落到默认模板（不然面板会说「默认」却给空模板）',
             '重绘之后模板框里是默认模板（不是空的）'
@@ -148,7 +180,7 @@ const PROBES = [
         green: [
             '默认模板**逐字**等于用户给的那份',
             '模板框里显示的就是它',
-            '标签写着「（默认）」',
+            '标签写着模板名字「默认模板」',
             '项数跟独立算出来的一致',
             '模板写进了状态',
             '而且存进了 localStorage',
@@ -257,9 +289,25 @@ const PROBES = [
         //   （`stPersonaTplIsDefault` 的 `v.trim()`）本来就容得下空串，
         //   所以这一针**只该红一条**。多红了说明套件里有别的东西顺带盯着存储，
         //   那是意外耦合，值得看一眼
-        from: "                if (!s.trim()) localStorage.removeItem(ST_PERSONA_TPL_KEY);\r\n" +
-              "                else localStorage.setItem(ST_PERSONA_TPL_KEY, s);",
-        to:   "                localStorage.setItem(ST_PERSONA_TPL_KEY, s);   // 注入：清空也存空串",
+        // ⚠ 第三十六轮 `stPersonaTplSet` 重写过（清空要删的键从 `stPersonaTpl` 换成了
+        //   `stPersonaTplDefault`，而且整段挪进了 `if (id === builtin)` 里）——
+        //   注入目标**跟着改**，否则这一针命中 0 次、静默变成空操作。
+        //   整跑那一轮就是靠「注入点在产品里唯一（命中 0 次）」把它抓出来的
+        // ⚠ 第三十七轮又整段换了：内置有四份，改动改成**一张覆盖表** `{ id: body }`，
+        //   「清空」从「删一个键」变成「删表里这一项」。注入点跟着换 —— 换的手法还是
+        //   「清空也存空串」，只是存进表里
+        from: "                const map = stPersonaTplOv();\r\n" +
+              "                if (!s.trim()) {\r\n" +
+              "                    if (!(id in map)) return;\r\n" +
+              "                    delete map[id];\r\n" +
+              "                } else {\r\n" +
+              "                    if (map[id] === s) return;\r\n" +
+              "                    map[id] = s;\r\n" +
+              "                }\r\n" +
+              "                stPersonaTplOvSave(map);",
+        to:   "                const map = stPersonaTplOv();\r\n" +
+              "                map[id] = s;   // 注入：清空也存空串\r\n" +
+              "                stPersonaTplOvSave(map);",
         red: [
             '清空之后 localStorage 的键被删了（不是存了个空串）'
         ],
@@ -686,12 +734,187 @@ const PROBES = [
             '「复制」的反馈里有名字',
             '名字取不到 ⇒ 反馈里不出现空的「」'
         ]
+    },
+    // ================= 第三十六轮：模板库（切换 / 命名 / 另存 / 改名 / 删除 / 迁移）=================
+    // 这一轮把「一份模板」变成「一套模板」，引入三个新的**静默**坏法：
+    //   · 老用户那一份自定义模板**没被迁移** —— 界面上什么都不报，用户只是发现
+    //     自己改的模板「变回默认了」（内容还在 localStorage 里躺着，但没人读它）；
+    //   · 切换模板**不重置工作副本** —— 名字变了、下拉变了，框里还是上一份的内容；
+    //   · 自定义模板的改动**没写回库** —— 本次会话看着对，一刷新就回到存的那一刻。
+    // 三个各打一针（R15 / R16 / R17）。R18 打的是「重名」：不拦的话会**造出两份同名的**，
+    // 下拉里两个一模一样的选项，删一个另一个也跟着找不到。
+    {
+        id: 'R15',
+        why: '模板库不迁移老版本那一份 → 老用户改过的模板**变回默认**（第三十六轮新增）',
+        // 迁移那一段的守卫条件。换成 `false` 之后迁移整块不执行，
+        // 而 `stPersonaTpl()` 会安安静静回落到内置的默认模板 —— 不报错、不提示。
+        from: "                if (typeof old === 'string' && old.trim() && old !== ST_PERSONA_TPL_DEFAULT) {",
+        to:   "                if (false) {   // 注入：不迁移老版本那一份",
+        red: [
+            '老版本那一份被迁移成了自定义模板（内容一字不差）',
+            '迁移出来的那份叫「我的模板」',
+            '迁移之后库里有它（四份内置 + 这一份 = 5）',
+            '迁移之后**选中的是它**（不然用户得自己去下拉里找）',
+            '迁移只发生一次：内存清空后重读也不会多出一份'
+        ],
+        // 对照组：整段 D2 **之前**的所有断言都不该受影响（迁移在 D2 最后才跑），
+        // 而且「老键留着没删」必须还是绿的 —— 那一句证明的是「我们不删旧键」，
+        // 跟迁不迁移无关。它要是红了，说明这一针打到了别处
+        green: [
+            '一开始库里就是四份内置',
+            '另存为之后库里多了一份（四份内置 + 这一份 = 5）',
+            '切回内置：正文跟着换成内置那份的（不是刚才那份自定义的）',
+            '刷新之后正文还是 TPL_B',
+            '答「要」⇒ 库里只剩四份内置',
+            '老键留着没删（回退旧版本时内容还在）',
+            '（收尾）清完之后回到内置的默认模板'
+        ]
+    },
+    {
+        id: 'R16',
+        why: '`stPersonaTplPick` 不重置工作副本 → 名字换了、框里还是上一份的内容（第三十六轮新增）',
+        // ⚠ 这一针红的全是**「正文到底换了没有」**那几条（第三十六轮 1 条 + 第三十七轮 D3 的
+        //   2 条）。其余「名字变了」的断言全绿，正好说明光看名字**分不出**切没切
+        from: "            stEditor.personaTpl = stPersonaTplBody(real);",
+        to:   "            /* 注入：切换时不重置工作副本 */",
+        red: [
+            '切回内置：正文跟着换成内置那份的（不是刚才那份自定义的）',
+            // ⚠ 这两条是**第三十七轮新加的 D3 断言带来的连带红**：D3 也走真下拉切了一份内置
+            //   （`builtin:2`），工作副本不重置 ⇒ 切过去正文还是上一份的。
+            //   第一版名单只有上面那一条，跑出来 3 红对 1 红 —— 名单一错，
+            //   「预期该红的都红了」就成了摆设
+            '切到「fate人设」：正文跟着换',
+            '（对照）切过去之后正文确实不是默认那份'
+        ],
+        green: [
+            '切回内置：名字是「默认模板」',
+            '再切回自定义：名字是「简洁版」',
+            '再切回自定义：正文是 TPL_B',
+            '切换之后折叠块标题也跟着变',
+            '刷新之后正文还是 TPL_B',
+            '答「要」⇒ 正文换回内置那份',
+            // 对照组：D3 里**只看名字 / 只看存储**的那几条 —— 工作副本没换不影响它们
+            '切到「fate人设」：名字对',
+            '切过去之后折叠块标题写着它的名字'
+        ]
+    },
+    {
+        id: 'R17',
+        why: '自定义模板的改动不写回库 → 本次会话看着对，一刷新就回退（第三十六轮新增）',
+        from: "            t.body = s;",
+        to:   "            /* 注入：不写回库 */",
+        red: [
+            '自定义模板改动是**边改边存**（不用点保存）',
+            // ⚠ 这两条是**连带红**，不是意外：库没写回 ⇒ 切回这份时读到的还是旧的
+            //   TPL_A ⇒ 「正文是 TPL_B」和「改名没动正文」的前提都没了。
+            //   第一版名单漏了它们，探针跑出来 4 红对 2 红 —— 名单一错，
+            //   「预期该红的都红了」就成了摆设
+            '再切回自定义：正文是 TPL_B',
+            '刷新之后正文还是 TPL_B',
+            '（对照）改名没动正文'
+        ],
+        // 对照组：**只看内存 / 只看 id** 的那几条必须还是绿的 ——
+        // 「改动没落库」不该影响「哪一份被选中」，也不该影响「另存那一刻存进去的正文」
+        green: [
+            '新模板的正文 = 存之前框里的内容',
+            '新模板真的落盘了',
+            '切回内置：正文跟着换成内置那份的（不是刚才那份自定义的）',
+            '刷新之后选中的还是「简洁版」',
+            '刷新之后库还是五份'
+        ]
+    },
+    {
+        id: 'R18',
+        why: '`stPersonaTplSaveAs` 不拦重名 → 造出两份同名的模板（第三十六轮新增）',
+        // 不拦之后每一次「另存为」都会多一份，后面**所有数条数的断言**跟着一起错，
+        // 所以这一针的红名单很长 —— 每一条都是**同一个原因**的直接后果，不是偶发
+        from: "            if (lib.some(t => t.name === name)) {",
+        to:   "            if (false) {   // 注入：不拦重名",
+        red: [
+            '重名 ⇒ 说了「已经有一份叫…」',
+            '重名 ⇒ 是 warn 不是 ok',
+            '重名 ⇒ 库里还是五份（没造出同名的那份）',
+            '名字空着 ⇒ 库里还是五份',
+            '名字空着 ⇒ 没造出新的（数目不变）',
+            '直接调删除函数：库里还是五份',
+            '答「不要」⇒ 库里还是五份',
+            '答「要」⇒ 库里只剩四份内置',
+            '（收尾）库里的 JSON 现在是空数组（没有残留条目）'
+        ],
+        // ⚠ 「重名 ⇒ 当前选中的没变」**故意放在对照组**：多出来的那份名字也叫「极简版」，
+        //   所以「名字没变」这条**读不出区别** —— 它绿着正好提醒：这条断言单靠名字
+        //   是抓不到重名的，抓重名的是上面那几条数条数的
+        green: [
+            '重名 ⇒ 当前选中的没变',
+            '内置那份没有「删掉这份」按钮',
+            '直接调删除函数：说了删不掉',
+            '答「要」⇒ 回到内置',
+            '「恢复默认模板」把内置那份清回常量',
+            '老版本那一份被迁移成了自定义模板（内容一字不差）'
+        ]
+    },
+    // ================= 第三十七轮：内置从一份变四份 =================
+    // 这一轮多了三种**静默**坏法，全都是「界面看着对、数据已经串了」：
+    //   · 「恢复默认」把**整张覆盖表**清掉 —— 用户改了 A，去点 B 的恢复，A 的改动一起没了；
+    //   · 内置的**名字**没被占住 —— 下拉里出现两个「精简人设」，一个删不掉一个能删；
+    //   · 改一份把别份的内容顶掉（覆盖表写成整表替换）—— 这条由 D3 的「没被连坐」两条盯着，
+    //     但**没有单独的探针**：它的注入点跟 R19 是同一段代码，R19 已经证明那两条不是恒真
+    {
+        id: 'R19',
+        why: '「恢复默认」清整张覆盖表 → 改过的别份模板一起被抹掉（第三十七轮新增）',
+        // ⚠ 这一针**故意只打「清整表」**，不动「删这一项」：要证的是
+        //   「只清当前这份」那两条不是恒真 —— 一旦清整表，对照组那两条必须红
+        from: "            const map = stPersonaTplOv();\r\n" +
+              "            if (id in map) {\r\n" +
+              "                delete map[id];\r\n" +
+              "                stPersonaTplOvSave(map);\r\n" +
+              "            }",
+        to:   "            const map = stPersonaTplOv();\r\n" +
+              "            if (id in map) stPersonaTplOvSave({});   // 注入：清整张表",
+        red: [
+            '「恢复默认模板」没把「fate人设」的改动一起清掉（对照）',
+            '「恢复默认模板」之后覆盖表里只剩 fate人设'
+        ],
+        // 对照组：**被恢复的那一份自己**必须照样回到出厂正文 —— 它绿着正好说明
+        // 红的是「清多了」，不是「恢复根本没生效」
+        green: [
+            '（前置）现在两份都有改动',
+            '「恢复默认模板」只清当前这份（精简人设回到 112 字符）',
+            '「恢复默认模板」的提示点了模板名字',
+            '改「fate人设」⇒「精简人设」没被连坐（还是 112 字符）',
+            '（D3 收尾）覆盖表空了',
+            '（D3 收尾）库里还是四份（没多造出东西）'
+        ]
+    },
+    {
+        id: 'R20',
+        why: '内置模板的名字没被占住 → 下拉里两个「精简人设」，一个删不掉一个能删（第三十七轮新增）',
+        from: "            return ST_PERSONA_TPLS_BUILTIN.some(b => b.name === n);",
+        to:   "            return false;   // 注入：内置名字随便占",
+        red: [
+            '用内置的名字另存 ⇒ 被拒，而且说明白了为什么',
+            '用内置的名字另存 ⇒ 是 warn 不是 ok',
+            '用内置的名字另存 ⇒ 库里还是四份',
+            // 连带红：多出来的那份留在库里，D3 收尾数条数就多一份
+            '（D3 收尾）库里还是四份（没多造出东西）'
+        ],
+        // 对照组：**内置清单本身**没被动（不拦重名 ≠ 内置少了/多了），
+        // 而且后面几段照样跑在干净的覆盖表上
+        green: [
+            '四份内置的 id / 名字 / 顺序（第一份 id 还是裸 builtin）',
+            '切到不存在的 id ⇒ 回落第一份内置',
+            '「恢复默认模板」只清当前这份（精简人设回到 112 字符）',
+            '（D3 收尾）覆盖表空了'
+        ]
     }
 ];
 
+// ⚠ 整段塞进 async IIFE：驱动换成异步之后每一步都得 `await`，
+//   而这是 CJS，顶层 `await` 不合法
+(async () => {
 // 先跑一遍**没注入**的，拿到基线（也顺便确认套件本身现在是绿的）
 console.log('== 基线（未注入）==');
-const base = runSuite();
+const base = await runSuite();
 const bs = summaryOf(base.out);
 const basePass = passesOf(base.out);
 expect('套件能跑完（有汇总行）', !!bs, JSON.stringify(bs));
@@ -705,8 +928,18 @@ expect('基线里能抽到断言名（否则后面的存在性检查是空转）
 // 先把所有探针点名的断言核一遍存在性 —— 这步**不需要跑套件**，纯离线。
 // 名字对不上就直接停，别浪费后面 5 次整跑。
 console.log('\n== 探针点名的断言，在基线里都在吗 ==');
+// ⚠ 只跑指定探针：`ONLY=R17 node _reverse13.js` —— 改完一条名单要重验时，
+//   不用为了那一条等 19 次整跑（≈ 27 分钟）。基线**照样跑**：存在性闸门、
+//   对照组名单、「恰好这几条」全都要拿基线对照
+const ONLY = String(process.env.ONLY || '').trim();
+const RUN = ONLY ? PROBES.filter(p => p.id === ONLY) : PROBES;
+if (ONLY && !RUN.length) {
+    console.log('没有叫「' + ONLY + '」的探针。现有的：' + PROBES.map(p => p.id).join(' '));
+    process.exit(1);
+}
+if (ONLY) console.log('⚠ 只跑 ' + ONLY + '（基线照跑）—— 收尾那个「全部达标」只覆盖这一条');
 let stale = 0;
-for (const p of PROBES) {
+for (const p of RUN) {
     const miss = p.red.concat(p.green).filter(x => !hit(basePass, x));
     expect(p.id + ' 点名的 ' + (p.red.length + p.green.length) + ' 条断言都在基线里',
         miss.length === 0, miss.length ? '找不到：' + miss.join(' / ') : '');
@@ -717,17 +950,19 @@ if (stale) {
     process.exit(1);
 }
 
-for (const p of PROBES) {
+for (const p of RUN) {
     console.log('\n== ' + p.id + '：' + p.why + ' ==');
     const cnt = ORIG.split(p.from).length - 1;
     expect('注入点在产品里唯一（命中 ' + cnt + ' 次）', cnt === 1, cnt);
-    if (cnt !== 1) { bad++; continue; }
+    // ⚠ 别在这里再 `bad++`：上面那个 `expect` 已经记过一次了，
+    //   再记一次会让汇总说「2 项不达标」而屏幕上只有 1 个 ❌（第三十六轮修）
+    if (cnt !== 1) continue;
 
     fs.writeFileSync(BAK, ORIG, 'utf8');
     fs.writeFileSync(PAGE, ORIG.replace(p.from, p.to), 'utf8');
     let r;
     try {
-        r = runSuite();
+        r = await runSuite();
     } finally {
         fs.writeFileSync(PAGE, ORIG, 'utf8');   // 无论跑成什么样都先还原
     }
@@ -756,3 +991,4 @@ expect('saki.html 与基线逐字节一致', sha1(fs.readFileSync(PAGE, 'utf8'))
 
 console.log('\n===== 反向测试（人设生成器）：' + (bad ? bad + ' 项不达标' : '全部达标') + ' =====');
 process.exit(bad ? 1 : 0);
+})();
