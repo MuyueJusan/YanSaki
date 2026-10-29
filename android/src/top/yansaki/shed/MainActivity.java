@@ -181,15 +181,36 @@ public class MainActivity extends Activity {
     }
 
     // ================= 返回键 =================
-    // ⚠ 小屋是选项卡式 SPA，`canGoBack()` 基本都是 false ⇒ 从任何一页按返回都会直接退出。
-    //    这是 v1 已知的粗糙点，不是 bug：要做到「先回首页」得让页面自己暴露一个钩子，
-    //    那是产品改动，不该由封装层偷偷做。
+    // ⚠⚠ v1.4 起**返回键被禁用**（用户要求：「新版本的 apk 请尝试禁用【返回】」）。
+    //
+    //   以前是：能回退就回退，不能回退就 `super.onBackPressed()` —— 后者等于 **finish()**，
+    //   也就是退出 App。小屋是选项卡式 SPA，`canGoBack()` 基本都是 false
+    //   ⇒ 从任何一页按返回都会**直接退出**，而且没有任何提示。
+    //
+    //   现在：WebView 有历史就回退（那不算退出，留着有用），否则**什么都不做**。
+    //   ⇒ 关键在于**绝不调用 `super.onBackPressed()`** —— 那一步才是「退出」本身。
+    //
+    // ⚠ 为什么还要弹一句 Toast：按钮「没反应」和「坏了」在用户眼里长得一样。
+    //   但连按会让 Toast 排队（系统不会合并），所以加 1.5 秒节流。
+    //
+    // ⚠ 只覆盖 `onBackPressed()` 就够：清单里**没有**开
+    //   `android:enableOnBackInvokedCallback`，所以 Android 13+ 的返回手势
+    //   仍然走这条老路。哪天有人把它设成 true，这里就会**静默失效**
+    //   （那时必须改用 `OnBackInvokedDispatcher.registerOnBackInvokedCallback`）——
+    //   verify.sh 里有一条断言盯着清单里不出现这个属性。
+    private long lastBackHint = 0L;
+
+    @SuppressWarnings("deprecation")
     @Override
     public void onBackPressed() {
         if (web != null && web.canGoBack()) {
             web.goBack();
-        } else {
-            super.onBackPressed();
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastBackHint > 1500) {
+            lastBackHint = now;
+            Toast.makeText(this, "返回键已禁用（离开请按 Home）", Toast.LENGTH_SHORT).show();
         }
     }
 

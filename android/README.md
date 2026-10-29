@@ -584,7 +584,7 @@ python tools/reverse-ai.py          # 反向测试：证明 verify.sh 那一节�
 
 | 项 | 状态 |
 |---|---|
-| **返回键** | 小屋是选项卡式 SPA，`canGoBack()` 基本为 false ⇒ 从任何一页按返回都会直接退出。要做到「先回首页」得让页面自己暴露一个钩子，那是产品改动，封装层不该偷偷做。 |
+| **返回键（v1.4 起已禁用）** | 以前 `onBackPressed()` 在 `canGoBack()` 为 false 时调 `super.onBackPressed()` = **退出 App**，而小屋是选项卡式 SPA、`canGoBack()` 基本恒为 false ⇒ 从任何一页按返回都直接退出。v1.4 起**不再退出**：WebView 有历史就回退，否则什么都不做，并弹一句「返回键已禁用（离开请按 Home）」（1.5 秒节流，否则连按会排队）。<br>⚠ 这条**只在 `onBackPressed()` 这条路有效** —— 一旦给 activity 加 `android:enableOnBackInvokedCallback="true"`，Android 13+ 的返回手势会绕开它、禁用**静默失效**。`verify.sh` 有一条断言盯着清单里不出现该属性。<br>⚠ 判据为什么是「那句 Toast 文案在不在」：`super.onBackPressed()` 在 dex 里只是一个方法引用，调没调**从字节上分不出来**。拿 v1.3 的 release 附件跑同一个判据，它查不到 ⇒ 这条断言是**会红的**（反向测试做过）。 |
 | **离线** | 页面内嵌在 APK 里，完全离线可用。但页面 `@import` 了 Google Fonts，离线时字体退化（不影响功能）。 |
 | **真机未验证** | 本机没有设备/模拟器，**只做了静态验证**（`verify.sh` 全绿：清单、签名、对齐、dex 内容、内嵌页面逐字节一致）。**「能装、能跑」还没有在真机上确认过。** |
 | **AI 转发只验到「除 WebView 之外」** | 桌面契约测试把 `AiProxy → JsEvent → 垫片` 全跑通了，但 **`evaluateJavascript` 的投递时序没实测**，而且本机 `*.googleapis.com` 全被代理挡死（`http=000`）⇒ **「真的能连上 Vertex AI」没有验证过**。详见「AI 跨域转发」最后一节。 |

@@ -60,6 +60,15 @@ chk "$(echo "$BADGING" | grep -q "targetSdkVersion:'34'" && echo 1 || echo 0)" "
 chk "$(echo "$BADGING" | grep -q "launchable-activity: name='top.yansaki.shed.MainActivity'" && echo 1 || echo 0)" "启动 Activity 存在"
 chk "$(echo "$BADGING" | grep -q "mipmap-anydpi-v26/ic_launcher.xml" && echo 1 || echo 0)" "自适应图标已挂上"
 
+# ⚠⚠ v1.4 的返回键禁用**只在 onBackPressed() 这条路有效**。
+#   一旦有人给 activity 加上 `android:enableOnBackInvokedCallback="true"`，
+#   Android 13+ 的返回手势会改走 OnBackInvokedDispatcher，**根本不调 onBackPressed**
+#   ⇒ 禁用会**静默失效**（没有任何报错，只是按返回又开始退出了）。
+#   ⇒ 所以这里要一条「不该发生」的断言，而不是只测「新代码编进去了」。
+#   （同族：RULES 六之二十六「发生了」必须配「不该发生」的对照组。）
+chk "$(grep -q 'enableOnBackInvokedCallback' "$HERE/AndroidManifest.xml" && echo 1 || echo 0)" \
+    "清单里没有 enableOnBackInvokedCallback（否则返回键禁用会静默失效）"
+
 # ---------- 2. 签名 ----------
 echo
 echo "== 2. 签名（apksigner verify）=="
@@ -330,6 +339,18 @@ if 'classes.dex' in names:
     # ⚠ `window.__ysAi` 只可能是**子串**匹配：它是 JsEvent 拼出来的 JS 字面量的一个片段，
     #   不单独成串。这条弱一档是格式决定的，不是偷懒 —— 所以它单独写、单独说清楚。
     chk(b'window.__ysAi' in dex, 'dex 含 window.__ysAi（JS 字面量片段，只做子串匹配）')
+
+    # ---- v1.4：返回键被禁用 ----
+    # ⚠ 为什么判据是「那句 Toast 文案在不在」：`super.onBackPressed()` 在 dex 里
+    #   只是一个**方法引用**，调没调它在字节上分不出来（也正因如此，不能靠
+    #   「dex 里有没有 super.onBackPressed 这个串」来判）。而那句 Toast 文案
+    #   **只存在于新实现里** ⇒ 有人把实现改回旧写法，这个串就没了。
+    # ⚠ 反向测试：拿 **v1.3 的 release 附件**跑同一个判据，它必须是「查不到」
+    #   （`tools/` 之外没有留脚本，命令见 android/README.md「返回键」那一节）。
+    chk('返回键已禁用（离开请按 Home）'.encode('utf-8') in strs,
+        'dex 里有 v1.4 的「返回键已禁用」文案（说明新实现真的被编进去了）')
+    chk(b'onBackPressed' in strs,
+        'dex 字符串表里有恰好叫 onBackPressed 的方法名（⚠ 弱一档：v1.3 也有，只证明 override 没被删）')
 
 # ---- zip 结构：本地文件头里的名字必须与中央目录里的名字逐字节一致 ----
 # ⚠⚠ 这条不是吹毛求疵，是**本轮花了很久才查清的一个假警报的判据**。
