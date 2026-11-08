@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="m3_app_title">小屋</string>
+    <string name="m3_nav_clock">时钟</string>
+    <string name="m3_nav_api">接口</string>
+    <string name="m3_nav_settings">设置</string>
+
+    <string name="m3_clock_local">本地</string>
+    <string name="m3_clock_section">世界时间</string>
+    <string name="m3_clock_hint">这里的时间跟着系统时区与系统时间走，和网页版各自独立显示，不共享状态。</string>
+
+    <string name="m3_api_section_basic">连接</string>
+    <string name="m3_api_section_model">模型</string>
+    <string name="m3_api_section_gen">生成参数</string>
+    <string name="m3_api_provider">服务商</string>
+    <string name="m3_api_baseurl">接口地址</string>
+    <string name="m3_api_key">密钥</string>
+    <string name="m3_api_model">模型</string>
+    <string name="m3_api_temp">温度</string>
+    <string name="m3_api_maxtok">最大输出 token</string>
+    <string name="m3_api_stream">流式输出</string>
+    <string name="m3_api_show">显示</string>
+    <string name="m3_api_hide">隐藏</string>
+    <string name="m3_api_save">保存并同步</string>
+    <string name="m3_api_saved">已保存，网页版下次打开时生效</string>
+    <string name="m3_api_empty">还没有读到配置。先在网页版里配一次，或者直接在这里填。</string>
+    <string name="m3_api_note">这份配置就是网页版「🔌 API 全局配置」的那一份（同一个键 apiGlobalCfg），改完两边一致。</string>
+
+    <string name="m3_set_section_about">关于</string>
+    <string name="m3_set_version">版本</string>
+    <string name="m3_set_mirror">本地镜像条目</string>
+    <string name="m3_set_section_legacy">还没迁过来的功能</string>
+    <string name="m3_set_legacy_hint">下面这些仍然在网页界面里，点一下直接跳过去。迁完一个就删一条。</string>
+    <string name="m3_set_open_ai">🤖 AI 对话</string>
+    <string name="m3_set_open_st">🃏 角色卡编写器</string>
+    <string name="m3_set_open_games">🕹 街机小游戏</string>
+    <string name="m3_set_open_old">打开完整旧界面</string>
+    <string name="m3_set_section_theme">外观</string>
+    <string name="m3_set_theme_system">跟随系统深浅色</string>
+    <string name="m3_set_theme_note">新界面用 Material 3 Expressive 的色板；网页版有它自己的一整套皮肤，两边互不影响。</string>
+</resources>

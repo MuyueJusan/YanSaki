@@ -3,6 +3,7 @@ package top.yansaki.shed;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -24,17 +25,23 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.ref.WeakReference;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import top.yansaki.shed.nativeui.NativeShellActivity;
+import top.yansaki.shed.nativeui.Store;
 
 /**
  * 「YanSaki的小屋」的 Android 封装：一个 WebView，页面来自 APK 内的 assets/。
@@ -81,6 +88,33 @@ public class MainActivity extends Activity {
     /** AI 转发垫片。由 build.sh 从 shim/ 拷进 assets/。 */
     private static final String SHIM_ASSET = "ys-ai-shim.js";
 
+    /** 存储桥垫片：把 localStorage 镜像到原生，并把原生改过的值回灌。 */
+    private static final String STORE_SHIM_ASSET = "ys-store-shim.js";
+
+    /** 入口按钮：往左上那个下拉菜单里塞「✨ 新界面」。 */
+    private static final String ENTRY_SHIM_ASSET = "ys-native-entry.js";
+
+    /**
+     * 活着的那个 MainActivity。
+     *
+     * <p>⚠ 用 {@link WeakReference} 而不是静态强引用：Activity 被销毁之后静态字段
+     * 还捏着它 = 泄漏整个 WebView。原生界面靠这个引用把改动回推给页面。
+     */
+    private static WeakReference<MainActivity> LIVE;
+
+    /**
+     * 回到网页之后要执行的一段 JS。
+     *
+     * <p>用途：新界面里点「AI 对话 / 角色卡编写器 / 小游戏」这些还没迁过来的功能时，
+     * 先记下要调的入口函数，再 finish() 回网页，由 {@link #onResume()} 执行。
+     * ⚠ 不能直接在原生界面里 evaluateJavascript —— 那时网页是 stop 状态，
+     * 执行了也看不到效果（用户已经回到网页了，却没跳到那一页）。
+     */
+    private static volatile String pendingJs;
+
+    /** 应用上下文：静态方法里要用，但不能持有 Activity。 */
+    private static Context appCtx;
+
     private WebView web;
     private ValueCallback<Uri[]> fileCb;
 
@@ -95,6 +129,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+
+        LIVE = new WeakReference<MainActivity>(this);
+        appCtx = getApplicationContext();
 
         web = new WebView(this);
         web.setLayoutParams(new ViewGroup.LayoutParams(
@@ -147,6 +184,10 @@ public class MainActivity extends Activity {
                 //   安全性来自实测：产品**从不把 fetch 存进变量**（grep 过），
                 //   所有调用点都是裸 fetch(...)，所以在这里换掉 window.fetch 一定生效。
                 v.evaluateJavascript(readShim(), null);
+                // 存储桥先于入口按钮：它可能会触发一次 reload（把原生改过的值灌回页面），
+                // 那一次 reload 之后 onPageFinished 会再跑一遍，两个都会重新注入。
+                v.evaluateJavascript(readAsset(STORE_SHIM_ASSET, "存储桥没装上，新界面读不到数据"), null);
+                v.evaluateJavascript(readAsset(ENTRY_SHIM_ASSET, "左上菜单里不会出现「新界面」按钮"), null);
             }
         });
 
@@ -226,8 +267,69 @@ public class MainActivity extends Activity {
         super.onActivityResult(req, res, data);
     }
 
+    /**
+     * 从原生界面回来时，执行它留下的那一段 JS。
+     *
+     * <p>⚠ 用 {@code web.post} 而不是直接 evaluateJavascript：onResume 的时机比
+     * WebView 恢复渲染早，直接执行偶尔会落进「页面还在 resume」的空档里。
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        final String js = pendingJs;
+        pendingJs = null;
+        if (js != null && web != null) {
+            web.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        web.evaluateJavascript(js, null);
+                    } catch (Exception e) {
+                        Log.w(TAG, "pendingJs failed: " + js, e);
+                    }
+                }
+            });
+        }
+    }
+
+    // ================= 给原生界面（nativeui 包）用的入口 =================
+    // ⚠ 这几个必须是 public：nativeui 是**另一个包**，包级私有在这儿访问不到。
+
+    /** 记下「回到网页之后要跑哪一句」。 */
+    public static void setPendingJs(String js) {
+        pendingJs = js;
+    }
+
+    /**
+     * 把一条键写回网页的 localStorage。
+     *
+     * <p>⚠ 网页不在（被系统回收 / 还没加载完）时**不能假装成功**：这时写进
+     * {@link Store} 的 pending，等页面下次加载时由存储桥灌回去。
+     * 少了这一步，表现就是「在新界面改的配置，回到网页又变回旧值」。
+     */
+    public static void pushToWeb(final String key, final String value) {
+        final MainActivity a = LIVE == null ? null : LIVE.get();
+        if (a == null || a.web == null) {
+            if (appCtx != null) Store.get(appCtx).pendingPut(key, value);
+            return;
+        }
+        a.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    a.web.evaluateJavascript(
+                            "try{localStorage.setItem(" + JSONObject.quote(key) + ","
+                                    + JSONObject.quote(value) + ")}catch(e){}", null);
+                } catch (Exception e) {
+                    if (appCtx != null) Store.get(appCtx).pendingPut(key, value);
+                }
+            }
+        });
+    }
+
     @Override
     protected void onDestroy() {
+        if (LIVE != null && LIVE.get() == this) LIVE = null;
         if (web != null) {
             web.removeJavascriptInterface("YanSakiNative");
             web.destroy();
@@ -264,6 +366,58 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean aiAllowed(String url) {
             return AiProxy.hostAllowed(url);
+        }
+
+        // ---------- 新界面（M3 Expressive，APK 专属） ----------
+
+        /**
+         * 打开原生「新界面」。
+         *
+         * <p>⚠ 必须切回 UI 线程再 startActivity —— {@code @JavascriptInterface} 的方法
+         * 跑在 WebView 的 JS 桥线程上，不是主线程。
+         */
+        @JavascriptInterface
+        public void openNativeUi() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        startActivity(new Intent(MainActivity.this, NativeShellActivity.class));
+                    } catch (Exception e) {
+                        Log.w(TAG, "openNativeUi failed", e);
+                        Toast.makeText(MainActivity.this, "新界面打不开：" + e.getMessage(),
+                                Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
+        }
+
+        /** 整份镜像（页面加载完时推一次）。 */
+        @JavascriptInterface
+        public void storeSync(String json) {
+            Store.get(MainActivity.this).syncAll(json);
+        }
+
+        /** 页面里一次 setItem。 */
+        @JavascriptInterface
+        public void storePut(String k, String v) {
+            Store.get(MainActivity.this).put(k, v);
+        }
+
+        @JavascriptInterface
+        public void storeRemove(String k) {
+            Store.get(MainActivity.this).remove(k);
+        }
+
+        @JavascriptInterface
+        public void storeClear() {
+            Store.get(MainActivity.this).clearAll();
+        }
+
+        /** 取走「原生改了、网页还不知道」的键（取完即清）。 */
+        @JavascriptInterface
+        public String storePending() {
+            return Store.get(MainActivity.this).pendingTake();
         }
 
         /**
@@ -346,8 +500,19 @@ public class MainActivity extends Activity {
 
     /** 读垫片。读不到就注入一条会喊出来的脚本 —— 静默失效最难查。 */
     private String readShim() {
+        return readAsset(SHIM_ASSET, "AI 转发垫片没装上");
+    }
+
+    /**
+     * 从 assets 读一段脚本，失败时返回一条 console.error。
+     *
+     * <p>⚠ 失败**必须喊出来**：注入垫片失败的表现是「功能静默不工作」
+     * （下载没反应 / 新界面读不到数据 / 菜单里没有按钮），而控制台里如果连一句
+     * 报错都没有，排查就只能靠猜。
+     */
+    private String readAsset(String name, String why) {
         try {
-            InputStream in = getAssets().open(SHIM_ASSET);
+            InputStream in = getAssets().open(name);
             try {
                 ByteArrayOutputStream bos = new ByteArrayOutputStream();
                 byte[] buf = new byte[8192];
@@ -358,8 +523,8 @@ public class MainActivity extends Activity {
                 try { in.close(); } catch (IOException ignored) { }
             }
         } catch (IOException e) {
-            Log.w(TAG, "读不到 " + SHIM_ASSET, e);
-            return "console.error('" + SHIM_ASSET + " 读不到：AI 转发垫片没装上')";
+            Log.w(TAG, "读不到 " + name, e);
+            return "console.error(" + JSONObject.quote(name + " 读不到：" + why) + ")";
         }
     }
 

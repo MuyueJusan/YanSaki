@@ -11,7 +11,7 @@
 
   ⚠ targetSdk 34：Play 商店的硬要求，且 34 会强制 `android:exported` 显式声明。
 
-  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.5` ⇔ versionName `1.5`。
+  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.6` ⇔ versionName `1.6`。
     versionCode 只要求**单调递增**，装新包时系统靠它判断是升级。
     ⚠ 2026-09-30「清空重来」：versionCode 由 2 退回 1、versionName 由 1.2 退回 1.0
       （用户指定「回归到 1.0」），并把旧的 v1.0 / v1.1 / v1.2 三个 release 与 tag 一并删除
@@ -34,6 +34,13 @@
       fate人设 / 另一个模板，逐字照抄）。封装层（`android/`）**一行都没改**，
       变的只有 `assets/index.html` 与内嵌页面的 sha1。
 
+    ⚠ v1.6（2026-11-08）：**新增 Material 3 Expressive 原生界面**（`nativeui` 包）。
+      入口 = 网页左上那个下拉菜单里注入的「✨ 新界面」按钮。
+      ⚠ 这一版**网页侧一个字节都没动**（`assets/index.html` 的 sha1 与 v1.5 相同）——
+         新界面整个活在 `android/` 里，所以它天然只在 APK 出现。
+      ⚠ M3 的色板 / 字阶 / 形状 / 涟漪 / 弹簧动效都是**手写**的（不引 AndroidX）。
+      ⚠ 已原生：时钟 / API 全局配置 / 设置；其余功能在「设置」页有「用旧界面打开」入口。
+
   ⚠⚠ **从这一版起改用真密钥签名**（`keystore/YanSaki-13.jks`，别名 `yansaki-13`，
     口令在同目录被 gitignore 的 `signing.env`）。
     签名身份 = App 的身份 ⇒ **证书 SHA-256 与历史上那些 debug 签名的包不同**
@@ -44,8 +51,8 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="top.yansaki.shed"
-    android:versionCode="4"
-    android:versionName="1.5">
+    android:versionCode="5"
+    android:versionName="1.6">
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
 
@@ -73,5 +80,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          「新界面」—— Material 3 Expressive 的原生界面，**只在 APK 里存在**
+          （网页版没有、也不该有）。入口是网页左上菜单里注入的那个「✨ 新界面」按钮。
+
+          ⚠ exported=false：它只能由本 App 内部拉起，不需要外部入口。
+          ⚠ configChanges 跟 MainActivity 保持一致 —— 转屏时重建会把输入框里
+             没保存的内容抹掉，那种「转个屏填的东西没了」最难解释。
+        -->
+        <activity
+            android:name=".nativeui.NativeShellActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.YS.Expressive"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode|density|fontScale|locale|layoutDirection" />
     </application>
 </manifest>

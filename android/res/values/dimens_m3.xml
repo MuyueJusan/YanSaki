@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Material 3 Expressive · 尺寸令牌
+
+  ⚠ 形状（shape）是 Expressive 与 M3 老版最大的差别之一：圆角**更大**、
+     并且「同一种组件在不同层级用不同圆角」。所以这里按 M3 的 shape scale 命名
+     （xs / s / m / l / xl / full），别写成 corner_8 / corner_28 这种散名 ——
+     散名之后没人知道哪个该跟哪个。
+-->
+<resources>
+    <!-- 间距（4 的倍数，M3 的 spacing scale） -->
+    <dimen name="md_space_xs">4dp</dimen>
+    <dimen name="md_space_s">8dp</dimen>
+    <dimen name="md_space_m">12dp</dimen>
+    <dimen name="md_space_l">16dp</dimen>
+    <dimen name="md_space_xl">24dp</dimen>
+    <dimen name="md_space_xxl">32dp</dimen>
+    <dimen name="md_space_3xl">48dp</dimen>
+
+    <!-- 形状（圆角半径） -->
+    <dimen name="md_shape_xs">4dp</dimen>
+    <dimen name="md_shape_s">8dp</dimen>
+    <dimen name="md_shape_m">12dp</dimen>
+    <dimen name="md_shape_l">16dp</dimen>
+    <dimen name="md_shape_xl">28dp</dimen>
+    <dimen name="md_shape_full">100dp</dimen>
+
+    <!-- 组件尺寸 -->
+    <dimen name="md_touch_target">48dp</dimen>
+    <dimen name="md_btn_height">52dp</dimen>
+    <dimen name="md_navbar_height">80dp</dimen>
+    <dimen name="md_nav_indicator_w">64dp</dimen>
+    <dimen name="md_nav_indicator_h">32dp</dimen>
+    <dimen name="md_field_height">56dp</dimen>
+    <dimen name="md_list_item_min_h">64dp</dimen>
+    <dimen name="md_page_pad">20dp</dimen>
+
+    <!-- 海拔（M3 用「表面着色 + 极轻阴影」而不是重投影） -->
+    <dimen name="md_elev_1">1dp</dimen>
+    <dimen name="md_elev_2">3dp</dimen>
+    <dimen name="md_elev_3">6dp</dimen>
+</resources>

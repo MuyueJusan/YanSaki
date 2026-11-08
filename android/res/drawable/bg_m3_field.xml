@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  M3 outlined text field 的容器。
+  ⚠ 聚焦时描边变粗变主色 —— 用 selector 而不是在 Java 里监听焦点，
+     否则「点了没反应」和「聚焦了但看不出」两种问题都会出现。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/md_surface_container_lowest" />
+            <stroke android:width="2dp" android:color="@color/md_primary" />
+            <corners android:radius="@dimen/md_shape_l" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/md_surface_container_lowest" />
+            <stroke android:width="1dp" android:color="@color/md_outline" />
+            <corners android:radius="@dimen/md_shape_l" />
+        </shape>
+    </item>
+</selector>

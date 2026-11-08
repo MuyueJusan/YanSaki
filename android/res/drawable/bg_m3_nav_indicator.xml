@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  底部导航条的「药丸指示器」—— 这是 M3 navigation bar 的标志性形状：
+  选中项的图标背后有一块 secondaryContainer 色的圆角药丸，图标本身变 onSecondaryContainer。
+  ⚠ 不是「选中就把文字加粗/换色」那种老做法。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/md_secondary_container" />
+    <corners android:radius="@dimen/md_shape_full" />
+</shape>

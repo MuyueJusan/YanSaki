@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 填充按钮：整颗药丸（shape_full） -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33FFFFFF">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/md_primary" />
+            <corners android:radius="@dimen/md_shape_full" />
+        </shape>
+    </item>
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFFF" />
+            <corners android:radius="@dimen/md_shape_full" />
+        </shape>
+    </item>
+</ripple>

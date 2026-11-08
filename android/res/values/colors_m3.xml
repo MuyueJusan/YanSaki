@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Material 3 Expressive · 颜色角色（浅色）
+
+  ⚠⚠ 这一套是**手写**的，不是 `com.google.android.material` 给的。
+     本项目的构建链是 aapt2 → javac → d8，不引 Gradle / AndroidX / Material 库
+     （理由见 styles.xml 顶部）。所以 M3 的「颜色角色 / 字阶 / 形状 / 涟漪」四件事
+     全部得自己落成资源与代码。
+
+  ⚠ 命名一律照 M3 的 role 名（primary / onPrimary / primaryContainer / surfaceContainer…），
+    不要自创名字 —— 这样对得上 m3.material.io 上的色板，改色时能一一对应。
+
+  色相取自小屋自己的青绿色身份（页面 :root 那条 135deg 渐变的中间调 #79c4d2），
+  再按 M3 的 tonal palette 方式压到 tone 40 / 90 上，避免「随便挑几个好看的颜色」。
+-->
+<resources>
+    <!-- primary：青绿 -->
+    <color name="md_primary">#00696E</color>
+    <color name="md_on_primary">#FFFFFF</color>
+    <color name="md_primary_container">#6FF6FE</color>
+    <color name="md_on_primary_container">#002021</color>
+
+    <!-- secondary：低饱和青灰 -->
+    <color name="md_secondary">#4A6365</color>
+    <color name="md_on_secondary">#FFFFFF</color>
+    <color name="md_secondary_container">#CCE8EA</color>
+    <color name="md_on_secondary_container">#051F21</color>
+
+    <!-- tertiary：蓝紫（Expressive 的「跳一下」） -->
+    <color name="md_tertiary">#4B607C</color>
+    <color name="md_on_tertiary">#FFFFFF</color>
+    <color name="md_tertiary_container">#D3E4FF</color>
+    <color name="md_on_tertiary_container">#041C35</color>
+
+    <!-- error -->
+    <color name="md_error">#BA1A1A</color>
+    <color name="md_on_error">#FFFFFF</color>
+    <color name="md_error_container">#FFDAD6</color>
+    <color name="md_on_error_container">#410002</color>
+
+    <!-- surface 家族（带一点青的中性色，不是纯灰） -->
+    <color name="md_surface">#F5FAFA</color>
+    <color name="md_on_surface">#171D1D</color>
+    <color name="md_surface_variant">#DAE4E5</color>
+    <color name="md_on_surface_variant">#3F4949</color>
+    <color name="md_surface_container_lowest">#FFFFFF</color>
+    <color name="md_surface_container_low">#EFF5F5</color>
+    <color name="md_surface_container">#E9EFEF</color>
+    <color name="md_surface_container_high">#E3E9E9</color>
+    <color name="md_surface_container_highest">#DDE4E4</color>
+
+    <!-- 描边 / 分隔 -->
+    <color name="md_outline">#6F797A</color>
+    <color name="md_outline_variant">#BEC8C9</color>
+
+    <color name="md_scrim">#000000</color>
+    <color name="md_shadow">#000000</color>
+
+    <!-- 强调色（Expressive 喜欢在卡片上撒一点高饱和） -->
+    <color name="md_accent_lime">#B6F09C</color>
+    <color name="md_accent_peach">#FFD8C2</color>
+</resources>

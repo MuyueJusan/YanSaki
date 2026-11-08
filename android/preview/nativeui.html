@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>新界面 · 设计预览（M3 Expressive）</title>
+<!--
+  ⚠⚠ 这是**设计预览**，不是运行截图。
+     本机没有设备/模拟器，`verify.sh` 只能证明「类编进 dex 了、注入脚本装进去了、
+     清单里声明了 Activity」，证明不了「跑起来长这样」。
+     所以这里用**同一套令牌**（色板 / 字阶 / 圆角 / 间距，数值抄自 res/values/*_m3.xml）
+     把三屏画一遍，好让人先看长相、先提意见，而不是等装上手机才发现不对。
+     ⇒ 它和真机的差别：字体是系统字体（真机是 Roboto/思源）、涟漪和弹簧动效只有静态帧、
+       状态栏是模拟的。布局比例与配色是一致的。
+-->
+<style>
+  :root{
+    --primary:#00696E; --on-primary:#FFFFFF; --primary-container:#6FF6FE;
+    --on-primary-container:#002021;
+    --secondary:#4A6365; --secondary-container:#CCE8EA; --on-secondary-container:#051F21;
+    --tertiary:#4B607C; --tertiary-container:#D3E4FF; --on-tertiary-container:#041C35;
+    --surface:#F5FAFA; --on-surface:#171D1D; --on-surface-variant:#3F4949;
+    --surface-low:#EFF5F5; --surface-c:#E9EFEF; --surface-high:#E3E9E9;
+    --outline:#6F797A; --outline-variant:#BEC8C9;
+    --shadow:0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+  }
+  body.dark{
+    --primary:#4CD9E1; --on-primary:#003739; --primary-container:#004F53;
+    --on-primary-container:#6FF6FE;
+    --secondary:#B0CCCE; --secondary-container:#324B4D; --on-secondary-container:#CCE8EA;
+    --tertiary:#B3C8E8; --tertiary-container:#334863; --on-tertiary-container:#D3E4FF;
+    --surface:#0E1515; --on-surface:#DDE4E4; --on-surface-variant:#BEC8C9;
+    --surface-low:#171D1D; --surface-c:#1B2121; --surface-high:#252B2B;
+    --outline:#899393; --outline-variant:#3F4949;
+    --shadow:0 1px 3px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:#0f1414;color:#e6eded;
+    font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;gap:18px;
+    padding:26px 16px 40px;
+  }
+  .banner{
+    max-width:760px;font-size:12.5px;line-height:1.7;color:#9fb0b0;
+    border-left:3px solid var(--primary);padding:8px 12px;background:#141b1b;border-radius:8px;
+  }
+  .banner b{color:#cfe6e6}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+  .tabs{display:flex;gap:6px;background:#1a2222;padding:5px;border-radius:999px}
+  .tabs button{
+    border:0;background:transparent;color:#9fb0b0;padding:9px 18px;border-radius:999px;
+    font-size:13px;cursor:pointer;font-family:inherit;
+  }
+  .tabs button.on{background:#2b3a3a;color:#eaf6f6}
+  .ghost{
+    border:1px solid #2f3d3d;background:transparent;color:#9fb0b0;border-radius:999px;
+    padding:9px 16px;font-size:13px;cursor:pointer;font-family:inherit;
+  }
+
+  /* ---------- 手机框 ---------- */
+  .phone{
+    width:393px;height:852px;border-radius:44px;background:#000;
+    padding:10px;box-shadow:0 24px 60px rgba(0,0,0,.55);position:relative;
+  }
+  .screen{
+    width:100%;height:100%;border-radius:35px;overflow:hidden;
+    background:var(--surface);color:var(--on-surface);
+    display:flex;flex-direction:column;position:relative;
+  }
+  .status{
+    height:34px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 22px;font-size:12px;color:var(--on-surface);opacity:.85;flex:0 0 auto;
+  }
+
+  /* ---------- 大标题顶栏 ---------- */
+  .appbar{padding:6px 22px 10px;flex:0 0 auto}
+  .kicker{
+    font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--primary);font-weight:500;
+  }
+  .title{font-size:28px;line-height:1.28;margin-top:2px;font-weight:500}
+
+  /* ---------- 内容 ---------- */
+  .content{flex:1 1 auto;overflow:auto;padding:0 20px 26px}
+  .content::-webkit-scrollbar{width:0}
+  .card{
+    background:var(--surface-low);border-radius:28px;padding:18px;box-shadow:var(--shadow);
+  }
+  .card+.card{margin-top:12px}
+  .section{
+    color:var(--primary);font-size:14px;font-weight:500;padding:22px 4px 8px;
+  }
+  .hint{font-size:12px;line-height:1.6;color:var(--on-surface-variant);padding:6px 4px 2px}
+
+  .label-m{font-size:12px;font-weight:500;color:var(--on-surface-variant);letter-spacing:.02em}
+  .body-l{font-size:16px;line-height:1.5}
+  .body-m{font-size:14px;line-height:1.5;color:var(--on-surface-variant)}
+  .title-m{font-size:16px;font-weight:500;line-height:1.5}
+  .title-s{font-size:14px;font-weight:500}
+
+  /* 时钟 */
+  .zone{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--primary);font-weight:500}
+  .bigtime{
+    font-family:"SF Mono",Consolas,monospace;font-size:52px;line-height:1.1;
+    letter-spacing:-.02em;margin-top:4px;
+  }
+  .bigdate{font-size:16px;color:var(--on-surface-variant);margin-top:6px}
+  .chips{display:flex;gap:8px;overflow:auto;padding:2px 0 4px}
+  .chips::-webkit-scrollbar{height:0}
+  .chip{
+    flex:0 0 auto;border-radius:8px;border:1px solid var(--outline);
+    padding:9px 16px;font-size:14px;font-weight:500;color:var(--on-surface);white-space:nowrap;
+  }
+  .chip.on{background:var(--secondary-container);border-color:transparent;color:var(--on-secondary-container)}
+  .zrow{display:flex;align-items:center;padding:7px 6px;font-size:16px}
+  .zrow span:first-child{flex:1}
+  .zrow span:last-child{font-family:"SF Mono",Consolas,monospace;font-size:16px;font-weight:500}
+
+  /* 表单 */
+  .field{
+    background:#fff;border:1px solid var(--outline);border-radius:16px;
+    padding:8px 14px 10px;margin-top:12px;
+  }
+  body.dark .field{background:#090F0F}
+  .field .label-m{margin-bottom:2px}
+  .field .val{font-size:16px;line-height:1.5}
+  .field .val.dim{color:var(--on-surface-variant)}
+  .fieldrow{display:flex;align-items:center;gap:8px}
+  .fieldrow .val{flex:1}
+  .link{color:var(--primary);font-size:14px;font-weight:500;cursor:pointer}
+
+  .seekwrap{display:flex;align-items:center;gap:12px;margin-top:10px}
+  .seek{flex:1;height:4px;border-radius:2px;background:var(--outline-variant);position:relative}
+  .seek i{position:absolute;left:0;top:0;bottom:0;width:35%;border-radius:2px;background:var(--primary)}
+  .seek b{
+    position:absolute;left:35%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;
+    border-radius:50%;background:var(--primary);
+  }
+  .switch{
+    width:52px;height:32px;border-radius:999px;background:var(--secondary);
+    position:relative;flex:0 0 auto;
+  }
+  .switch i{
+    position:absolute;left:6px;top:6px;width:20px;height:20px;border-radius:50%;
+    background:#fff;transition:.2s;
+  }
+  .switch.on{background:var(--primary)}
+  .switch.on i{left:26px}
+
+  .btn{
+    margin-top:20px;height:52px;border-radius:999px;background:var(--primary);
+    color:var(--on-primary);display:flex;align-items:center;justify-content:center;
+    font-size:14px;font-weight:500;
+  }
+  .btn.tonal{background:var(--secondary-container);color:var(--on-secondary-container)}
+
+  /* 设置 */
+  .row{display:flex;align-items:center;padding:6px 0;font-size:16px}
+  .row span:first-child{flex:1;color:var(--on-surface-variant)}
+  .row span:last-child{font-size:16px;font-weight:500}
+  .divider{height:1px;background:var(--outline-variant);margin:12px 0}
+  .item{padding:14px;border-radius:16px;font-size:16px}
+
+  /* ---------- 底部导航 ---------- */
+  .navbar{
+    flex:0 0 auto;height:80px;background:var(--surface-c);
+    border-top:1px solid var(--outline-variant);
+    display:flex;align-items:center;
+  }
+  .navitem{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+  .indicator{
+    width:64px;height:32px;border-radius:999px;display:flex;align-items:center;justify-content:center;
+    font-size:17px;
+  }
+  .navitem.on .indicator{background:var(--secondary-container)}
+  .navitem .ico{font-size:17px;filter:grayscale(.15)}
+  .navitem .nm{font-size:12px;font-weight:500;color:var(--on-surface-variant)}
+  .navitem.on .nm{color:var(--on-surface)}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <b>设计预览，不是运行截图。</b> 本机没有设备 / 模拟器，所以三屏是用<b>同一套令牌</b>（色板、字阶、圆角、间距，
+  数值抄自 <code>res/values/*_m3.xml</code>）画出来的。真机差别只有：字体是系统字体、涟漪与弹簧动效是静态帧、状态栏是模拟的。
+  配色与比例一致。
+</div>
+
+<div class="bar">
+  <div class="tabs">
+    <button data-tab="0" class="on">时钟</button>
+    <button data-tab="1">接口</button>
+    <button data-tab="2">设置</button>
+  </div>
+  <button class="ghost" id="theme">切深色</button>
+</div>
+
+<div class="phone">
+  <div class="screen">
+    <div class="status"><span>15:04</span><span>▮▮▮ 5G ▮</span></div>
+
+    <div class="appbar">
+      <div class="kicker" id="kicker">Material 3 · Expressive</div>
+      <div class="title" id="ptitle">时钟</div>
+    </div>
+
+    <div class="content" id="pane0">
+      <div class="card" style="padding:24px 22px">
+        <div class="zone" id="zoneName">本地</div>
+        <div class="bigtime" id="bigtime">15:04:27</div>
+        <div class="bigdate" id="bigdate">2026年11月8日 星期日</div>
+      </div>
+
+      <div class="section">世界时间</div>
+      <div class="chips" id="chips">
+        <div class="chip on" data-z="-1">本地</div>
+        <div class="chip" data-z="0">东京</div>
+        <div class="chip" data-z="1">纽约</div>
+        <div class="chip" data-z="2">伦敦</div>
+        <div class="chip" data-z="3">洛杉矶</div>
+      </div>
+      <div style="margin-top:12px" id="zrows"></div>
+
+      <div class="hint">这里的时间跟着系统时区与系统时间走，和网页版各自独立显示，不共享状态。</div>
+    </div>
+
+    <div class="content hidden" id="pane1">
+      <div class="section">连接</div>
+      <div class="card">
+        <div class="label-m">服务商</div>
+        <div class="chips" style="margin-top:8px">
+          <div class="chip on">OpenAI</div>
+          <div class="chip">Anthropic Claude</div>
+          <div class="chip">Google Gemini</div>
+          <div class="chip">自定义</div>
+        </div>
+        <div class="field"><div class="label-m">接口地址</div><div class="val">https://api.openai.com/v1</div></div>
+        <div class="field">
+          <div class="fieldrow">
+            <div style="flex:1">
+              <div class="label-m">密钥</div>
+              <div class="val dim">••••••••••••••••••••</div>
+            </div>
+            <div class="link">显示</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">模型</div>
+      <div class="card">
+        <div class="field" style="margin-top:0"><div class="label-m">模型</div><div class="val">gpt-4o-mini</div></div>
+      </div>
+
+      <div class="section">生成参数</div>
+      <div class="card">
+        <div style="display:flex;align-items:center">
+          <div class="label-m" style="flex:1">温度</div>
+          <div class="title-m" style="color:var(--primary)">0.7</div>
+        </div>
+        <div class="seekwrap"><div class="seek"><i></i><b></b></div></div>
+        <div class="field"><div class="label-m">最大输出 token</div><div class="val">1024</div></div>
+        <div style="display:flex;align-items:center;padding-top:12px">
+          <div class="body-l" style="flex:1">流式输出</div>
+          <div class="switch on"><i></i></div>
+        </div>
+      </div>
+
+      <div class="btn">保存并同步</div>
+      <div class="hint">这份配置就是网页版「🔌 API 全局配置」的那一份（同一个键 apiGlobalCfg），改完两边一致。</div>
+    </div>
+
+    <div class="content hidden" id="pane2">
+      <div class="section">关于</div>
+      <div class="card">
+        <div class="row"><span>版本</span><span>1.6</span></div>
+        <div class="divider"></div>
+        <div class="row"><span>本地镜像条目</span><span>37</span></div>
+      </div>
+
+      <div class="section">外观</div>
+      <div class="card">
+        <div class="body-m">新界面用 Material 3 Expressive 的色板；网页版有它自己的一整套皮肤，两边互不影响。</div>
+      </div>
+
+      <div class="section">还没迁过来的功能</div>
+      <div class="hint">下面这些仍然在网页界面里，点一下直接跳过去。迁完一个就删一条。</div>
+      <div class="card" style="padding:8px">
+        <div class="item">🤖 AI 对话</div>
+        <div class="item">🃏 角色卡编写器</div>
+        <div class="item">🕹 街机小游戏</div>
+      </div>
+
+      <div class="btn tonal">打开完整旧界面</div>
+    </div>
+
+    <div class="navbar">
+      <div class="navitem on" data-nav="0"><div class="indicator">🕒</div><div class="nm">时钟</div></div>
+      <div class="navitem" data-nav="1"><div class="indicator">🔌</div><div class="nm">接口</div></div>
+      <div class="navitem" data-nav="2"><div class="indicator">⚙️</div><div class="nm">设置</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var ZONES = [
+    ['东京', 9], ['纽约', -5], ['伦敦', 0], ['洛杉矶', -8]
+  ];
+  var TITLES = ['时钟', '接口', '设置'];
+  var KICKERS = ['Material 3 · Expressive', 'API 全局配置', '关于与入口'];
+  var picked = -1;
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function renderClock() {
+    var now = new Date();
+    var off = picked < 0 ? -now.getTimezoneOffset() / 60 : ZONES[picked][1];
+    var t = new Date(now.getTime() + (off * 60 + now.getTimezoneOffset()) * 60000);
+    document.getElementById('bigtime').textContent =
+      pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds());
+    document.getElementById('zoneName').textContent = picked < 0 ? '本地' : ZONES[picked][0];
+
+    var rows = '';
+    for (var i = 0; i < ZONES.length; i++) {
+      var tt = new Date(now.getTime() + (ZONES[i][1] * 60 + now.getTimezoneOffset()) * 60000);
+      rows += '<div class="zrow"><span>' + ZONES[i][0] + '</span><span>' +
+        pad(tt.getHours()) + ':' + pad(tt.getMinutes()) + '</span></div>';
+    }
+    document.getElementById('zrows').innerHTML = rows;
+  }
+
+  function showTab(i) {
+    for (var k = 0; k < 3; k++) {
+      document.getElementById('pane' + k).classList.toggle('hidden', k !== i);
+      document.querySelector('[data-nav="' + k + '"]').classList.toggle('on', k === i);
+      document.querySelector('[data-tab="' + k + '"]').classList.toggle('on', k === i);
+    }
+    document.getElementById('ptitle').textContent = TITLES[i];
+    document.getElementById('kicker').textContent = KICKERS[i];
+  }
+
+  document.querySelectorAll('[data-nav],[data-tab]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      showTab(parseInt(el.getAttribute('data-nav') || el.getAttribute('data-tab'), 10));
+    });
+  });
+
+  document.getElementById('chips').addEventListener('click', function (e) {
+    var c = e.target.closest('.chip');
+    if (!c) return;
+    picked = parseInt(c.getAttribute('data-z'), 10);
+    document.querySelectorAll('#chips .chip').forEach(function (x) {
+      x.classList.toggle('on', x === c);
+    });
+    renderClock();
+  });
+
+  document.getElementById('theme').addEventListener('click', function () {
+    document.body.classList.toggle('dark');
+    this.textContent = document.body.classList.contains('dark') ? '切浅色' : '切深色';
+  });
+
+  renderClock();
+  setInterval(renderClock, 1000);
+</script>
+</body>
+</html>

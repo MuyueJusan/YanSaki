@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Material 3 Expressive · 颜色角色（深色）
+
+  ⚠ 深色不是把浅色反相，而是另一组 tone（primary tone 80 / container tone 30）。
+     手抄的时候最容易犯的错是「on* 忘了跟着换」—— 表现是深底上的深字，看不见。
+-->
+<resources>
+    <color name="md_primary">#4CD9E1</color>
+    <color name="md_on_primary">#003739</color>
+    <color name="md_primary_container">#004F53</color>
+    <color name="md_on_primary_container">#6FF6FE</color>
+
+    <color name="md_secondary">#B0CCCE</color>
+    <color name="md_on_secondary">#1B3436</color>
+    <color name="md_secondary_container">#324B4D</color>
+    <color name="md_on_secondary_container">#CCE8EA</color>
+
+    <color name="md_tertiary">#B3C8E8</color>
+    <color name="md_on_tertiary">#1D314B</color>
+    <color name="md_tertiary_container">#334863</color>
+    <color name="md_on_tertiary_container">#D3E4FF</color>
+
+    <color name="md_error">#FFB4AB</color>
+    <color name="md_on_error">#690005</color>
+    <color name="md_error_container">#93000A</color>
+    <color name="md_on_error_container">#FFDAD6</color>
+
+    <color name="md_surface">#0E1515</color>
+    <color name="md_on_surface">#DDE4E4</color>
+    <color name="md_surface_variant">#3F4949</color>
+    <color name="md_on_surface_variant">#BEC8C9</color>
+    <color name="md_surface_container_lowest">#090F0F</color>
+    <color name="md_surface_container_low">#171D1D</color>
+    <color name="md_surface_container">#1B2121</color>
+    <color name="md_surface_container_high">#252B2B</color>
+    <color name="md_surface_container_highest">#303636</color>
+
+    <color name="md_outline">#899393</color>
+    <color name="md_outline_variant">#3F4949</color>
+
+    <color name="md_scrim">#000000</color>
+    <color name="md_shadow">#000000</color>
+
+    <color name="md_accent_lime">#8FD37A</color>
+    <color name="md_accent_peach">#E8B79B</color>
+</resources>

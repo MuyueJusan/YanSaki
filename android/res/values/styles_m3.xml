@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Material 3 Expressive · 字阶（type scale）与组件样式
+
+  ⚠ 字阶**照 M3 的 15 档**来，别自己拍脑袋定字号：
+     display / headline / title / body / label 各 3 档，每档都有固定字号 + 行高。
+     自创字号的后果是「每个页面看起来都差一点点」，说不上哪儿不对。
+
+  ⚠ Expressive 的特征是「大的更大、小的更小」：display 57sp 而 label 只有 11sp，
+     对比拉得很开。别把 display 收小成 40sp 来「显得稳重」—— 那就退回老 M3 了。
+
+  ⚠ 全部 `textAllCaps=false`：M3 不用全大写。
+-->
+<resources>
+
+    <!-- ==================== 字阶 ==================== -->
+    <style name="TextAppearance.M3.DisplayLarge" parent="">
+        <item name="android:textSize">57sp</item>
+        <item name="android:lineSpacingMultiplier">1.12</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">-0.02</item>
+    </style>
+
+    <style name="TextAppearance.M3.DisplayMedium" parent="">
+        <item name="android:textSize">45sp</item>
+        <item name="android:lineSpacingMultiplier">1.16</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">-0.02</item>
+    </style>
+
+    <style name="TextAppearance.M3.DisplaySmall" parent="">
+        <item name="android:textSize">36sp</item>
+        <item name="android:lineSpacingMultiplier">1.22</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.M3.HeadlineLarge" parent="">
+        <item name="android:textSize">32sp</item>
+        <item name="android:lineSpacingMultiplier">1.25</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="TextAppearance.M3.HeadlineMedium" parent="">
+        <item name="android:textSize">28sp</item>
+        <item name="android:lineSpacingMultiplier">1.29</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="TextAppearance.M3.HeadlineSmall" parent="">
+        <item name="android:textSize">24sp</item>
+        <item name="android:lineSpacingMultiplier">1.33</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="TextAppearance.M3.TitleLarge" parent="">
+        <item name="android:textSize">22sp</item>
+        <item name="android:lineSpacingMultiplier">1.27</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="TextAppearance.M3.TitleMedium" parent="">
+        <item name="android:textSize">16sp</item>
+        <item name="android:lineSpacingMultiplier">1.5</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.009</item>
+    </style>
+
+    <style name="TextAppearance.M3.TitleSmall" parent="">
+        <item name="android:textSize">14sp</item>
+        <item name="android:lineSpacingMultiplier">1.43</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.007</item>
+    </style>
+
+    <style name="TextAppearance.M3.BodyLarge" parent="">
+        <item name="android:textSize">16sp</item>
+        <item name="android:lineSpacingMultiplier">1.5</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">0.031</item>
+    </style>
+
+    <style name="TextAppearance.M3.BodyMedium" parent="">
+        <item name="android:textSize">14sp</item>
+        <item name="android:lineSpacingMultiplier">1.43</item>
+        <item name="android:textColor">@color/md_on_surface_variant</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">0.018</item>
+    </style>
+
+    <style name="TextAppearance.M3.BodySmall" parent="">
+        <item name="android:textSize">12sp</item>
+        <item name="android:lineSpacingMultiplier">1.33</item>
+        <item name="android:textColor">@color/md_on_surface_variant</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">0.033</item>
+    </style>
+
+    <style name="TextAppearance.M3.LabelLarge" parent="">
+        <item name="android:textSize">14sp</item>
+        <item name="android:lineSpacingMultiplier">1.43</item>
+        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.007</item>
+    </style>
+
+    <style name="TextAppearance.M3.LabelMedium" parent="">
+        <item name="android:textSize">12sp</item>
+        <item name="android:lineSpacingMultiplier">1.33</item>
+        <item name="android:textColor">@color/md_on_surface_variant</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.042</item>
+    </style>
+
+    <style name="TextAppearance.M3.LabelSmall" parent="">
+        <item name="android:textSize">11sp</item>
+        <item name="android:lineSpacingMultiplier">1.45</item>
+        <item name="android:textColor">@color/md_on_surface_variant</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.045</item>
+    </style>
+
+    <!-- ==================== 组件 ==================== -->
+
+    <!-- 卡片：M3 的「filled card」，大圆角 + 极轻阴影，不描边 -->
+    <style name="Widget.M3.Card" parent="">
+        <item name="android:background">@drawable/bg_m3_card</item>
+        <item name="android:padding">@dimen/md_space_l</item>
+        <item name="android:elevation">@dimen/md_elev_1</item>
+        <item name="android:clickable">false</item>
+    </style>
+
+    <!-- 填充按钮（primary） -->
+    <style name="Widget.M3.Button.Filled" parent="">
+        <item name="android:background">@drawable/bg_m3_btn_filled</item>
+        <item name="android:textAppearance">@style/TextAppearance.M3.LabelLarge</item>
+        <item name="android:textColor">@color/md_on_primary</item>
+        <item name="android:minHeight">@dimen/md_btn_height</item>
+        <item name="android:minWidth">@dimen/md_touch_target</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingLeft">@dimen/md_space_xl</item>
+        <item name="android:paddingRight">@dimen/md_space_xl</item>
+        <item name="android:paddingTop">@dimen/md_space_m</item>
+        <item name="android:paddingBottom">@dimen/md_space_m</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <!-- 色调按钮（tonal）：Expressive 里最常用的次级动作 -->
+    <style name="Widget.M3.Button.Tonal" parent="Widget.M3.Button.Filled">
+        <item name="android:background">@drawable/bg_m3_btn_tonal</item>
+        <item name="android:textColor">@color/md_on_secondary_container</item>
+    </style>
+
+    <!-- 描边按钮 -->
+    <style name="Widget.M3.Button.Outlined" parent="Widget.M3.Button.Filled">
+        <item name="android:background">@drawable/bg_m3_btn_outlined</item>
+        <item name="android:textColor">@color/md_primary</item>
+    </style>
+
+    <!-- 文字按钮 -->
+    <style name="Widget.M3.Button.Text" parent="Widget.M3.Button.Filled">
+        <item name="android:background">@drawable/bg_m3_btn_text</item>
+        <item name="android:textColor">@color/md_primary</item>
+        <item name="android:paddingLeft">@dimen/md_space_l</item>
+        <item name="android:paddingRight">@dimen/md_space_l</item>
+    </style>
+
+    <!-- 列表项：M3 的 list item，圆角 + 涟漪，整行可点 -->
+    <style name="Widget.M3.ListItem" parent="">
+        <item name="android:background">@drawable/bg_m3_list_item</item>
+        <item name="android:minHeight">@dimen/md_list_item_min_h</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingLeft">@dimen/md_space_l</item>
+        <item name="android:paddingRight">@dimen/md_space_l</item>
+        <item name="android:paddingTop">@dimen/md_space_m</item>
+        <item name="android:paddingBottom">@dimen/md_space_m</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <!-- 输入框容器：M3 outlined text field（16dp 圆角，描边用 outline） -->
+    <style name="Widget.M3.Field" parent="">
+        <item name="android:background">@drawable/bg_m3_field</item>
+        <item name="android:paddingLeft">@dimen/md_space_l</item>
+        <item name="android:paddingRight">@dimen/md_space_l</item>
+        <item name="android:minHeight">@dimen/md_field_height</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+</resources>

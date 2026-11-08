@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 涟漪颜色。M3 的涟漪是「前景色 12%」，不是黑色 20% —— 后者在深色主题上会糊成一片。 -->
+<resources>
+    <color name="md_ripple">#1F00696E</color>
+</resources>

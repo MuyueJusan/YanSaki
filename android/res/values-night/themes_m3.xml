@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- M3 Expressive 主题（深色）：只有状态栏那两条要反过来 -->
+<resources>
+    <style name="Theme.YS.Expressive" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/md_surface</item>
+        <item name="android:statusBarColor">@color/md_surface</item>
+        <item name="android:navigationBarColor">@color/md_surface</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+
+        <item name="android:colorAccent">@color/md_primary</item>
+        <item name="android:colorControlActivated">@color/md_primary</item>
+        <item name="android:colorControlHighlight">@color/md_ripple</item>
+        <item name="android:colorPrimary">@color/md_primary</item>
+        <item name="android:textColorPrimary">@color/md_on_surface</item>
+        <item name="android:textColorSecondary">@color/md_on_surface_variant</item>
+        <item name="android:textColorHighlight">@color/md_primary_container</item>
+    </style>
+</resources>

@@ -352,6 +352,43 @@ if 'classes.dex' in names:
     chk(b'onBackPressed' in strs,
         'dex 字符串表里有恰好叫 onBackPressed 的方法名（⚠ 弱一档：v1.3 也有，只证明 override 没被删）')
 
+    # ---- v1.5：新界面（Material 3 Expressive，APK 专属） ----
+    # 这一节回答三件事：
+    #   ① 原生界面**真的编进 dex 了**（不是「源码在仓库里」——那是两回事）；
+    #   ② 两段注入脚本装进去了、而且是仓库里那一份；
+    #   ③ **注入点的锚点还在产品里**（产品改名 ⇒ 按钮静默消失，没有任何一层会报）。
+    print('   --- 新界面（M3 Expressive，APK 专属）---')
+    man = z.read('AndroidManifest.xml')
+    # ⚠ 二进制 XML 的字符串池可能是 UTF-8 也可能是 UTF-16，两种都认；
+    #   两种都不中才红 —— 这比「只认一种」稳，也不是永真（两种都不中就是没有）。
+    chk('NativeShellActivity'.encode('utf-16-le') in man
+        or b'NativeShellActivity' in man,
+        '清单里声明了 NativeShellActivity（不是只写了 Java 类）')
+    for desc in (b'Ltop/yansaki/shed/nativeui/NativeShellActivity;',
+                 b'Ltop/yansaki/shed/nativeui/M3;',
+                 b'Ltop/yansaki/shed/nativeui/Store;'):
+        chk(desc in strs, 'dex 字符串表里有类型描述符 %s' % desc.decode())
+    for nm in (b'openNativeUi', b'storeSync', b'storePut', b'storeRemove', b'storePending'):
+        chk(nm in strs, 'dex 字符串表里有恰好叫 %s 的符号（桥接方法）' % nm.decode())
+
+    for asset_name, src_name in (('assets/ys-store-shim.js', 'store-shim.js'),
+                                 ('assets/ys-native-entry.js', 'native-entry.js')):
+        chk(asset_name in names, 'APK 里有 %s' % asset_name)
+        sp = os.path.join(os.path.dirname(shim_path), src_name)
+        if asset_name in names and os.path.exists(sp):
+            a = z.read(asset_name)
+            b = open(sp, 'rb').read()
+            chk(a == b, '%s 与仓库源文件逐字节一致 (%d 字节)' % (src_name, len(b)))
+
+    # ⚠⚠ 反漂移（这一条最容易被人当成多余）：入口按钮靠下面三个锚点插进左上菜单。
+    #   产品哪天把 `#mobile-nav` / `.mobile-nav-box` 改名，或者把 closeMobileNav 删了，
+    #   注入脚本会走 `if (!box) return;` **静默退出** —— 表现是「APK 里没有新界面入口」，
+    #   而 build / dex / 签名 全绿，没人会想到是这里。
+    if html is not None:
+        chk(b'id="mobile-nav"' in html, '锚点：#mobile-nav 还在页面里')
+        chk(b'mobile-nav-box' in html, '锚点：.mobile-nav-box 还在页面里')
+        chk(b'function closeMobileNav' in html, '锚点：closeMobileNav() 还在页面里')
+
 # ---- zip 结构：本地文件头里的名字必须与中央目录里的名字逐字节一致 ----
 # ⚠⚠ 这条不是吹毛求疵，是**本轮花了很久才查清的一个假警报的判据**。
 #   aapt2 在 Windows 上给**带子目录的资产**写本地文件头(LFH)时，路径用的是平台分隔符 `\`，
