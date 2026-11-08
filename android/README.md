@@ -59,6 +59,7 @@ APK **不进仓库**（是生成物），挂在这个分支对应的 **Release**
 
 | tag | commit | 附件 | 说明 |
 |---|---|---|---|
+| [`apk-v1.8`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.8) | `见 release` | `YanSakiShed-1.8.apk` 2 669 668 字节<br />sha1 `2b6a66e5e2be758d6ea38ff1d5cba8cd69606fcb` | **「接口」从底部导航挪进「设置」当二级页**（用户要求）。底部导航回到 3 项：对话 / 时钟 / 设置。设置页多一行「接口配置」（带 `服务商 · 模型` 摘要），点进去顶栏出现返回箭头、底部导航藏起来、返回键先退二级页。⚠ 网页侧仍然一个字节没动 |
 | [`apk-v1.7`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.7) | `cdc41b5` | `YanSakiShed-1.7.apk` 2 665 572 字节<br />sha1 `266541d253a25d4d6ba0e31e4451bbd27bba2d45` | **AI 对话原生化**：气泡 / 流式出字 / 停止 / 会话列表（新建、切换、重命名、清空、删除）。底部导航 3 项 → **4 项**，「对话」排第一并作为默认落点。⚠ 会话与网页**共用 `aiChatSessions`**，两边能接着聊。⚠ 提示词只发「第一段 + 系统提示词 + `{{user}}` + 会话历史」，酒馆模式 / 世界书留在旧界面。⚠ 网页侧仍然一个字节没动 |
 | [`apk-v1.6`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.6) | `a325df6` | `YanSakiShed-1.6.apk` 2 640 838 字节<br />sha1 `772fe8186001f5c2b9f63b8ee45761db4b9cecc3` | **新增 Material 3 Expressive 原生界面**（`nativeui` 包）：入口在网页左上那个下拉菜单里多出来的「✨ 新界面」。已原生：时钟 / API 全局配置 / 设置；其余功能在「设置」页有「用旧界面打开」入口。⚠ **网页侧一个字节都没动**（`assets/index.html` 的 sha1 与 v1.5 相同），所以这套设计天然只在 APK 出现 |
 | [`apk-v1.5`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.5) | `cd0e56a` | `YanSakiShed-1.5.apk` 2 586 679 字节<br />sha1 `02980fcbfa4a2251ad01d92ee66085df7dea481c` | **产品侧两轮改动打进来的第一版**：人设生成器的模板库（切换 / 命名 / 另存 / 改名 / 删除）+ 内置模板扩成四份（默认 / 精简人设 / fate人设 / 另一个模板，逐字照抄）。封装层 `android/` **一行未改**，变的只有内嵌页面（sha1 `7dddd8c9…`）。versionCode 3 → 4，签名身份不变 ⇒ 装过 1.3 / 1.4 的**可直接覆盖安装** |
@@ -292,11 +293,22 @@ ERROR … Error during a `trash` operation: Unknown { description: "Some operati
 
 ```
 NativeShellActivity（scaffold）
-├── 大标题顶栏：kicker(labelMedium/primary) + 标题(headlineMedium)
+├── 大标题顶栏：kicker(labelMedium/primary) + 标题(headlineMedium) [+ 返回箭头（二级页时）]
 ├── 内容区：Screen.build() 一次，之后只 refresh()   ← ⚠ 见下
-└── 底部导航：4 项 + **药丸指示器**（bg_m3_nav_indicator）
-    对话 / 时钟 / 接口 / 设置  ← 「对话」排第一并作为默认落点
+└── 底部导航：3 项 + **药丸指示器**（bg_m3_nav_indicator）
+    对话 / 时钟 / 设置  ← 「对话」排第一并作为默认落点
 ```
+
+### 二级页（`openDetail`）
+
+「设置 → 接口配置」是**二级页**，不是选项卡：进去之后**藏掉底部导航**、顶栏出现返回箭头、
+返回键先退二级页。⚠ 留着导航条会让人以为那是并列的一项，而且选中态没有哪一项是对的。
+
+⚠ 不用 `startActivity`：二级页要复用同一套 scaffold 与动效，另起一个 Activity 会闪一下，
+返回时状态全丢。
+
+⚠ `select()` 里有一处必须留意：**从二级页回来时，哪怕点的还是原来那一项，也要重渲染**
+（`if (idx == current) return` 那条捷径会把内容区留在二级页上）。
 
 ⚠ 底部导航是手搓的：框架里没有 `BottomNavigationView`（那是 Material Components 的）。
 选中态**三件事一起变**：指示器出现、图标换 `onSecondaryContainer`、文字换 `onSurface` ——
@@ -327,7 +339,7 @@ Key、切去「设置」看一眼再切回来，填的东西就没了 —— 而
 |---|---|
 | **对话** | AI 聊天：气泡 / 流式出字 / 停止 / 会话列表（新建、切换、重命名、清空、删除）。⚠ **会话与网页共用 `aiChatSessions`**，两边能接着聊。提示词只发「第一段 + 系统提示词 + `{{user}}` 宏 + 会话历史」—— 酒馆模式 / 世界书 / 预设顺序**不在这一版** |
 | **时钟** | 大时钟 + 世界时间。`TimeZone` + `SimpleDateFormat`，不手算偏移（手算会在夏令时那两周错一小时） |
-| **接口** | 就是网页「🔌 API 全局配置」那一份（键 `apiGlobalCfg`）。⚠ 只改本页认识的字段，其余原样保留 |
+| **接口** | **二级页**（设置 → 接口配置，v1.8 起不再占底部导航）。就是网页「🔌 API 全局配置」那一份（键 `apiGlobalCfg`）。⚠ 只改本页认识的字段，其余原样保留 |
 | **设置** | 版本 / 镜像条目数 / 外观说明 / **「用旧界面打开」入口** |
 
 还没迁的功能**明写在设置页**，点一下跳到网页对应入口（`mobileOpenSt()` / `openCatGame()`）。

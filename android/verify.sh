@@ -390,6 +390,15 @@ if 'classes.dex' in names:
             % (marker.decode(), what))
     chk(b'aiChatSessions' in strs,
         'dex 里有 aiChatSessions（会话与网页共用同一个键，不是自己另存一份）')
+
+    # ---- v1.8：接口挪进设置当二级页 ----
+    # ⚠ 判据是「二级页那套机制真的编进去了」（openDetail / closeDetail / onBackPressed）。
+    #   底部导航是几项、哪一项叫什么，在字节上看不出来 —— 那部分只能靠人看，别在这里假装验过。
+    print('   --- 二级页（接口挪进设置）---')
+    for nm in (b'openDetail', b'closeDetail'):
+        chk(nm in strs, 'dex 字符串表里有恰好叫 %s 的符号（二级页机制）' % nm.decode())
+    chk(b'Ltop/yansaki/shed/nativeui/ApiScreen;' in strs,
+        'ApiScreen 还在（挪进设置 ≠ 删掉）')
     # ⚠ 反漂移：会话结构是照 js/333b 抄的，网页哪天改了键名这里必须跟着红。
     if html is not None:
         chk(b"AI_SESS_KEY = 'aiChatSessions'" in html,

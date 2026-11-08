@@ -27,6 +27,9 @@
     <string name="m3_api_note">这份配置就是网页版「🔌 API 全局配置」的那一份（同一个键 apiGlobalCfg），改完两边一致。</string>
 
     <string name="m3_set_section_about">关于</string>
+    <string name="m3_set_section_api">接口</string>
+    <string name="m3_set_api_row">接口配置</string>
+    <string name="m3_set_api_none">还没配</string>
     <string name="m3_set_version">版本</string>
     <string name="m3_set_mirror">本地镜像条目</string>
     <string name="m3_set_section_legacy">还没迁过来的功能</string>

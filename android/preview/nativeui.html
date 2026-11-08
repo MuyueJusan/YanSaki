@@ -76,6 +76,11 @@
 
   /* ---------- 大标题顶栏 ---------- */
   .appbar{padding:6px 22px 10px;flex:0 0 auto}
+  .kickerrow{display:flex;align-items:center;gap:6px}
+  .backbtn{
+    width:40px;height:40px;margin-left:-8px;display:flex;align-items:center;justify-content:center;
+    font-size:22px;color:var(--primary);border-radius:999px;
+  }
   .kicker{
     font-size:12px;letter-spacing:.12em;text-transform:uppercase;
     color:var(--primary);font-weight:500;
@@ -234,8 +239,7 @@
   <div class="tabs">
     <button data-tab="0" class="on">对话</button>
     <button data-tab="1">时钟</button>
-    <button data-tab="2">接口</button>
-    <button data-tab="3">设置</button>
+    <button data-tab="2">设置</button>
   </div>
   <button class="ghost" id="theme">切深色</button>
 </div>
@@ -245,7 +249,10 @@
     <div class="status"><span>15:04</span><span>▮▮▮ 5G ▮</span></div>
 
     <div class="appbar">
-      <div class="kicker" id="kicker">AI 对话</div>
+      <div class="kickerrow">
+        <div class="backbtn hidden" id="backbtn">←</div>
+        <div class="kicker" id="kicker">AI 对话</div>
+      </div>
       <div class="title" id="ptitle">对话</div>
     </div>
 
@@ -293,6 +300,42 @@
     </div>
 
     <div class="content hidden" id="pane2">
+      <div class="section">接口</div>
+      <div class="card" style="padding:8px">
+        <div class="item" id="openapi" style="display:flex;align-items:center;gap:12px">
+          <div style="flex:1">
+            <div>接口配置</div>
+            <div class="body-m" style="font-size:12px;margin-top:2px">openai · gpt-4o-mini</div>
+          </div>
+          <div style="color:var(--on-surface-variant);font-size:20px">›</div>
+        </div>
+      </div>
+
+      <div class="section">关于</div>
+      <div class="card">
+        <div class="row"><span>版本</span><span>1.6</span></div>
+        <div class="divider"></div>
+        <div class="row"><span>本地镜像条目</span><span>37</span></div>
+      </div>
+
+      <div class="section">外观</div>
+      <div class="card">
+        <div class="body-m">新界面用 Material 3 Expressive 的色板；网页版有它自己的一整套皮肤，两边互不影响。</div>
+      </div>
+
+      <div class="section">还没迁过来的功能</div>
+      <div class="hint">下面这些仍然在网页界面里，点一下直接跳过去。迁完一个就删一条。</div>
+      <div class="card" style="padding:8px">
+        <div class="item">🤖 AI 对话</div>
+        <div class="item">🃏 角色卡编写器</div>
+        <div class="item">🕹 街机小游戏</div>
+      </div>
+
+      <div class="btn tonal">打开完整旧界面</div>
+    </div>
+
+    <!-- 二级页：从「设置 → 接口配置」点进来。⚠ 藏掉底部导航、顶栏出现返回箭头。 -->
+    <div class="content hidden" id="pane-api">
       <div class="section">连接</div>
       <div class="card">
         <div class="label-m">服务商</div>
@@ -337,35 +380,10 @@
       <div class="hint">这份配置就是网页版「🔌 API 全局配置」的那一份（同一个键 apiGlobalCfg），改完两边一致。</div>
     </div>
 
-    <div class="content hidden" id="pane3">
-      <div class="section">关于</div>
-      <div class="card">
-        <div class="row"><span>版本</span><span>1.6</span></div>
-        <div class="divider"></div>
-        <div class="row"><span>本地镜像条目</span><span>37</span></div>
-      </div>
-
-      <div class="section">外观</div>
-      <div class="card">
-        <div class="body-m">新界面用 Material 3 Expressive 的色板；网页版有它自己的一整套皮肤，两边互不影响。</div>
-      </div>
-
-      <div class="section">还没迁过来的功能</div>
-      <div class="hint">下面这些仍然在网页界面里，点一下直接跳过去。迁完一个就删一条。</div>
-      <div class="card" style="padding:8px">
-        <div class="item">🤖 AI 对话</div>
-        <div class="item">🃏 角色卡编写器</div>
-        <div class="item">🕹 街机小游戏</div>
-      </div>
-
-      <div class="btn tonal">打开完整旧界面</div>
-    </div>
-
     <div class="navbar">
       <div class="navitem on" data-nav="0"><div class="indicator">💬</div><div class="nm">对话</div></div>
       <div class="navitem" data-nav="1"><div class="indicator">🕒</div><div class="nm">时钟</div></div>
-      <div class="navitem" data-nav="2"><div class="indicator">🔌</div><div class="nm">接口</div></div>
-      <div class="navitem" data-nav="3"><div class="indicator">⚙️</div><div class="nm">设置</div></div>
+      <div class="navitem" data-nav="2"><div class="indicator">⚙️</div><div class="nm">设置</div></div>
     </div>
   </div>
 </div>
@@ -374,8 +392,8 @@
   var ZONES = [
     ['东京', 9], ['纽约', -5], ['伦敦', 0], ['洛杉矶', -8]
   ];
-  var TITLES = ['对话', '时钟', '接口', '设置'];
-  var KICKERS = ['AI 对话', 'Material 3 · Expressive', 'API 全局配置', '关于与入口'];
+  var TITLES = ['对话', '时钟', '设置'];
+  var KICKERS = ['AI 对话', 'Material 3 · Expressive', '关于与入口'];
   var picked = -1;
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -398,7 +416,8 @@
   }
 
   function showTab(i) {
-    for (var k = 0; k < 4; k++) {
+    closeApi();
+    for (var k = 0; k < 3; k++) {
       document.getElementById('pane' + k).classList.toggle('hidden', k !== i);
       document.querySelector('[data-nav="' + k + '"]').classList.toggle('on', k === i);
       document.querySelector('[data-tab="' + k + '"]').classList.toggle('on', k === i);
@@ -427,6 +446,33 @@
     document.body.classList.toggle('dark');
     this.textContent = document.body.classList.contains('dark') ? '切浅色' : '切深色';
   });
+
+  // ---------- 二级页：设置 → 接口配置 ----------
+  // ⚠ 二级页会藏掉底部导航并显示返回箭头 —— 它是「进到设置里面」，不是并列的选项卡。
+  function openApi() {
+    document.getElementById('pane2').classList.add('hidden');
+    document.getElementById('pane-api').classList.remove('hidden');
+    document.querySelector('.navbar').style.display = 'none';
+    document.getElementById('backbtn').classList.remove('hidden');
+    document.getElementById('ptitle').textContent = '接口';
+    document.getElementById('kicker').textContent = 'API 全局配置';
+    document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.remove('on'); });
+  }
+
+  function closeApi() {
+    var api = document.getElementById('pane-api');
+    if (!api || api.classList.contains('hidden')) return;
+    api.classList.add('hidden');
+    document.querySelector('.navbar').style.display = '';
+    document.getElementById('backbtn').classList.add('hidden');
+    document.getElementById('ptitle').textContent = TITLES[2];
+    document.getElementById('kicker').textContent = KICKERS[2];
+    document.querySelector('[data-tab="2"]').classList.add('on');
+    document.getElementById('pane2').classList.remove('hidden');
+  }
+
+  document.getElementById('openapi').addEventListener('click', openApi);
+  document.getElementById('backbtn').addEventListener('click', closeApi);
 
   renderClock();
   setInterval(renderClock, 1000);

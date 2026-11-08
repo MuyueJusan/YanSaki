@@ -11,7 +11,7 @@
 
   ⚠ targetSdk 34：Play 商店的硬要求，且 34 会强制 `android:exported` 显式声明。
 
-  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.7` ⇔ versionName `1.7`。
+  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.8` ⇔ versionName `1.8`。
     versionCode 只要求**单调递增**，装新包时系统靠它判断是升级。
     ⚠ 2026-09-30「清空重来」：versionCode 由 2 退回 1、versionName 由 1.2 退回 1.0
       （用户指定「回归到 1.0」），并把旧的 v1.0 / v1.1 / v1.2 三个 release 与 tag 一并删除
@@ -50,6 +50,12 @@
          **不走 AiProxy**：HttpURLConnection 没有 CORS 这回事。
       ⚠ 网页侧仍然一个字节没动。
 
+    ⚠ v1.8（2026-11-08）：**「接口」从底部导航挪进「设置」当二级页**（用户要求）。
+      底部导航回到 3 项：对话 / 时钟 / 设置。设置页多了「接口配置」一行（带 服务商 · 模型 摘要），
+      点进去是二级页：顶栏出现返回箭头、底部导航藏起来、返回键先退二级页。
+      ⚠ 为什么要改 `NativeShellActivity` 而不是另起 Activity：二级页要复用同一套 scaffold
+         与动效；另起一个 Activity 会闪一下，返回时状态全丢。
+
   ⚠⚠ **从这一版起改用真密钥签名**（`keystore/YanSaki-13.jks`，别名 `yansaki-13`，
     口令在同目录被 gitignore 的 `signing.env`）。
     签名身份 = App 的身份 ⇒ **证书 SHA-256 与历史上那些 debug 签名的包不同**
@@ -60,8 +66,8 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="top.yansaki.shed"
-    android:versionCode="6"
-    android:versionName="1.7">
+    android:versionCode="7"
+    android:versionName="1.8">
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
 

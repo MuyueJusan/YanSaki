@@ -42,14 +42,21 @@ public class NativeShellActivity extends Activity {
 
     private TextView kickerView;
     private TextView titleView;
+    private TextView backBtn;
     private FrameLayout content;
     private LinearLayout navbar;
+    /** 底部导航那一整条（含顶上的分隔线）。二级页要把它藏起来。 */
+    private View navWrap;
 
     private Screen[] screens;
-    private final NavItem[] items = new NavItem[4];
+    private final NavItem[] items = new NavItem[3];
     /** 每一屏建好的视图，只建一次。⚠ 见 {@link #select} 里的注释。 */
-    private final View[] built = new View[4];
+    private final View[] built = new View[3];
     private int current = -1;
+
+    /** 二级页（从某一屏里点进去的，比如「设置 → 接口配置」）。null = 在正常选项卡里。 */
+    private Screen detail;
+    private View detailView;
 
     /** 导航条上的一项。 */
     private static final class NavItem {
@@ -66,7 +73,6 @@ public class NativeShellActivity extends Activity {
         screens = new Screen[]{
                 new ChatScreen(this),
                 new ClockScreen(this),
-                new ApiScreen(this),
                 new SettingsScreen(this)
         };
 
@@ -97,11 +103,36 @@ public class NativeShellActivity extends Activity {
         int l = M3.dp(this, 22), t = M3.dp(this, 14), r = M3.dp(this, 22), bt = M3.dp(this, 10);
         bar.setPadding(l, t, r, bt);
 
+        // ⚠ 返回按钮和 kicker 同一行：进二级页时才出现（GONE），
+        //   正常选项卡里它不占位置 —— 否则每屏标题都会莫名其妙往右缩一截。
+        LinearLayout topRow = new LinearLayout(this);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        backBtn = M3.text(this, "←", R.style.TextAppearance_M3_TitleLarge);
+        backBtn.setTextColor(M3.color(this, R.color.md_primary));
+        backBtn.setGravity(Gravity.CENTER);
+        backBtn.setClickable(true);
+        backBtn.setFocusable(true);
+        backBtn.setVisibility(View.GONE);
+        backBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                closeDetail();
+            }
+        });
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                M3.dp(this, 40), M3.dp(this, 40));
+        blp.rightMargin = M3.dp(this, 6);
+        topRow.addView(backBtn, blp);
+
         kickerView = M3.text(this, "", R.style.TextAppearance_M3_LabelMedium);
         kickerView.setTextColor(M3.color(this, R.color.md_primary));
         kickerView.setLetterSpacing(0.12f);
         kickerView.setAllCaps(true);
-        bar.addView(kickerView);
+        topRow.addView(kickerView, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        bar.addView(topRow);
 
         titleView = M3.text(this, "", R.style.TextAppearance_M3_HeadlineMedium);
         titleView.setPadding(0, M3.dp(this, 2), 0, 0);
@@ -127,11 +158,11 @@ public class NativeShellActivity extends Activity {
         navbar.setGravity(Gravity.CENTER_VERTICAL);
 
         // ⚠ 「对话」排第一并且是默认落点：它是这个屋子用得最多的一屏。
-        String[] icons = {"💬", "🕒", "🔌", "⚙️"};
+        // ⚠ 接口配置**不在这里** —— 它挪进「设置」当二级页了（v1.8）。
+        String[] icons = {"💬", "🕒", "⚙️"};
         String[] labels = {
                 getString(R.string.m3_nav_chat),
                 getString(R.string.m3_nav_clock),
-                getString(R.string.m3_nav_api),
                 getString(R.string.m3_nav_settings)
         };
 
@@ -187,16 +218,45 @@ public class NativeShellActivity extends Activity {
 
         wrap.addView(navbar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        navWrap = wrap;
         return wrap;
     }
 
     // ────────────────────────── 切页 ──────────────────────────
 
     private void select(int idx) {
-        if (idx == current) return;
-        if (current >= 0) screens[current].onLeave();
+        boolean leavingDetail = detail != null;
+        if (leavingDetail) {
+            detail.onLeave();
+            detail = null;
+            detailView = null;
+            navWrap.setVisibility(View.VISIBLE);
+            backBtn.setVisibility(View.GONE);
+        }
+        // ⚠ 从二级页回来时哪怕点的还是原来那一项，也必须重渲染 ——
+        //   否则内容区还停在二级页上（`idx == current` 直接 return 就会这样）。
+        if (idx == current && !leavingDetail) return;
+        if (current >= 0 && current != idx) screens[current].onLeave();
         current = idx;
 
+        updateNav(idx);
+
+        kickerView.setText(screens[idx].kicker() == null ? "" : screens[idx].kicker());
+        titleView.setText(screens[idx].title());
+
+        content.removeAllViews();
+        // ⚠⚠ 视图只建一次，之后复用。
+        //   每次切页都 build() 的话，用户在「接口」页填了一半的 Key、切去「设置」看一眼
+        //   再切回来，填的东西就没了 —— 而且不报错、看着像「本来就没填」。
+        //   （滚动位置同理。）
+        if (built[idx] == null) built[idx] = screens[idx].build();
+        content.addView(built[idx], new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        M3.popIn(content);
+        screens[idx].refresh();
+    }
+
+    private void updateNav(int idx) {
         for (int i = 0; i < items.length; i++) {
             NavItem it = items[i];
             boolean on = i == idx;
@@ -216,20 +276,66 @@ public class NativeShellActivity extends Activity {
                         .start();
             }
         }
+    }
 
-        kickerView.setText(screens[idx].kicker() == null ? "" : screens[idx].kicker());
-        titleView.setText(screens[idx].title());
+    // ────────────────────────── 二级页 ──────────────────────────
+
+    /**
+     * 打开一个二级页（从某一屏里点进去，比如「设置 → 接口配置」）。
+     *
+     * <p>⚠ 二级页会**藏掉底部导航**并显示返回箭头：它是「进到某一屏里面」，
+     * 不是并列的选项卡。留着导航条会让人以为那是个新选项卡，而且选中态没有哪一项是对的。
+     *
+     * <p>⚠ 每次进来都重新 {@code build()}：上次没保存的输入不该带到下一次
+     * （否则「我明明改了、退出再进来还是改后的值，可它没保存」）。
+     */
+    void openDetail(Screen s) {
+        if (s == null) return;
+        if (detail != null) detail.onLeave();
+        if (current >= 0) screens[current].onLeave();
+
+        detail = s;
+        detailView = s.build();
+
+        navWrap.setVisibility(View.GONE);
+        backBtn.setVisibility(View.VISIBLE);
+        kickerView.setText(s.kicker() == null ? "" : s.kicker());
+        titleView.setText(s.title());
 
         content.removeAllViews();
-        // ⚠⚠ 视图只建一次，之后复用。
-        //   每次切页都 build() 的话，用户在「接口」页填了一半的 Key、切去「设置」看一眼
-        //   再切回来，填的东西就没了 —— 而且不报错、看着像「本来就没填」。
-        //   （滚动位置同理。）
-        if (built[idx] == null) built[idx] = screens[idx].build();
-        content.addView(built[idx], new FrameLayout.LayoutParams(
+        content.addView(detailView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         M3.popIn(content);
-        screens[idx].refresh();
+        s.refresh();
+    }
+
+    /** 关掉二级页，回到进来之前那一屏。 */
+    void closeDetail() {
+        if (detail == null) return;
+        detail.onLeave();
+        detail = null;
+        detailView = null;
+        navWrap.setVisibility(View.VISIBLE);
+        backBtn.setVisibility(View.GONE);
+
+        int idx = current;
+        current = -1;          // 强制重渲染，见 select() 里那条注释
+        select(idx);
+    }
+
+    /**
+     * 返回键：二级页里先退二级页，退完再交给系统（也就是退出新界面回网页）。
+     *
+     * <p>⚠ 不覆盖的话，在「接口配置」里按返回会**直接关掉整个新界面**，
+     * 表现是「刚填完一半，一按返回人没了」。
+     */
+    @Override
+    public void onBackPressed() {
+        if (detail != null) {
+            closeDetail();
+            return;
+        }
+        super.onBackPressed();
     }
 
     @Override

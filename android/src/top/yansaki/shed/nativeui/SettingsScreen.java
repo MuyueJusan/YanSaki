@@ -9,6 +9,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import org.json.JSONObject;
+
 import top.yansaki.shed.MainActivity;
 import top.yansaki.shed.R;
 
@@ -25,6 +27,7 @@ public class SettingsScreen implements Screen {
     private final Store store;
 
     private TextView mirrorVal;
+    private TextView apiSummaryView;
 
     public SettingsScreen(Context c) {
         this.ctx = c;
@@ -52,6 +55,15 @@ public class SettingsScreen implements Screen {
         col.setOrientation(LinearLayout.VERTICAL);
         sv.addView(col, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // ── 接口（二级页入口）──
+        // ⚠ v1.8 起「接口」不再占底部导航：它配置一次就不常动，
+        //   占一格导航不值；而「对话 / 时钟 / 设置」是天天用的。
+        col.addView(M3.section(ctx, ctx.getString(R.string.m3_set_section_api)));
+        LinearLayout c0 = M3.card(ctx);
+        c0.setPadding(M3.dp(ctx, 8), M3.dp(ctx, 8), M3.dp(ctx, 8), M3.dp(ctx, 8));
+        c0.addView(apiEntry());
+        col.addView(c0, M3.gap(ctx, 8));
 
         // ── 关于 ──
         col.addView(M3.section(ctx, ctx.getString(R.string.m3_set_section_about)));
@@ -108,6 +120,62 @@ public class SettingsScreen implements Screen {
         return sv;
     }
 
+    /**
+     * 「接口配置」那一行 —— 点进去是二级页（{@link ApiScreen}）。
+     *
+     * <p>⚠ 用 {@code openDetail} 而不是 startActivity：新界面只有一套 scaffold，
+     * 二级页要复用同一个顶栏（带返回箭头）与动效，另起一个 Activity 会闪一下、
+     * 而且返回时状态全丢。
+     */
+    private View apiEntry() {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackgroundResource(R.drawable.bg_m3_list_item);
+        row.setClickable(true);
+        row.setFocusable(true);
+        int p = M3.dp(ctx, 14);
+        row.setPadding(p, p, p, p);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ((NativeShellActivity) ctx).openDetail(new ApiScreen(ctx));
+            }
+        });
+
+        LinearLayout col = new LinearLayout(ctx);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.addView(M3.text(ctx, ctx.getString(R.string.m3_set_api_row),
+                R.style.TextAppearance_M3_BodyLarge));
+        apiSummaryView = M3.text(ctx, "", R.style.TextAppearance_M3_BodySmall);
+        apiSummaryView.setPadding(0, M3.dp(ctx, 2), 0, 0);
+        col.addView(apiSummaryView);
+        row.addView(col, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView chev = M3.text(ctx, "›", R.style.TextAppearance_M3_TitleLarge);
+        chev.setTextColor(M3.color(ctx, R.color.md_on_surface_variant));
+        row.addView(chev);
+        return row;
+    }
+
+    /** 摘要：服务商 · 模型。读不到就写「还没配」，别显示空白让人以为坏了。 */
+    private String apiSummary() {
+        String raw = store.get("apiGlobalCfg", null);
+        if (raw == null) return ctx.getString(R.string.m3_set_api_none);
+        try {
+            JSONObject o = new JSONObject(raw);
+            String prov = o.optString("provider", "");
+            String model = o.optString("model", "");
+            if (prov.length() == 0 && model.length() == 0) {
+                return ctx.getString(R.string.m3_set_api_none);
+            }
+            return prov + (model.length() > 0 ? " · " + model : "");
+        } catch (Exception e) {
+            return ctx.getString(R.string.m3_set_api_none);
+        }
+    }
+
     private View row(String label, String value) {
         TextView v = M3.text(ctx, value, R.style.TextAppearance_M3_TitleMedium);
         return rowWith(label, v);
@@ -154,6 +222,9 @@ public class SettingsScreen implements Screen {
     @Override
     public void refresh() {
         if (mirrorVal != null) mirrorVal.setText(String.valueOf(store.count()));
+        // ⚠ 从「接口配置」退回来时会走到这里 —— 摘要要跟着变，
+        //   否则刚改完服务商、设置页还写着旧的那个。
+        if (apiSummaryView != null) apiSummaryView.setText(apiSummary());
     }
 
     @Override
