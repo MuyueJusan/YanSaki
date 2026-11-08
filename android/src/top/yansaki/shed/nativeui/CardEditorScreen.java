@@ -54,7 +54,8 @@ public class CardEditorScreen implements Screen {
 
     /** 这一版真的做了的。⚠ 加一页就从这里加，别只改 builder。 */
     private static final List<String> NATIVE = Arrays.asList(
-            "home", "name", "spec", "desc", "sys", "meta", "book", "greet", "export");
+            "home", "name", "spec", "desc", "sys", "meta", "book", "greet",
+            "persona", "export");
 
     private final Context ctx;
     private final Store store;
@@ -62,6 +63,7 @@ public class CardEditorScreen implements Screen {
     private JSONObject draft;
     private JSONObject card;
     private BookTab book;
+    private PersonaTab persona;
     private LinearLayout tabRow;
     private FrameLayout content;
     private String tab = "home";
@@ -293,6 +295,7 @@ public class CardEditorScreen implements Screen {
         if ("meta".equals(id)) return buildMeta();
         if ("book".equals(id)) return buildBook();
         if ("greet".equals(id)) return buildGreet();
+        if ("persona".equals(id)) return buildPersona();
         return buildExport();
     }
 
@@ -302,6 +305,22 @@ public class CardEditorScreen implements Screen {
      * <p>⚠ BookTab **只建一次**并留住：它内部有「列表 ⇄ 条目编辑」两级状态，
      * 每次切页重建会把用户正在编辑的那一条踢回列表。
      */
+    /**
+     * 人设生成器页。⚠ 跟 BookTab 一样**只建一次**并留住：它内部有「需求 / 结果」
+     * 这些会话级状态，每次切页重建会把生成结果清掉。
+     */
+    private View buildPersona() {
+        if (persona == null) {
+            persona = new PersonaTab(ctx, card, store, new Runnable() {
+                @Override
+                public void run() {
+                    touch();
+                }
+            });
+        }
+        return persona.build();
+    }
+
     private View buildBook() {
         if (book == null) {
             book = new BookTab(ctx, card, new Runnable() {
@@ -382,8 +401,8 @@ public class CardEditorScreen implements Screen {
             }
         }), M3.gap(ctx, 8));
         col.addView(CardForm.note(ctx,
-                "⚠ 正则 / 酒馆助手 / MVU / 状态栏 / Code / AI 助手 / 人设生成器"
-                        + " 这七页还没搬成原生，点上面那几个选项卡会给你一个「在旧界面打开」的入口。"));
+                "⚠ 正则 / 酒馆助手 / MVU / 状态栏 / Code / AI 助手"
+                        + " 这六页还没搬成原生，点上面那几个选项卡会给你一个「在旧界面打开」的入口。"));
         return h[0];
     }
 
@@ -1062,6 +1081,7 @@ public class CardEditorScreen implements Screen {
     public void onLeave() {
         // ⚠ 离开必须立刻落盘：防抖那 500ms 里切走的话，最后几个字就没了。
         if (saveTask != null) saveH.removeCallbacks(saveTask);
+        if (persona != null) persona.onLeave();
         flush();
     }
 }

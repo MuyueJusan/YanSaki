@@ -435,7 +435,25 @@ if 'classes.dex' in names:
         chk(field in strs, 'dex 里有世界书字段 %s' % field.decode())
     # ⚠ 反漂移：草稿里的键名是照 js/241 抄的
     if html is not None:
-        chk(b'bookEntries' in html, '锚点：页面里仍是 bookEntries（世界书数组的键名）')    # ⚠ 这里**故意没有**「旧的芯片实现已经不在了」这条断言。
+        chk(b'bookEntries' in html, '锚点：页面里仍是 bookEntries（世界书数组的键名）')
+
+    # ---- v1.12：人设生成器 ----
+    # ⚠ 判据落在**存储键**上：模板库的语义全在这四个键里（内置=常量+覆盖、自定义=数组、
+    #   当前选中=id）。抄错一个键，表现是「改了模板、切回来又变回去」，而界面不报错。
+    print('   --- 人设生成器 ---')
+    for desc in (b'Ltop/yansaki/shed/nativeui/PersonaTab;',
+                 b'Ltop/yansaki/shed/nativeui/AiCfg;'):
+        chk(desc in strs, 'dex 字符串表里有类型描述符 %s' % desc.decode())
+    for k in (b'stPersonaTplDefOv', b'stPersonaTpls', b'stPersonaTplId'):
+        chk(k in strs, 'dex 里有模板库的键 %s' % k.decode())
+    # ⚠ 模板正文与系统提示词是**页面推过来**的，Java 里不该有它们的原文
+    for k in (b'__ys_persona_tpls', b'__ys_persona_sys'):
+        chk(k in strs, 'dex 里有桥接键 %s（模板正文由页面推过来）' % k.decode())
+    if html is not None:
+        chk(b'stPersonaTplDefOv' in html,
+            '锚点：页面里仍是 stPersonaTplDefOv（内置模板的覆盖键）')
+        chk(b'function stPersonaSysPrompt' in html,
+            '锚点：页面里仍有 stPersonaSysPrompt（系统提示词由它提供）')    # ⚠ 这里**故意没有**「旧的芯片实现已经不在了」这条断言。
     #   第一版写了 `chk(b'buildChips' not in strs, ...)`，它红了 —— 而产品是对的：
     #   `ClockScreen` 里也有一个 `buildChips()`（时区芯片），完全合法。
     #   **dex 字符串表只存字符串，不带「属于哪个类」** ⇒ 全局搜方法名分不出同名方法。

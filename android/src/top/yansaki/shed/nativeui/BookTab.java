@@ -268,7 +268,7 @@ public class BookTab {
      * 会补默认值，但**默认值可能跟这里想的不一样**（比如 selective 默认是 true）。
      * 写全了才不用去猜。
      */
-    private JSONObject blankEntry() {
+    static JSONObject blankEntry() {
         JSONObject e = new JSONObject();
         try {
             e.put("id", newId());
@@ -319,7 +319,7 @@ public class BookTab {
         return e;
     }
 
-    private String newId() {
+    static String newId() {
         return "e" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
 

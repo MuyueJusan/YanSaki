@@ -63,6 +63,24 @@
         }
     } catch (e) { }
 
+    // 人设生成器的**内置模板正文** + **系统提示词**也一起带过去。
+    // ⚠ 不抄进 Java：那两段加起来快 300 行中文提示词，抄一份就是第二份真相源，
+    //   网页那边改一个字，原生这边就悄悄用旧的了（而且没有任何一层会报）。
+    try {
+        if (typeof ST_PERSONA_TPLS_BUILTIN !== 'undefined' && ST_PERSONA_TPLS_BUILTIN) {
+            dump.__ys_persona_tpls = JSON.stringify(
+                ST_PERSONA_TPLS_BUILTIN.map(function (t) {
+                    return [t.id, t.name, t.body];
+                })
+            );
+        }
+    } catch (e) { }
+    try {
+        if (typeof stPersonaSysPrompt === 'function') {
+            dump.__ys_persona_sys = String(stPersonaSysPrompt() || '');
+        }
+    } catch (e) { }
+
     try { N.storeSync(JSON.stringify(dump)); } catch (e) { }
 
     // ───────── 3. 写穿 ─────────

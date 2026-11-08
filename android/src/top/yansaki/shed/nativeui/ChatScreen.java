@@ -367,46 +367,7 @@ public class ChatScreen implements Screen {
     // ────────────────────────── 发送 ──────────────────────────
 
     private ChatApi.Cfg cfg() {
-        JSONObject g = parse(store.get("apiGlobalCfg"));
-        JSONObject ai = parse(store.get("aiChatConfig"));
-
-        boolean follow = true;
-        JSONObject own = null;
-        if (ai != null) {
-            follow = !(ai.has("followGlobal") && !ai.optBoolean("followGlobal", true));
-            own = ai.optJSONObject("own");
-        }
-        JSONObject eff = (follow || own == null) ? g : own;
-        if (eff == null) eff = new JSONObject();
-
-        ChatApi.Cfg c = new ChatApi.Cfg();
-        c.baseUrl = eff.optString("baseUrl", "");
-        c.apiKey = eff.optString("apiKey", "");
-        c.model = eff.optString("model", "");
-        c.stream = eff.optBoolean("stream", true);
-        c.temperature = eff.optDouble("temperature", 0.7);
-        c.maxTokens = eff.optInt("maxTokens", 1024);
-        c.proto = protoOf(eff.optString("provider", "openai"));
-        return c;
-    }
-
-    /** 从页面推过来的服务商表里查协议；查不到按 openai 兼容处理。 */
-    private String protoOf(String provider) {
-        String raw = store.get("__ys_providers", null);
-        if (raw == null) return "openai";
-        try {
-            JSONArray a = new JSONArray(raw);
-            for (int i = 0; i < a.length(); i++) {
-                JSONArray e = a.optJSONArray(i);
-                if (e == null || e.length() < 2) continue;
-                if (provider.equals(e.optString(0))) {
-                    String proto = e.length() > 3 ? e.optString(3, "openai") : "openai";
-                    return proto.length() == 0 ? "openai" : proto;
-                }
-            }
-        } catch (Exception ignore) {
-        }
-        return "openai";
+        return AiCfg.resolve(store);
     }
 
     /** 系统提示词 = 第一段 + 系统提示词，再把 {{user}} 换掉。 */
