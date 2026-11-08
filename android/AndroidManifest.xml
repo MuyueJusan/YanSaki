@@ -11,7 +11,7 @@
 
   ⚠ targetSdk 34：Play 商店的硬要求，且 34 会强制 `android:exported` 显式声明。
 
-  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.10` ⇔ versionName `1.10`。
+  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.11` ⇔ versionName `1.11`。
     versionCode 只要求**单调递增**，装新包时系统靠它判断是升级。
     ⚠ 2026-09-30「清空重来」：versionCode 由 2 退回 1、versionName 由 1.2 退回 1.0
       （用户指定「回归到 1.0」），并把旧的 v1.0 / v1.1 / v1.2 三个 release 与 tag 一并删除
@@ -66,8 +66,8 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="top.yansaki.shed"
-    android:versionCode="9"
-    android:versionName="1.10">
+    android:versionCode="10"
+    android:versionName="1.11">
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
 

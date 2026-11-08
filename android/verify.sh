@@ -422,7 +422,20 @@ if 'classes.dex' in names:
     chk(b'Landroid/widget/PopupMenu;' in strs, 'dex 里有 PopupMenu（下拉真的用了）')
     chk(b'showProviderMenu' in strs, 'dex 里有恰好叫 showProviderMenu 的方法')
     chk(b'pickProvider' in strs, 'dex 里有恰好叫 pickProvider 的方法（选中回调）')
-    # ⚠ 这里**故意没有**「旧的芯片实现已经不在了」这条断言。
+
+    # ---- v1.11：世界书 ----
+    # ⚠ 选的是**导出侧的字段名**（secondary_keys / insertion_order / before_char）：
+    #   它们只可能来自「照 ST 规格写的映射」。拼错一个，导出的卡在世界书这块就少东西，
+    #   而界面上完全看不出来。
+    print('   --- 世界书 ---')
+    chk(b'Ltop/yansaki/shed/nativeui/BookTab;' in strs,
+        'dex 里有 BookTab（世界书页真的编进去了）')
+    for field in (b'secondary_keys', b'insertion_order', b'before_char', b'after_char',
+                  b'character_filter', b'delayUntilRecursion'):
+        chk(field in strs, 'dex 里有世界书字段 %s' % field.decode())
+    # ⚠ 反漂移：草稿里的键名是照 js/241 抄的
+    if html is not None:
+        chk(b'bookEntries' in html, '锚点：页面里仍是 bookEntries（世界书数组的键名）')    # ⚠ 这里**故意没有**「旧的芯片实现已经不在了」这条断言。
     #   第一版写了 `chk(b'buildChips' not in strs, ...)`，它红了 —— 而产品是对的：
     #   `ClockScreen` 里也有一个 `buildChips()`（时区芯片），完全合法。
     #   **dex 字符串表只存字符串，不带「属于哪个类」** ⇒ 全局搜方法名分不出同名方法。

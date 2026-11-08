@@ -54,13 +54,14 @@ public class CardEditorScreen implements Screen {
 
     /** 这一版真的做了的。⚠ 加一页就从这里加，别只改 builder。 */
     private static final List<String> NATIVE = Arrays.asList(
-            "home", "name", "spec", "desc", "sys", "meta", "greet", "export");
+            "home", "name", "spec", "desc", "sys", "meta", "book", "greet", "export");
 
     private final Context ctx;
     private final Store store;
 
     private JSONObject draft;
     private JSONObject card;
+    private BookTab book;
     private LinearLayout tabRow;
     private FrameLayout content;
     private String tab = "home";
@@ -290,8 +291,27 @@ public class CardEditorScreen implements Screen {
         if ("desc".equals(id)) return buildDesc();
         if ("sys".equals(id)) return buildSys();
         if ("meta".equals(id)) return buildMeta();
+        if ("book".equals(id)) return buildBook();
         if ("greet".equals(id)) return buildGreet();
         return buildExport();
+    }
+
+    /**
+     * 世界书页。
+     *
+     * <p>⚠ BookTab **只建一次**并留住：它内部有「列表 ⇄ 条目编辑」两级状态，
+     * 每次切页重建会把用户正在编辑的那一条踢回列表。
+     */
+    private View buildBook() {
+        if (book == null) {
+            book = new BookTab(ctx, card, new Runnable() {
+                @Override
+                public void run() {
+                    touch();
+                }
+            });
+        }
+        return book.build();
     }
 
     /** 造一个「已经装在 ScrollView 里」的列。 */
@@ -362,8 +382,8 @@ public class CardEditorScreen implements Screen {
             }
         }), M3.gap(ctx, 8));
         col.addView(CardForm.note(ctx,
-                "⚠ 世界书 / 正则 / 酒馆助手 / MVU / 状态栏 / Code / AI 助手 / 人设生成器"
-                        + " 这八页还没搬成原生，点上面那几个选项卡会给你一个「在旧界面打开」的入口。"));
+                "⚠ 正则 / 酒馆助手 / MVU / 状态栏 / Code / AI 助手 / 人设生成器"
+                        + " 这七页还没搬成原生，点上面那几个选项卡会给你一个「在旧界面打开」的入口。"));
         return h[0];
     }
 
@@ -767,8 +787,8 @@ public class CardEditorScreen implements Screen {
         }), M3.gap(ctx, 12));
 
         col.addView(CardForm.note(ctx,
-                "⚠ 这一版的导出只覆盖核心字段：世界书（character_book）与 extensions 里的"
-                        + "正则 / 酒馆助手 / MVU 是从导入时留的原始 JSON 原样带过去的，"
+                "⚠ 这一版的导出只覆盖核心字段：世界书按原生这边编辑的条目重新拼（书级字段从"
+                        + "原始 JSON 带过来），extensions 里的正则 / 酒馆助手 / MVU 仍是原样带过去的，"
                         + "**在原生里改不了它们**。要完整导出（含 PNG 内嵌）请用旧界面。"));
         col.addView(CardForm.button(ctx, "用旧界面导出", 2, new View.OnClickListener() {
             @Override
@@ -853,9 +873,30 @@ public class CardEditorScreen implements Screen {
             }
             data.put("extensions", ext);
 
-            // 世界书：原样带过去（这一版不改它）
-            if (rawData != null && rawData.optJSONObject("character_book") != null) {
-                data.put("character_book", rawData.optJSONObject("character_book"));
+            // 世界书：有条目就按条目重新拼（v1.11 起原生能改它了）。
+            // ⚠ 起点仍然是 raw 里那份 character_book —— 书级字段（scan_depth /
+            //   token_budget / recursive_scanning）和 extensions 要原样带过去。
+            JSONArray entries = card.optJSONArray("bookEntries");
+            JSONObject rawBook = rawData == null ? null : rawData.optJSONObject("character_book");
+            if (entries != null && entries.length() > 0) {
+                JSONObject book = rawBook != null
+                        ? new JSONObject(rawBook.toString()) : new JSONObject();
+                String bn = s("bookName");
+                if (bn.length() == 0) bn = name + " 的世界书";
+                book.put("name", bn);
+                book.put("description", s("bookDescription"));
+                if (book.optJSONObject("extensions") == null) {
+                    book.put("extensions", new JSONObject());
+                }
+                JSONArray arr = new JSONArray();
+                for (int i = 0; i < entries.length(); i++) {
+                    JSONObject e = entries.optJSONObject(i);
+                    if (e != null) arr.put(entryToBookJson(e));
+                }
+                book.put("entries", arr);
+                data.put("character_book", book);
+            } else if (rawBook != null) {
+                data.put("character_book", rawBook);
             }
 
             JSONObject out = new JSONObject();
@@ -875,6 +916,97 @@ public class CardEditorScreen implements Screen {
         } catch (Exception e) {
             return "拼导出 JSON 失败：" + e;
         }
+    }
+
+    /**
+     * 一条世界书条目 → {@code character_book.entries[i]}。照 {@code stEntryToBookJson}（js/242）。
+     *
+     * <p>⚠ ST 的条目字段**在四个地方都可能出现**（顶层 camel / 顶层 snake /
+     * extensions.camel / extensions.snake），所以原实现把同一批值同时写进
+     * camelCase 和 snake_case 两份 —— 这里照做，否则某些前端只认其中一种。
+     *
+     * <p>⚠ {@code position} 只区分 before_char / after_char 两种字符串，具体第几档
+     * 由 {@code extensions.position} 里的**数字**决定（0/1/4…）。
+     */
+    private JSONObject entryToBookJson(JSONObject e) {
+        JSONObject out = new JSONObject();
+        try {
+            String[] camelKeys = {
+                    "position", "depth", "role", "probability", "useProbability",
+                    "selectiveLogic", "caseSensitive", "matchWholeWords", "useGroupScoring",
+                    "excludeRecursion", "preventRecursion", "delayUntilRecursion",
+                    "scanDepth", "group", "groupWeight", "groupOverride", "outletName",
+                    "matchPersonaDescription", "matchCharacterDescription",
+                    "matchCharacterPersonality", "matchCharacterDepthPrompt",
+                    "matchScenario", "matchCreatorNotes"
+            };
+            JSONObject ext = new JSONObject();
+            for (String k : camelKeys) {
+                if (!e.has(k)) continue;
+                Object v = e.opt(k);
+                ext.put(k, v);
+                String snake = camelToSnake(k);
+                if (!snake.equals(k)) ext.put(snake, v);
+            }
+            ext.put("disable", !e.optBoolean("enabled", true));
+            ext.put("triggers", e.optJSONArray("triggers") == null
+                    ? new JSONArray() : e.optJSONArray("triggers"));
+            // ⚠ sticky / cooldown / delay 在草稿里是 null（= 没设），导出时写 0（ST 的默认）
+            ext.put("sticky", e.isNull("sticky") ? 0 : e.optInt("sticky", 0));
+            ext.put("cooldown", e.isNull("cooldown") ? 0 : e.optInt("cooldown", 0));
+            ext.put("delay", e.isNull("delay") ? 0 : e.optInt("delay", 0));
+            ext.put("useRegex", e.optBoolean("useRegex"));
+            ext.put("use_regex", e.optBoolean("useRegex"));
+
+            JSONObject cf = e.optJSONObject("characterFilter");
+            JSONObject filter = new JSONObject();
+            filter.put("isExclude", cf != null && cf.optBoolean("isExclude"));
+            filter.put("names", cf == null || cf.optJSONArray("names") == null
+                    ? new JSONArray() : cf.optJSONArray("names"));
+            filter.put("tags", cf == null || cf.optJSONArray("tags") == null
+                    ? new JSONArray() : cf.optJSONArray("tags"));
+            ext.put("characterFilter", filter);
+            ext.put("character_filter", filter);
+            ext.put("vectorized", false);
+            ext.put("addMemo", true);
+
+            int pos = e.optInt("position", 0);
+            int order = e.optInt("order", 100);
+            String comment = e.optString("comment", "");
+
+            out.put("keys", e.optJSONArray("keys") == null
+                    ? new JSONArray() : e.optJSONArray("keys"));
+            out.put("content", e.optString("content", ""));
+            out.put("extensions", ext);
+            out.put("enabled", e.optBoolean("enabled", true));
+            out.put("insertion_order", order);
+            // ⚠ case_sensitive 是三态（null = 跟随全局），别写成 false
+            out.put("case_sensitive", e.isNull("caseSensitive")
+                    ? JSONObject.NULL : e.optBoolean("caseSensitive"));
+            out.put("name", comment);
+            out.put("priority", order);
+            out.put("id", e.optString("id", ""));
+            out.put("comment", comment);
+            out.put("selective", e.optBoolean("selective", true));
+            out.put("secondary_keys", e.optJSONArray("secondaryKeys") == null
+                    ? new JSONArray() : e.optJSONArray("secondaryKeys"));
+            out.put("constant", e.optBoolean("constant"));
+            out.put("position", pos == 1 ? "after_char" : "before_char");
+            out.put("use_regex", e.optBoolean("useRegex"));
+        } catch (Exception ignore) {
+        }
+        return out;
+    }
+
+    /** camelCase → snake_case（只插下划线，不做别的变换）。 */
+    private static String camelToSnake(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c >= 'A' && c <= 'Z') sb.append('_').append((char) (c + 32));
+            else sb.append(c);
+        }
+        return sb.toString();
     }
 
     // ────────────────────────── 没搬的那几页 ──────────────────────────
