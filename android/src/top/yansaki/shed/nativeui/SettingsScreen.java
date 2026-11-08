@@ -90,8 +90,9 @@ public class SettingsScreen implements Screen {
         c3.setPadding(M3.dp(ctx, 8), M3.dp(ctx, 8), M3.dp(ctx, 8), M3.dp(ctx, 8));
 
         // ⚠ 「🤖 AI 对话」已经从这份清单里删掉了 —— 它 v1.7 起是原生的一屏（底部导航第一项）。
-        //   规矩是「迁完一个就删一条」，留着会让人以为还得回旧界面才能聊。
-        c3.addView(legacyItem(ctx.getString(R.string.m3_set_open_st), "mobileOpenSt()"));
+        //   「🃏 角色卡编写器」v1.9 起也进了底部导航（16 个选项卡里 8 个已原生，
+        //   剩下 8 个在那几页里各自有「在旧界面打开」的入口）。
+        //   规矩是「迁完一个就删一条」，留着会让人以为还得回旧界面才能用。
         c3.addView(legacyItem(ctx.getString(R.string.m3_set_open_games), "openCatGame()"));
         col.addView(c3, M3.gap(ctx, 8));
 

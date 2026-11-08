@@ -238,8 +238,9 @@
 <div class="bar">
   <div class="tabs">
     <button data-tab="0" class="on">对话</button>
-    <button data-tab="1">时钟</button>
-    <button data-tab="2">设置</button>
+    <button data-tab="1">卡片</button>
+    <button data-tab="2">时钟</button>
+    <button data-tab="3">设置</button>
   </div>
   <button class="ghost" id="theme">切深色</button>
 </div>
@@ -279,7 +280,51 @@
       </div>
     </div>
 
+    <!-- ================= 角色卡编写器 ================= -->
     <div class="content hidden" id="pane1">
+      <div class="chips" style="padding-bottom:8px">
+        <div class="chip on">首页</div>
+        <div class="chip">名字</div>
+        <div class="chip">类型</div>
+        <div class="chip">角色描述</div>
+        <div class="chip">系统提示词</div>
+        <div class="chip">元信息</div>
+        <div class="chip" style="opacity:.62">AI 助手</div>
+        <div class="chip" style="opacity:.62">世界书</div>
+        <div class="chip">开场白</div>
+        <div class="chip" style="opacity:.62">正则</div>
+        <div class="chip" style="opacity:.62">酒馆助手</div>
+        <div class="chip" style="opacity:.62">MVU</div>
+        <div class="chip" style="opacity:.62">状态栏</div>
+        <div class="chip" style="opacity:.62">Code</div>
+        <div class="chip" style="opacity:.62">人设生成器</div>
+        <div class="chip">导出</div>
+      </div>
+
+      <div class="section">名字</div>
+      <div class="card">
+        <div class="field" style="margin-top:0">
+          <div class="label-m">角色名</div>
+          <div class="val">夜乃</div>
+        </div>
+        <div class="field">
+          <div class="label-m">昵称（V3 才有）</div>
+          <div class="val dim">小夜</div>
+        </div>
+      </div>
+
+      <div class="section">角色描述</div>
+      <div class="card">
+        <div class="field" style="margin-top:0">
+          <div class="label-m">description —— 她是谁</div>
+          <div class="val" style="line-height:1.5">市立图书馆的夜班管理员。话少，记得每一本书的位置。</div>
+        </div>
+      </div>
+
+      <div class="hint">⚠ 世界书 / 正则 / 酒馆助手 / MVU / 状态栏 / Code / AI 助手 / 人设生成器 这八页还没搬成原生（预览里是灰的），点进去会给一个「在旧界面打开」的入口。</div>
+    </div>
+
+    <div class="content hidden" id="pane2">
       <div class="card" style="padding:24px 22px">
         <div class="zone" id="zoneName">本地</div>
         <div class="bigtime" id="bigtime">15:04:27</div>
@@ -299,7 +344,7 @@
       <div class="hint">这里的时间跟着系统时区与系统时间走，和网页版各自独立显示，不共享状态。</div>
     </div>
 
-    <div class="content hidden" id="pane2">
+    <div class="content hidden" id="pane3">
       <div class="section">接口</div>
       <div class="card" style="padding:8px">
         <div class="item" id="openapi" style="display:flex;align-items:center;gap:12px">
@@ -382,8 +427,9 @@
 
     <div class="navbar">
       <div class="navitem on" data-nav="0"><div class="indicator">💬</div><div class="nm">对话</div></div>
-      <div class="navitem" data-nav="1"><div class="indicator">🕒</div><div class="nm">时钟</div></div>
-      <div class="navitem" data-nav="2"><div class="indicator">⚙️</div><div class="nm">设置</div></div>
+      <div class="navitem" data-nav="1"><div class="indicator">🃏</div><div class="nm">卡片</div></div>
+      <div class="navitem" data-nav="2"><div class="indicator">🕒</div><div class="nm">时钟</div></div>
+      <div class="navitem" data-nav="3"><div class="indicator">⚙️</div><div class="nm">设置</div></div>
     </div>
   </div>
 </div>
@@ -392,8 +438,8 @@
   var ZONES = [
     ['东京', 9], ['纽约', -5], ['伦敦', 0], ['洛杉矶', -8]
   ];
-  var TITLES = ['对话', '时钟', '设置'];
-  var KICKERS = ['AI 对话', 'Material 3 · Expressive', '关于与入口'];
+  var TITLES = ['对话', '卡片', '时钟', '设置'];
+  var KICKERS = ['AI 对话', '角色卡编写器', 'Material 3 · Expressive', '关于与入口'];
   var picked = -1;
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -417,7 +463,7 @@
 
   function showTab(i) {
     closeApi();
-    for (var k = 0; k < 3; k++) {
+    for (var k = 0; k < 4; k++) {
       document.getElementById('pane' + k).classList.toggle('hidden', k !== i);
       document.querySelector('[data-nav="' + k + '"]').classList.toggle('on', k === i);
       document.querySelector('[data-tab="' + k + '"]').classList.toggle('on', k === i);
@@ -450,7 +496,7 @@
   // ---------- 二级页：设置 → 接口配置 ----------
   // ⚠ 二级页会藏掉底部导航并显示返回箭头 —— 它是「进到设置里面」，不是并列的选项卡。
   function openApi() {
-    document.getElementById('pane2').classList.add('hidden');
+    document.getElementById('pane3').classList.add('hidden');
     document.getElementById('pane-api').classList.remove('hidden');
     document.querySelector('.navbar').style.display = 'none';
     document.getElementById('backbtn').classList.remove('hidden');
@@ -467,8 +513,8 @@
     document.getElementById('backbtn').classList.add('hidden');
     document.getElementById('ptitle').textContent = TITLES[2];
     document.getElementById('kicker').textContent = KICKERS[2];
-    document.querySelector('[data-tab="2"]').classList.add('on');
-    document.getElementById('pane2').classList.remove('hidden');
+    document.querySelector('[data-tab="3"]').classList.add('on');
+    document.getElementById('pane3').classList.remove('hidden');
   }
 
   document.getElementById('openapi').addEventListener('click', openApi);

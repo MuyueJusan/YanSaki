@@ -399,6 +399,23 @@ if 'classes.dex' in names:
         chk(nm in strs, 'dex 字符串表里有恰好叫 %s 的符号（二级页机制）' % nm.decode())
     chk(b'Ltop/yansaki/shed/nativeui/ApiScreen;' in strs,
         'ApiScreen 还在（挪进设置 ≠ 删掉）')
+
+    # ---- v1.9：角色卡编写器原生化 ----
+    # ⚠ 判据选的是**卡字段名**（postHistoryInstructions / groupOnlyGreetings …）：
+    #   它们只可能来自「按 ST 规格写的映射」，拼错一个字母，导出的卡就少一个字段，
+    #   而那种错在界面上完全看不出来。
+    print('   --- 角色卡编写器 ---')
+    for desc in (b'Ltop/yansaki/shed/nativeui/CardEditorScreen;',
+                 b'Ltop/yansaki/shed/nativeui/CardForm;'):
+        chk(desc in strs, 'dex 字符串表里有类型描述符 %s' % desc.decode())
+    chk(b'stCardDraft' in strs, 'dex 里有 stCardDraft（草稿与网页共用同一个键）')
+    for field in (b'postHistoryInstructions', b'groupOnlyGreetings',
+                  b'alternateGreetings', b'character_book', b'depth_prompt'):
+        chk(field in strs, 'dex 里有卡字段 %s（映射真的编进去了）' % field.decode())
+    # ⚠ 反漂移：草稿的键名是照 js/220 抄的，网页改了这里必须红
+    if html is not None:
+        chk(b"ST_DRAFT_KEY = 'stCardDraft'" in html,
+            '锚点：页面里 ST_DRAFT_KEY 仍是 stCardDraft')
     # ⚠ 反漂移：会话结构是照 js/333b 抄的，网页哪天改了键名这里必须跟着红。
     if html is not None:
         chk(b"AI_SESS_KEY = 'aiChatSessions'" in html,

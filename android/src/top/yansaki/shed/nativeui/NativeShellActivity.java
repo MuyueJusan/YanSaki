@@ -49,9 +49,9 @@ public class NativeShellActivity extends Activity {
     private View navWrap;
 
     private Screen[] screens;
-    private final NavItem[] items = new NavItem[3];
+    private final NavItem[] items = new NavItem[4];
     /** 每一屏建好的视图，只建一次。⚠ 见 {@link #select} 里的注释。 */
-    private final View[] built = new View[3];
+    private final View[] built = new View[4];
     private int current = -1;
 
     /** 二级页（从某一屏里点进去的，比如「设置 → 接口配置」）。null = 在正常选项卡里。 */
@@ -72,6 +72,7 @@ public class NativeShellActivity extends Activity {
 
         screens = new Screen[]{
                 new ChatScreen(this),
+                new CardEditorScreen(this),
                 new ClockScreen(this),
                 new SettingsScreen(this)
         };
@@ -159,9 +160,10 @@ public class NativeShellActivity extends Activity {
 
         // ⚠ 「对话」排第一并且是默认落点：它是这个屋子用得最多的一屏。
         // ⚠ 接口配置**不在这里** —— 它挪进「设置」当二级页了（v1.8）。
-        String[] icons = {"💬", "🕒", "⚙️"};
+        String[] icons = {"💬", "🃏", "🕒", "⚙️"};
         String[] labels = {
                 getString(R.string.m3_nav_chat),
+                getString(R.string.m3_nav_card),
                 getString(R.string.m3_nav_clock),
                 getString(R.string.m3_nav_settings)
         };

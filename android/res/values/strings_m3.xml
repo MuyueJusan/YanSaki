@@ -2,6 +2,7 @@
 <resources>
     <string name="m3_app_title">小屋</string>
     <string name="m3_nav_clock">时钟</string>
+    <string name="m3_nav_card">卡片</string>
     <string name="m3_nav_api">接口</string>
     <string name="m3_nav_settings">设置</string>
 

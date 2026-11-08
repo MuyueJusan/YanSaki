@@ -59,6 +59,7 @@ APK **不进仓库**（是生成物），挂在这个分支对应的 **Release**
 
 | tag | commit | 附件 | 说明 |
 |---|---|---|---|
+| [`apk-v1.9`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.9) | `见 release` | `YanSakiShed-1.9.apk` 2 694 244 字节<br />sha1 `3a074d9c9b7e20416d1567b70551e078f10550fe` | **角色卡编写器原生化**（用户要求「保持原有功能」）。底部导航 3 项 → 4 项：对话 / 卡片 / 时钟 / 设置。16 个选项卡里 **8 个已原生**（首页 / 名字 / 类型 / 角色描述 / 系统提示词 / 元信息 / 开场白 / 导出），其余 8 个**仍然列出来**，点进去是「在旧界面打开」。⚠ 草稿与网页共用 `stCardDraft`，`raw` / `mvuOwn` 等键原样带回去 |
 | [`apk-v1.8`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.8) | `844968d` | `YanSakiShed-1.8.apk` 2 669 668 字节<br />sha1 `2b6a66e5e2be758d6ea38ff1d5cba8cd69606fcb` | **「接口」从底部导航挪进「设置」当二级页**（用户要求）。底部导航回到 3 项：对话 / 时钟 / 设置。设置页多一行「接口配置」（带 `服务商 · 模型` 摘要），点进去顶栏出现返回箭头、底部导航藏起来、返回键先退二级页。⚠ 网页侧仍然一个字节没动 |
 | [`apk-v1.7`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.7) | `cdc41b5` | `YanSakiShed-1.7.apk` 2 665 572 字节<br />sha1 `266541d253a25d4d6ba0e31e4451bbd27bba2d45` | **AI 对话原生化**：气泡 / 流式出字 / 停止 / 会话列表（新建、切换、重命名、清空、删除）。底部导航 3 项 → **4 项**，「对话」排第一并作为默认落点。⚠ 会话与网页**共用 `aiChatSessions`**，两边能接着聊。⚠ 提示词只发「第一段 + 系统提示词 + `{{user}}` + 会话历史」，酒馆模式 / 世界书留在旧界面。⚠ 网页侧仍然一个字节没动 |
 | [`apk-v1.6`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.6) | `a325df6` | `YanSakiShed-1.6.apk` 2 640 838 字节<br />sha1 `772fe8186001f5c2b9f63b8ee45761db4b9cecc3` | **新增 Material 3 Expressive 原生界面**（`nativeui` 包）：入口在网页左上那个下拉菜单里多出来的「✨ 新界面」。已原生：时钟 / API 全局配置 / 设置；其余功能在「设置」页有「用旧界面打开」入口。⚠ **网页侧一个字节都没动**（`assets/index.html` 的 sha1 与 v1.5 相同），所以这套设计天然只在 APK 出现 |
@@ -295,8 +296,8 @@ ERROR … Error during a `trash` operation: Unknown { description: "Some operati
 NativeShellActivity（scaffold）
 ├── 大标题顶栏：kicker(labelMedium/primary) + 标题(headlineMedium) [+ 返回箭头（二级页时）]
 ├── 内容区：Screen.build() 一次，之后只 refresh()   ← ⚠ 见下
-└── 底部导航：3 项 + **药丸指示器**（bg_m3_nav_indicator）
-    对话 / 时钟 / 设置  ← 「对话」排第一并作为默认落点
+└── 底部导航：4 项 + **药丸指示器**（bg_m3_nav_indicator）
+    对话 / 卡片 / 时钟 / 设置  ← 「对话」排第一并作为默认落点
 ```
 
 ### 二级页（`openDetail`）
@@ -309,6 +310,32 @@ NativeShellActivity（scaffold）
 
 ⚠ `select()` 里有一处必须留意：**从二级页回来时，哪怕点的还是原来那一项，也要重渲染**
 （`if (idx == current) return` 那条捷径会把内容区留在二级页上）。
+
+### 编写器：草稿是同一份，但只有 8 页是原生的
+
+草稿键 `stCardDraft`，结构照 `js/255` 的 `stSaveDraftInner`：
+
+```
+{ v, tab, tabsCollapsed, homeClosed, srcName, mvuOwn, sbOwn, sbFree, card, raw?, rawTh? }
+```
+
+⚠⚠ **只改 `card` 里的字段，其余键原样带回去**。抹掉 `raw` 等于把「导入时留的原始 JSON」删了，
+导出就再也不无损。⚠ 也**不写 `tab`** —— 那是网页界面的落点，原生自己的 tab 只记在内存里。
+
+⚠ 空卡**不立刻落盘**：只是打开看了一眼就走的话，不该把网页那边的「还没有草稿」
+变成「有一张空草稿」。
+
+⚠ 保存是**防抖 500ms + 离开时立刻 flush**：每敲一个字就序列化 + 过桥，长文本会明显卡；
+但离开时不 flush，最后几个字就丢了。
+
+**导出的取舍**：`buildExportJson()` 的起点是草稿里那份 `raw`，再覆盖本编辑器管的字段 ——
+这样 `extensions` 里不认识的键、`character_book` 都能原样带回去。白手起家拼一个「干净」的
+对象会让「导入 → 导出」丢东西。⚠ 世界书 / 正则 / 酒馆助手 / MVU / 状态栏**在原生里改不了**，
+导出时是从 `raw` 带过去的旧值；要完整导出（含 PNG 内嵌）得用旧界面。
+
+**没做的 8 页**（AI 助手 / 世界书 / 正则 / 酒馆助手 / MVU / 状态栏 / Code / 人设生成器）
+仍然**列在选项卡里**（文字调暗 0.62），点进去是一张说明 + 「在旧界面里打开编写器」。
+⚠ 藏起来会让人以为功能没了；列出来但说清楚为什么，才是诚实的降级。
 
 ⚠ 底部导航是手搓的：框架里没有 `BottomNavigationView`（那是 Material Components 的）。
 选中态**三件事一起变**：指示器出现、图标换 `onSecondaryContainer`、文字换 `onSurface` ——
@@ -339,6 +366,7 @@ Key、切去「设置」看一眼再切回来，填的东西就没了 —— 而
 |---|---|
 | **对话** | AI 聊天：气泡 / 流式出字 / 停止 / 会话列表（新建、切换、重命名、清空、删除）。⚠ **会话与网页共用 `aiChatSessions`**，两边能接着聊。提示词只发「第一段 + 系统提示词 + `{{user}}` 宏 + 会话历史」—— 酒馆模式 / 世界书 / 预设顺序**不在这一版** |
 | **时钟** | 大时钟 + 世界时间。`TimeZone` + `SimpleDateFormat`，不手算偏移（手算会在夏令时那两周错一小时） |
+| **卡片** | 角色卡编写器：16 个选项卡里 **8 个已原生**（首页 / 名字 / 类型 / 角色描述 / 系统提示词 / 元信息 / 开场白 / 导出），其余 8 个点进去是「在旧界面打开」。⚠ **草稿与网页共用 `stCardDraft`**，`raw` / `mvuOwn` 这些键原样带着走 |
 | **接口** | **二级页**（设置 → 接口配置，v1.8 起不再占底部导航）。就是网页「🔌 API 全局配置」那一份（键 `apiGlobalCfg`）。⚠ 只改本页认识的字段，其余原样保留 |
 | **设置** | 版本 / 镜像条目数 / 外观说明 / **「用旧界面打开」入口** |
 
@@ -412,6 +440,8 @@ src/top/yansaki/shed/
     Screen.java                     一屏的接口（build 一次、之后只 refresh）
     ChatScreen.java                 对话：气泡 / 流式 / 停止 / 会话列表（共用 aiChatSessions）
     ChatApi.java                    三种协议的 SSE（openai / anthropic / gemini），原生直连
+    CardEditorScreen.java           角色卡编写器：16 个选项卡（8 个已原生）+ 导出（共用 stCardDraft）
+    CardForm.java                   编写器的表单控件：输入域 / 多行域 / 芯片组 / 按钮
     ClockScreen.java                时钟 / 世界时间
     ApiScreen.java                  API 全局配置（键 apiGlobalCfg，与网页同一份）
     SettingsScreen.java             设置 / 关于 / 「用旧界面打开」入口
