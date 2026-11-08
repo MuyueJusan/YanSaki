@@ -416,6 +416,18 @@ if 'classes.dex' in names:
     if html is not None:
         chk(b"ST_DRAFT_KEY = 'stCardDraft'" in html,
             '锚点：页面里 ST_DRAFT_KEY 仍是 stCardDraft')
+
+    # ---- v1.10：服务商改成下拉 ----
+    print('   --- 服务商下拉 ---')
+    chk(b'Landroid/widget/PopupMenu;' in strs, 'dex 里有 PopupMenu（下拉真的用了）')
+    chk(b'showProviderMenu' in strs, 'dex 里有恰好叫 showProviderMenu 的方法')
+    chk(b'pickProvider' in strs, 'dex 里有恰好叫 pickProvider 的方法（选中回调）')
+    # ⚠ 这里**故意没有**「旧的芯片实现已经不在了」这条断言。
+    #   第一版写了 `chk(b'buildChips' not in strs, ...)`，它红了 —— 而产品是对的：
+    #   `ClockScreen` 里也有一个 `buildChips()`（时区芯片），完全合法。
+    #   **dex 字符串表只存字符串，不带「属于哪个类」** ⇒ 全局搜方法名分不出同名方法。
+    #   ⇒ 想要这条只能去查源码（`grep buildChips ApiScreen.java`），那是另一层的事，
+    #     不该塞进这个只看产物的脚本里。宁可少一条，也不要一条会假红的。
     # ⚠ 反漂移：会话结构是照 js/333b 抄的，网页哪天改了键名这里必须跟着红。
     if html is not None:
         chk(b"AI_SESS_KEY = 'aiChatSessions'" in html,

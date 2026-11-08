@@ -3,11 +3,12 @@ package top.yansaki.shed.nativeui;
 import android.content.Context;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Switch;
@@ -54,7 +55,8 @@ public class ApiScreen implements Screen {
 
     private String provider = "openai";
     private String[][] providers = FALLBACK;
-    private LinearLayout chipRow;
+    /** 下拉那一格里显示当前服务商名字的 TextView（点它弹出菜单）。 */
+    private TextView providerValue;
 
     private EditText baseUrl;
     private EditText apiKey;
@@ -98,20 +100,11 @@ public class ApiScreen implements Screen {
         col.addView(M3.section(ctx, ctx.getString(R.string.m3_api_section_basic)));
         LinearLayout c1 = M3.card(ctx);
 
-        c1.addView(M3.text(ctx, ctx.getString(R.string.m3_api_provider),
-                R.style.TextAppearance_M3_LabelMedium));
-
-        chipRow = new LinearLayout(ctx);
-        chipRow.setOrientation(LinearLayout.HORIZONTAL);
-        HorizontalScrollView hs = new HorizontalScrollView(ctx);
-        hs.setHorizontalScrollBarEnabled(false);
-        hs.setClipToPadding(false);
-        hs.addView(chipRow, new HorizontalScrollView.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        hlp.topMargin = M3.dp(ctx, 8);
-        c1.addView(hs, hlp);
+        // ── 服务商：**下拉选择** ──
+        // ⚠ 原来是一排横向滚动的芯片。19 家服务商 ⇒ 要滑好几次才看得到「自定义」，
+        //   而且当前选中的那个经常在屏幕外 —— 打开这一页根本看不出自己在用哪家。
+        //   改成下拉：当前值固定在最上面，全部选项一次性列出来。
+        c1.addView(buildProviderField());
 
         baseUrl = addField(c1, ctx.getString(R.string.m3_api_baseurl), InputType.TYPE_TEXT_VARIATION_URI);
 
@@ -258,35 +251,86 @@ public class ApiScreen implements Screen {
         return wrap;
     }
 
-    private void buildChips() {
-        chipRow.removeAllViews();
-        for (String[] p : providers) {
-            boolean on = p[0].equals(provider);
-            TextView c = M3.text(ctx, p[1], R.style.TextAppearance_M3_LabelLarge);
-            c.setBackgroundResource(on ? R.drawable.bg_m3_chip_on : R.drawable.bg_m3_chip);
-            c.setTextColor(M3.color(ctx, on
-                    ? R.color.md_on_secondary_container : R.color.md_on_surface));
-            c.setPadding(M3.dp(ctx, 14), M3.dp(ctx, 8), M3.dp(ctx, 14), M3.dp(ctx, 8));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            lp.rightMargin = M3.dp(ctx, 8);
-            c.setLayoutParams(lp);
-            c.setClickable(true);
-            c.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    provider = p[0];
-                    // 换服务商时把接口地址跟着换成它的默认值 —— 但**只在地址是空的、
-                    // 或者正好等于另一个服务商的默认地址**时才换，用户自己填过的别覆盖
-                    if (p[2] != null && p[2].length() > 0) {
-                        String cur = baseUrl.getText().toString().trim();
-                        if (cur.length() == 0 || isDefaultUrl(cur)) baseUrl.setText(p[2]);
-                    }
-                    buildChips();
-                }
-            });
-            chipRow.addView(c);
+    /**
+     * 「服务商」那一格：长得像输入框，点开是下拉菜单。
+     *
+     * <p>⚠ 用 {@link PopupMenu} 而不是再手搓一个列表：19 项超过一屏，PopupMenu 自带滚动，
+     * 而且点外面就关。自己拼一个 LinearLayout 弹窗要处理「点外面关闭」「超出屏幕」
+     * 「返回键」，全是重复劳动。
+     */
+    private View buildProviderField() {
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setBackgroundResource(R.drawable.bg_m3_field);
+        box.setPadding(M3.dp(ctx, 14), M3.dp(ctx, 8), M3.dp(ctx, 14), M3.dp(ctx, 8));
+        box.setClickable(true);
+        box.setFocusable(true);
+
+        LinearLayout col = new LinearLayout(ctx);
+        col.setOrientation(LinearLayout.VERTICAL);
+
+        TextView l = M3.text(ctx, ctx.getString(R.string.m3_api_provider),
+                R.style.TextAppearance_M3_LabelSmall);
+        l.setTextColor(M3.color(ctx, R.color.md_on_surface_variant));
+        col.addView(l);
+
+        providerValue = M3.text(ctx, providerLabel(provider), R.style.TextAppearance_M3_BodyLarge);
+        providerValue.setPadding(0, M3.dp(ctx, 2), 0, 0);
+        col.addView(providerValue);
+        box.addView(col, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView arrow = M3.text(ctx, "▾", R.style.TextAppearance_M3_TitleMedium);
+        arrow.setTextColor(M3.color(ctx, R.color.md_on_surface_variant));
+        box.addView(arrow);
+
+        final View anchor = box;
+        box.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showProviderMenu(anchor);
+            }
+        });
+        return box;
+    }
+
+    private void showProviderMenu(View anchor) {
+        PopupMenu pm = new PopupMenu(ctx, anchor);
+        for (int i = 0; i < providers.length; i++) {
+            // ⚠ itemId 直接存下标：用 label 当 id 的话，两家同名（或改名）就选错了
+            pm.getMenu().add(0, i, i, providers[i][1]);
         }
+        pm.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(MenuItem item) {
+                int idx = item.getItemId();
+                if (idx < 0 || idx >= providers.length) return false;
+                pickProvider(idx);
+                return true;
+            }
+        });
+        pm.show();
+    }
+
+    private void pickProvider(int idx) {
+        provider = providers[idx][0];
+        // 换服务商时把接口地址跟着换成它的默认值 —— 但**只在地址是空的、
+        // 或者正好等于另一个服务商的默认地址**时才换，用户自己填过的别覆盖
+        String def = providers[idx].length > 2 ? providers[idx][2] : null;
+        if (def != null && def.length() > 0) {
+            String cur = baseUrl.getText().toString().trim();
+            if (cur.length() == 0 || isDefaultUrl(cur)) baseUrl.setText(def);
+        }
+        if (providerValue != null) providerValue.setText(providerLabel(provider));
+    }
+
+    /** 当前服务商显示的名字。查不到就原样显示 id —— 别显示空白让人以为没选。 */
+    private String providerLabel(String id) {
+        for (String[] p : providers) {
+            if (p[0].equals(id)) return p[1];
+        }
+        return id;
     }
 
     private boolean isDefaultUrl(String u) {
@@ -340,7 +384,7 @@ public class ApiScreen implements Screen {
         tempVal.setText(String.format(java.util.Locale.US, "%.1f", t));
         stream.setChecked(o.optBoolean("stream", true));
 
-        buildChips();
+        if (providerValue != null) providerValue.setText(providerLabel(provider));
     }
 
     private void save() {

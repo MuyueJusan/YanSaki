@@ -383,12 +383,15 @@
     <div class="content hidden" id="pane-api">
       <div class="section">连接</div>
       <div class="card">
-        <div class="label-m">服务商</div>
-        <div class="chips" style="margin-top:8px">
-          <div class="chip on">OpenAI</div>
-          <div class="chip">Anthropic Claude</div>
-          <div class="chip">Google Gemini</div>
-          <div class="chip">自定义</div>
+        <!-- 服务商：下拉选择（点开是 PopupMenu，19 家一次列出来） -->
+        <div class="field" style="margin-top:0">
+          <div style="display:flex;align-items:center">
+            <div style="flex:1">
+              <div class="label-m">服务商</div>
+              <div class="val">OpenAI</div>
+            </div>
+            <div style="color:var(--on-surface-variant);font-size:16px">▾</div>
+          </div>
         </div>
         <div class="field"><div class="label-m">接口地址</div><div class="val">https://api.openai.com/v1</div></div>
         <div class="field">
