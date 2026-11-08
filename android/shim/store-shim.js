@@ -55,7 +55,10 @@
     try {
         if (typeof AI_PROVIDERS !== 'undefined' && AI_PROVIDERS && AI_PROVIDERS.length) {
             dump.__ys_providers = JSON.stringify(AI_PROVIDERS.map(function (p) {
-                return [p.value, p.label, p.baseUrl || ''];
+                // [id, 名字, 默认 baseUrl, 协议] —— 第 4 项是原生聊天要的：
+                // 三种协议的 SSE 格式完全不同（openai / anthropic / gemini），
+                // 抄一份到 Java 里就是第二份真相源，加一家服务商要记着改两处。
+                return [p.value, p.label, p.baseUrl || '', p.proto || 'openai'];
             }));
         }
     } catch (e) { }

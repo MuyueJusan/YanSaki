@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="m3_nav_chat">对话</string>
+    <string name="m3_chat_kicker">AI 对话</string>
+    <string name="m3_chat_hint">发一句话开始。会话与网页版共用同一份（键 aiChatSessions），所以两边可以接着聊。</string>
+    <string name="m3_chat_placeholder">说点什么…</string>
+    <string name="m3_chat_send">发送</string>
+    <string name="m3_chat_stop">停止</string>
+    <string name="m3_chat_new">新会话</string>
+    <string name="m3_chat_more">更多</string>
+    <string name="m3_chat_thinking">思考中…</string>
+    <string name="m3_chat_need_key">还没配 API 密钥 —— 去「接口」页填一个，或者先在网页版里配好。</string>
+    <string name="m3_chat_no_model">还没填模型名 —— 去「接口」页填。</string>
+    <string name="m3_chat_rename">重命名这段</string>
+    <string name="m3_chat_delete">删除这段</string>
+    <string name="m3_chat_clear">清空这段</string>
+    <string name="m3_chat_pick">切换会话</string>
+    <string name="m3_chat_stopped">（已停止）</string>
+</resources>

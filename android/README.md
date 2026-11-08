@@ -59,6 +59,7 @@ APK **不进仓库**（是生成物），挂在这个分支对应的 **Release**
 
 | tag | commit | 附件 | 说明 |
 |---|---|---|---|
+| [`apk-v1.7`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.7) | `见 release` | `YanSakiShed-1.7.apk` 2 665 572 字节<br />sha1 `266541d253a25d4d6ba0e31e4451bbd27bba2d45` | **AI 对话原生化**：气泡 / 流式出字 / 停止 / 会话列表（新建、切换、重命名、清空、删除）。底部导航 3 项 → **4 项**，「对话」排第一并作为默认落点。⚠ 会话与网页**共用 `aiChatSessions`**，两边能接着聊。⚠ 提示词只发「第一段 + 系统提示词 + `{{user}}` + 会话历史」，酒馆模式 / 世界书留在旧界面。⚠ 网页侧仍然一个字节没动 |
 | [`apk-v1.6`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.6) | `a325df6` | `YanSakiShed-1.6.apk` 2 640 838 字节<br />sha1 `772fe8186001f5c2b9f63b8ee45761db4b9cecc3` | **新增 Material 3 Expressive 原生界面**（`nativeui` 包）：入口在网页左上那个下拉菜单里多出来的「✨ 新界面」。已原生：时钟 / API 全局配置 / 设置；其余功能在「设置」页有「用旧界面打开」入口。⚠ **网页侧一个字节都没动**（`assets/index.html` 的 sha1 与 v1.5 相同），所以这套设计天然只在 APK 出现 |
 | [`apk-v1.5`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.5) | `cd0e56a` | `YanSakiShed-1.5.apk` 2 586 679 字节<br />sha1 `02980fcbfa4a2251ad01d92ee66085df7dea481c` | **产品侧两轮改动打进来的第一版**：人设生成器的模板库（切换 / 命名 / 另存 / 改名 / 删除）+ 内置模板扩成四份（默认 / 精简人设 / fate人设 / 另一个模板，逐字照抄）。封装层 `android/` **一行未改**，变的只有内嵌页面（sha1 `7dddd8c9…`）。versionCode 3 → 4，签名身份不变 ⇒ 装过 1.3 / 1.4 的**可直接覆盖安装** |
 | [`apk-v1.4`](https://github.com/MuyueJusan/YanSaki/releases/tag/apk-v1.4) | `e40fa35` | `YanSakiShed-1.4.apk`<br />sha1 见该 release | **禁用返回键**（从任何一页按返回都不再退出 App）。⚠ 发布时踩过「tag 指向了 versionName=1.3 的提交」，`release.js` 因此加了一道闸门 |
@@ -293,7 +294,8 @@ ERROR … Error during a `trash` operation: Unknown { description: "Some operati
 NativeShellActivity（scaffold）
 ├── 大标题顶栏：kicker(labelMedium/primary) + 标题(headlineMedium)
 ├── 内容区：Screen.build() 一次，之后只 refresh()   ← ⚠ 见下
-└── 底部导航：3 项 + **药丸指示器**（bg_m3_nav_indicator）
+└── 底部导航：4 项 + **药丸指示器**（bg_m3_nav_indicator）
+    对话 / 时钟 / 接口 / 设置  ← 「对话」排第一并作为默认落点
 ```
 
 ⚠ 底部导航是手搓的：框架里没有 `BottomNavigationView`（那是 Material Components 的）。
@@ -323,12 +325,38 @@ Key、切去「设置」看一眼再切回来，填的东西就没了 —— 而
 
 | 已原生 | 说明 |
 |---|---|
+| **对话** | AI 聊天：气泡 / 流式出字 / 停止 / 会话列表（新建、切换、重命名、清空、删除）。⚠ **会话与网页共用 `aiChatSessions`**，两边能接着聊。提示词只发「第一段 + 系统提示词 + `{{user}}` 宏 + 会话历史」—— 酒馆模式 / 世界书 / 预设顺序**不在这一版** |
 | **时钟** | 大时钟 + 世界时间。`TimeZone` + `SimpleDateFormat`，不手算偏移（手算会在夏令时那两周错一小时） |
 | **接口** | 就是网页「🔌 API 全局配置」那一份（键 `apiGlobalCfg`）。⚠ 只改本页认识的字段，其余原样保留 |
 | **设置** | 版本 / 镜像条目数 / 外观说明 / **「用旧界面打开」入口** |
 
-还没迁的功能**明写在设置页**，点一下跳到网页对应入口（`mobileOpenAi()` / `mobileOpenSt()` /
-`openCatGame()`）。迁完一个就删一条 —— 这份清单应该越来越短。
+还没迁的功能**明写在设置页**，点一下跳到网页对应入口（`mobileOpenSt()` / `openCatGame()`）。
+迁完一个就删一条 —— 这份清单应该越来越短。
+
+### 对话那一屏为什么能直连、网页不能
+
+网页被 **CORS** 挡（Google / Anthropic 不给浏览器 origin 发 `Access-Control-Allow-Origin`），
+所以 APK 的网页侧要注入 `fetch` 垫片走 `AiProxy`。而 `HttpURLConnection` 是原生 HTTP，
+**没有 CORS 这个概念** ⇒ 原生聊天直接连，不经 `AiProxy`、也不用那个垫片。
+
+⚠ 三种协议的 **SSE 帧格式完全不同**，分成三条解析路径：
+
+```
+openai      data: {"choices":[{"delta":{"content":"…"}}]}        … data: [DONE]
+anthropic   event: content_block_delta
+            data: {"type":"content_block_delta","delta":{"text":"…"}}
+gemini      data: {"candidates":[{"content":{"parts":[{"text":"…"}]}}]}
+```
+
+⚠ 协议 id 由页面推过来（`__ys_providers` 的第 4 项），**Java 里不抄一份服务商表** ——
+抄了就是第二份真相源，加一家服务商要记着改两处。
+
+⚠⚠ **「一个字节都没收到」必须当成失败说出来。** 协议猜错时 SSE 帧**照样是合法 JSON**，
+只是提取路径不匹配 ⇒ 循环跑完、结果空串、**不抛异常**。静默显示一个空气泡看起来像卡住，
+所以 `finishStream` 在「非错误但内容为空」时会改成一句明确的报错。
+
+⚠ 报错**不进会话**：那串「⚠ …」是我们自己写的提示，存进去之后会变成上下文的一部分，
+下次发给模型就是一句莫名其妙的用户内容。
 
 ### 验证到什么程度（明写）
 
@@ -370,6 +398,8 @@ src/top/yansaki/shed/
     M3.java                         手写的 M3 工具箱：dp / 字阶 / 卡片 / 弹簧入场
     Store.java                      网页 localStorage 的镜像 + 待回灌（两份 SharedPreferences）
     Screen.java                     一屏的接口（build 一次、之后只 refresh）
+    ChatScreen.java                 对话：气泡 / 流式 / 停止 / 会话列表（共用 aiChatSessions）
+    ChatApi.java                    三种协议的 SSE（openai / anthropic / gemini），原生直连
     ClockScreen.java                时钟 / 世界时间
     ApiScreen.java                  API 全局配置（键 apiGlobalCfg，与网页同一份）
     SettingsScreen.java             设置 / 关于 / 「用旧界面打开」入口

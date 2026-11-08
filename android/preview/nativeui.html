@@ -178,7 +178,48 @@
   .navitem .ico{font-size:17px;filter:grayscale(.15)}
   .navitem .nm{font-size:12px;font-weight:500;color:var(--on-surface-variant)}
   .navitem.on .nm{color:var(--on-surface)}
-  .hidden{display:none}
+  /* ---------- 对话 ---------- */
+  /* ⚠ 聊天那一屏要「消息区滚动、输入栏固定」，所以它是 flex column；
+     而 `.hidden` 必须能盖掉 `display:flex` —— 否则切走之后它还看得见。
+     真机上踩过同一类坑（`el.hidden = true` 被同权重的 display:flex 盖掉，
+     **无效且不报错**），这里用 !important 一次性钉死。 */
+  .pane-chat{display:flex;flex-direction:column;overflow:hidden;padding:0}
+  .chatbar{display:flex;align-items:center;gap:8px;padding:0 20px 10px}
+  .iconbtn{
+    width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+    font-size:16px;color:var(--on-surface);border-radius:999px;
+  }
+  .bubblewrap{flex:1 1 auto;overflow:auto;padding:0 20px 12px}
+  .bubblewrap::-webkit-scrollbar{width:0}
+  .row{display:flex;margin-bottom:8px}
+  .row.right{justify-content:flex-end}
+  .bubble{
+    max-width:78%;padding:10px 14px;font-size:16px;line-height:1.5;border-radius:16px;
+    white-space:pre-wrap;word-break:break-word;
+  }
+  .bubble.user{
+    background:var(--primary-container);color:var(--on-primary-container);
+    border-bottom-right-radius:4px;
+  }
+  .bubble.ai{
+    background:var(--surface-high);color:var(--on-surface);
+    border-bottom-left-radius:4px;
+  }
+  .inputbar{
+    flex:0 0 auto;display:flex;align-items:flex-end;gap:10px;
+    background:var(--surface-c);padding:10px 14px;
+  }
+  .inputbox{
+    flex:1;background:var(--surface-container-lowest,#fff);border:1px solid var(--outline);
+    border-radius:16px;padding:13px 14px;font-size:16px;color:var(--on-surface-variant);
+  }
+  body.dark .inputbox{background:#090F0F}
+  .sendbtn{
+    background:var(--primary);color:var(--on-primary);border-radius:999px;
+    padding:13px 20px;font-size:14px;font-weight:500;white-space:nowrap;
+  }
+
+  .hidden{display:none !important}
 </style>
 </head>
 <body>
@@ -191,9 +232,10 @@
 
 <div class="bar">
   <div class="tabs">
-    <button data-tab="0" class="on">时钟</button>
-    <button data-tab="1">接口</button>
-    <button data-tab="2">设置</button>
+    <button data-tab="0" class="on">对话</button>
+    <button data-tab="1">时钟</button>
+    <button data-tab="2">接口</button>
+    <button data-tab="3">设置</button>
   </div>
   <button class="ghost" id="theme">切深色</button>
 </div>
@@ -203,11 +245,34 @@
     <div class="status"><span>15:04</span><span>▮▮▮ 5G ▮</span></div>
 
     <div class="appbar">
-      <div class="kicker" id="kicker">Material 3 · Expressive</div>
-      <div class="title" id="ptitle">时钟</div>
+      <div class="kicker" id="kicker">AI 对话</div>
+      <div class="title" id="ptitle">对话</div>
     </div>
 
-    <div class="content" id="pane0">
+    <!-- ================= 对话 ================= -->
+    <div class="content pane-chat" id="pane0">
+      <div class="chatbar">
+        <div class="chip on" style="flex:1;overflow:hidden;text-overflow:ellipsis">今天想做点什么…  (6)</div>
+        <div class="iconbtn">＋</div>
+        <div class="iconbtn">⋯</div>
+      </div>
+
+      <div class="bubblewrap">
+        <div class="row right"><div class="bubble user">在吗？帮我想个开场白。</div></div>
+        <div class="row"><div class="bubble ai">在的呀 🐾 想让谁开口？给我一个名字和一句话的设定，我就照着写。</div></div>
+        <div class="row right"><div class="bubble user">名字叫「夜乃」，沉默寡言的图书管理员。</div></div>
+        <div class="row"><div class="bubble ai">夜乃把书推回架子，指尖在书脊上停了半秒。「……你找的那本，昨天被借走了。」她没抬头，「要不要等？」</div></div>
+        <div class="row right"><div class="bubble user">再来一句更冷的。</div></div>
+        <div class="row"><div class="bubble ai">「闭馆了。」她把灯关掉一半，剩下的一半正好照不到你。</div></div>
+      </div>
+
+      <div class="inputbar">
+        <div class="inputbox">说点什么…</div>
+        <div class="sendbtn">发送</div>
+      </div>
+    </div>
+
+    <div class="content hidden" id="pane1">
       <div class="card" style="padding:24px 22px">
         <div class="zone" id="zoneName">本地</div>
         <div class="bigtime" id="bigtime">15:04:27</div>
@@ -227,7 +292,7 @@
       <div class="hint">这里的时间跟着系统时区与系统时间走，和网页版各自独立显示，不共享状态。</div>
     </div>
 
-    <div class="content hidden" id="pane1">
+    <div class="content hidden" id="pane2">
       <div class="section">连接</div>
       <div class="card">
         <div class="label-m">服务商</div>
@@ -272,7 +337,7 @@
       <div class="hint">这份配置就是网页版「🔌 API 全局配置」的那一份（同一个键 apiGlobalCfg），改完两边一致。</div>
     </div>
 
-    <div class="content hidden" id="pane2">
+    <div class="content hidden" id="pane3">
       <div class="section">关于</div>
       <div class="card">
         <div class="row"><span>版本</span><span>1.6</span></div>
@@ -297,9 +362,10 @@
     </div>
 
     <div class="navbar">
-      <div class="navitem on" data-nav="0"><div class="indicator">🕒</div><div class="nm">时钟</div></div>
-      <div class="navitem" data-nav="1"><div class="indicator">🔌</div><div class="nm">接口</div></div>
-      <div class="navitem" data-nav="2"><div class="indicator">⚙️</div><div class="nm">设置</div></div>
+      <div class="navitem on" data-nav="0"><div class="indicator">💬</div><div class="nm">对话</div></div>
+      <div class="navitem" data-nav="1"><div class="indicator">🕒</div><div class="nm">时钟</div></div>
+      <div class="navitem" data-nav="2"><div class="indicator">🔌</div><div class="nm">接口</div></div>
+      <div class="navitem" data-nav="3"><div class="indicator">⚙️</div><div class="nm">设置</div></div>
     </div>
   </div>
 </div>
@@ -308,8 +374,8 @@
   var ZONES = [
     ['东京', 9], ['纽约', -5], ['伦敦', 0], ['洛杉矶', -8]
   ];
-  var TITLES = ['时钟', '接口', '设置'];
-  var KICKERS = ['Material 3 · Expressive', 'API 全局配置', '关于与入口'];
+  var TITLES = ['对话', '时钟', '接口', '设置'];
+  var KICKERS = ['AI 对话', 'Material 3 · Expressive', 'API 全局配置', '关于与入口'];
   var picked = -1;
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -332,7 +398,7 @@
   }
 
   function showTab(i) {
-    for (var k = 0; k < 3; k++) {
+    for (var k = 0; k < 4; k++) {
       document.getElementById('pane' + k).classList.toggle('hidden', k !== i);
       document.querySelector('[data-nav="' + k + '"]').classList.toggle('on', k === i);
       document.querySelector('[data-tab="' + k + '"]').classList.toggle('on', k === i);

@@ -77,7 +77,8 @@ public class SettingsScreen implements Screen {
         LinearLayout c3 = M3.card(ctx);
         c3.setPadding(M3.dp(ctx, 8), M3.dp(ctx, 8), M3.dp(ctx, 8), M3.dp(ctx, 8));
 
-        c3.addView(legacyItem(ctx.getString(R.string.m3_set_open_ai), "mobileOpenAi()"));
+        // ⚠ 「🤖 AI 对话」已经从这份清单里删掉了 —— 它 v1.7 起是原生的一屏（底部导航第一项）。
+        //   规矩是「迁完一个就删一条」，留着会让人以为还得回旧界面才能聊。
         c3.addView(legacyItem(ctx.getString(R.string.m3_set_open_st), "mobileOpenSt()"));
         c3.addView(legacyItem(ctx.getString(R.string.m3_set_open_games), "openCatGame()"));
         col.addView(c3, M3.gap(ctx, 8));

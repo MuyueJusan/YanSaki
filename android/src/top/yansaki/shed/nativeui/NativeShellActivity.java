@@ -46,9 +46,9 @@ public class NativeShellActivity extends Activity {
     private LinearLayout navbar;
 
     private Screen[] screens;
-    private final NavItem[] items = new NavItem[3];
+    private final NavItem[] items = new NavItem[4];
     /** 每一屏建好的视图，只建一次。⚠ 见 {@link #select} 里的注释。 */
-    private final View[] built = new View[3];
+    private final View[] built = new View[4];
     private int current = -1;
 
     /** 导航条上的一项。 */
@@ -64,6 +64,7 @@ public class NativeShellActivity extends Activity {
         super.onCreate(b);
 
         screens = new Screen[]{
+                new ChatScreen(this),
                 new ClockScreen(this),
                 new ApiScreen(this),
                 new SettingsScreen(this)
@@ -125,8 +126,10 @@ public class NativeShellActivity extends Activity {
         navbar.setOrientation(LinearLayout.HORIZONTAL);
         navbar.setGravity(Gravity.CENTER_VERTICAL);
 
-        String[] icons = {"🕒", "🔌", "⚙️"};
+        // ⚠ 「对话」排第一并且是默认落点：它是这个屋子用得最多的一屏。
+        String[] icons = {"💬", "🕒", "🔌", "⚙️"};
         String[] labels = {
+                getString(R.string.m3_nav_chat),
                 getString(R.string.m3_nav_clock),
                 getString(R.string.m3_nav_api),
                 getString(R.string.m3_nav_settings)

@@ -11,7 +11,7 @@
 
   ⚠ targetSdk 34：Play 商店的硬要求，且 34 会强制 `android:exported` 显式声明。
 
-  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.6` ⇔ versionName `1.6`。
+  ⚠⚠ 版本号与 Release tag **必须对得上**：tag `apk-v1.7` ⇔ versionName `1.7`。
     versionCode 只要求**单调递增**，装新包时系统靠它判断是升级。
     ⚠ 2026-09-30「清空重来」：versionCode 由 2 退回 1、versionName 由 1.2 退回 1.0
       （用户指定「回归到 1.0」），并把旧的 v1.0 / v1.1 / v1.2 三个 release 与 tag 一并删除
@@ -41,6 +41,15 @@
       ⚠ M3 的色板 / 字阶 / 形状 / 涟漪 / 弹簧动效都是**手写**的（不引 AndroidX）。
       ⚠ 已原生：时钟 / API 全局配置 / 设置；其余功能在「设置」页有「用旧界面打开」入口。
 
+    ⚠ v1.7（2026-11-08）：**AI 对话原生化**（`nativeui/ChatScreen` + `ChatApi`）。
+      底部导航从 3 项变 4 项，「对话」排第一并作为默认落点。
+      ⚠ 会话数据与网页**共用同一个键** `aiChatSessions`（结构照 333b），所以两边能接着聊。
+      ⚠ 提示词只发「第一段 + 系统提示词 + {{user}} 宏 + 会话历史」；
+         酒馆模式 / 世界书 / 预设顺序**不在这一版**，留在旧界面。
+      ⚠ 原生直连三种协议（openai / anthropic / gemini 的 SSE 帧格式各不相同），
+         **不走 AiProxy**：HttpURLConnection 没有 CORS 这回事。
+      ⚠ 网页侧仍然一个字节没动。
+
   ⚠⚠ **从这一版起改用真密钥签名**（`keystore/YanSaki-13.jks`，别名 `yansaki-13`，
     口令在同目录被 gitignore 的 `signing.env`）。
     签名身份 = App 的身份 ⇒ **证书 SHA-256 与历史上那些 debug 签名的包不同**
@@ -51,8 +60,8 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="top.yansaki.shed"
-    android:versionCode="5"
-    android:versionName="1.6">
+    android:versionCode="6"
+    android:versionName="1.7">
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
 

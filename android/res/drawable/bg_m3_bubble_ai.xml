@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AI 气泡：surfaceContainerHigh，左下角收成 4dp -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/md_surface_container_high" />
+    <corners
+        android:topLeftRadius="@dimen/md_shape_l"
+        android:topRightRadius="@dimen/md_shape_l"
+        android:bottomRightRadius="@dimen/md_shape_l"
+        android:bottomLeftRadius="@dimen/md_shape_xs" />
+</shape>

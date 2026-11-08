@@ -371,6 +371,30 @@ if 'classes.dex' in names:
     for nm in (b'openNativeUi', b'storeSync', b'storePut', b'storeRemove', b'storePending'):
         chk(nm in strs, 'dex 字符串表里有恰好叫 %s 的符号（桥接方法）' % nm.decode())
 
+    # ---- v1.7：原生 AI 对话 ----
+    # ⚠ 三条协议路径都要点名：少一条就是「选了那家服务商 ⇒ 空回复」，
+    #   而那种失败**不会抛异常**（SSE 帧仍是合法 JSON，只是提取路径不匹配）。
+    print('   --- 原生 AI 对话 ---')
+    for desc in (b'Ltop/yansaki/shed/nativeui/ChatScreen;',
+                 b'Ltop/yansaki/shed/nativeui/ChatApi;'):
+        chk(desc in strs, 'dex 字符串表里有类型描述符 %s' % desc.decode())
+    for marker, what in ((b'/chat/completions', 'openai'),
+                         (b'/messages', 'anthropic'),
+                         # ⚠ gemini 这两条必须用**完整字面量**：代码里是
+                         #   ":streamGenerateContent?alt=sse&key=" 一个整体，
+                         #   拿 `streamGenerateContent` 去精确匹配会红 —— 而产品其实是对的。
+                         #   这正是「断言比产品严」的假红，别顺手把断言放宽成子串了事。
+                         (b':streamGenerateContent?alt=sse&key=', 'gemini 流式'),
+                         (b':generateContent?key=', 'gemini 非流式')):
+        chk(marker in strs, 'dex 里有 %s 的请求路径（%s 这条路真的编进去了）'
+            % (marker.decode(), what))
+    chk(b'aiChatSessions' in strs,
+        'dex 里有 aiChatSessions（会话与网页共用同一个键，不是自己另存一份）')
+    # ⚠ 反漂移：会话结构是照 js/333b 抄的，网页哪天改了键名这里必须跟着红。
+    if html is not None:
+        chk(b"AI_SESS_KEY = 'aiChatSessions'" in html,
+            '锚点：页面里 AI_SESS_KEY 仍是 aiChatSessions')
+
     for asset_name, src_name in (('assets/ys-store-shim.js', 'store-shim.js'),
                                  ('assets/ys-native-entry.js', 'native-entry.js')):
         chk(asset_name in names, 'APK 里有 %s' % asset_name)
